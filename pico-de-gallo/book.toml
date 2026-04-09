@@ -1,0 +1,8 @@
+[book]
+authors = ["Felipe Balbi"]
+language = "en"
+src = "src"
+title = "Pico de Gallo"
+
+[output.html]
+mathjax-support = true
