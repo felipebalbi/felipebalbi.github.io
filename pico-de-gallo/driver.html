@@ -1,0 +1,939 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Writing A Device Driver - Pico de Gallo</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="favicon-8114d1fc.png">
+        <link rel="stylesheet" href="css/variables-8adf115d.css">
+        <link rel="stylesheet" href="css/general-2459343d.css">
+        <link rel="stylesheet" href="css/chrome-ae938929.css">
+        <link rel="stylesheet" href="css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+        <!-- MathJax -->
+        <script async src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex-1ee565ed.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc-aa45779d.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Pico de Gallo</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="writing-a-device-driver"><a class="header" href="#writing-a-device-driver">Writing A Device Driver</a></h1>
+<p>For this short introduction to writing devices drivers in Rust and
+verifying with <em>Pico de Gallo</em>, we are targeting the TMP102
+I<sup>2</sup>C Temperature Sensor. Its datasheet is available online
+in both <a href="https://www.ti.com/lit/gpn/tmp102">pdf</a> and
+<a href="https://www.ti.com/document-viewer/tmp102/datasheet">html</a> formats.</p>
+<p>Like many other temperature sensors from the <em>TMP</em> family, this device
+is very straightforward. Temperatures are reported with 12-bits of
+dynamic range with each bit representing 0.0625℃. There is a simple
+linear formula to convert raw ADC values to degrees celsius.</p>
+<p>With its low 0.35µA shutdown current, this sensor is suitable for
+battery powered applications of all kinds.</p>
+<h2 id="exploring-the-device-with-gallo-app"><a class="header" href="#exploring-the-device-with-gallo-app">Exploring the device with <code>gallo</code> app</a></h2>
+<p>Before committing to writing a full driver, we can make sure we
+understand how the device works by exploring it with the <code>gallo</code>
+app. For the purposes of this document, we are using <a href="https://www.sparkfun.com/sparkfun-digital-temperature-sensor-tmp102-qwiic.html">Sparkfun’s
+Digital Temperature Sensor - TMP102
+(Qwiic)</a>
+breakout board.</p>
+<p>The <a href="https://www.sparkfun.com/qwiic">qwiic documentation</a> confirms the
+pin assignment used on their JST connector, which we replicate here:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th><strong>Pin</strong></th><th><strong>Color</strong></th><th><strong>Signal</strong></th></tr>
+</thead>
+<tbody>
+<tr><td>1</td><td>Black</td><td>Ground</td></tr>
+<tr><td>2</td><td>Red</td><td>3.3V</td></tr>
+<tr><td>3</td><td>Blue</td><td>SDA</td></tr>
+<tr><td>4</td><td>Yellow</td><td>SCL</td></tr>
+</tbody>
+</table>
+</div>
+<p>Let’s wire up the board to <em>Pico de Gallo</em> and <code>scan</code> the bus:</p>
+<p><img src="wiring.jpg" title="TMP102 Wiring" alt="TMP102 Wiring"></p>
+<pre><code class="language-console">$ gallo i2c scan
+╭────┬────┬────┬────┬────┬────┬────┬────┬────┬────┬────┬────┬────┬────┬────┬────┬────╮
+│    │  0 │  1 │  2 │  3 │  4 │  5 │  6 │  7 │  8 │  9 │  a │  b │  c │  d │  e │  f │
+├────┼────┼────┼────┼────┼────┼────┼────┼────┼────┼────┼────┼────┼────┼────┼────┼────┤
+│ 0  │ RR │ RR │ RR │ RR │ RR │ RR │ RR │ RR │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │
+│ 1  │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │
+│ 2  │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │
+│ 3  │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │
+│ 4  │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ 48 │ -- │ -- │ -- │ -- │ -- │ -- │ -- │
+│ 5  │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │
+│ 6  │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │
+│ 7  │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ -- │ RR │ RR │ RR │ RR │ RR │ RR │ RR │ RR │
+╰────┴────┴────┴────┴────┴────┴────┴────┴────┴────┴────┴────┴────┴────┴────┴────┴────╯
+</code></pre>
+<p>A new device responds on address <code>0x48</code>, looking through TMP102
+datasheet, we find out, in table 6-4, that this device is supposed to
+respond to one of four different addresses depending on how pin <code>A0</code>
+was wired:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th><strong>A0</strong></th><th><strong>Address</strong></th></tr>
+</thead>
+<tbody>
+<tr><td>Ground</td><td><code>0x48</code></td></tr>
+<tr><td>V+</td><td><code>0x49</code></td></tr>
+<tr><td>SDA</td><td><code>0x4a</code></td></tr>
+<tr><td>SCL</td><td><code>0x4b</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Sparkfun must have routed <code>A0</code> to ground. We can confirm this by
+looking through <a href="https://cdn.sparkfun.com/assets/d/1/6/7/4/SparkFun_TMP102_Qwiic-Schematic.pdf">Sparkfun’s TMP102
+schematics</a>
+where we find jumpers <code>JP1</code> and <code>JP2</code> used for selecting the state of
+<code>A0</code> pin. It comes from the factory with <code>A0</code> routed to ground, as we
+expected.</p>
+<p>Section 6.5.3.6 of the datasheet specifies that setting bit 7 of first
+byte of the configuration register initiates a one-shot
+conversion. Additionally, figure 6-2 specifies how to access any of
+the four registers. We start by sending the target device address
+— in our case, <code>0x48</code> —, followed by the pointer register
+byte, and, finally, 2 bytes of register data, MSB first. Table 6-7
+defines the valid values for the pointer register byte, reproduced
+below for convenience:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th><strong>P1</strong></th><th><strong>P0</strong></th><th><strong>Register</strong></th></tr>
+</thead>
+<tbody>
+<tr><td>0</td><td>0</td><td>Temperature Register (read-only)</td></tr>
+<tr><td>0</td><td>1</td><td>Configuration register (read-write)</td></tr>
+<tr><td>1</td><td>0</td><td>T<sub>LOW</sub> register (read-write)</td></tr>
+<tr><td>1</td><td>1</td><td>T<sub>HIGH</sub> register (read-write)</td></tr>
+</tbody>
+</table>
+</div>
+<p>We want to set bit 7 without modifying the other bits. This is
+commonly referred to as a <em>read-modify-write</em> operation. However, for
+the sake of simplicity we will check the power-on reset value of the
+configuration register in tables 6-10 and 6-11, modify bit 7 or byte 1
+and write the resulting value.</p>
+<p>Reset state for configuration register is as shown below:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th></th><th><strong>B7</strong></th><th><strong>B6</strong></th><th><strong>B5</strong></th><th><strong>B4</strong></th><th><strong>B3</strong></th><th><strong>B2</strong></th><th><strong>B1</strong></th><th><strong>B0</strong></th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Byte 1</strong></td><td>0</td><td>1</td><td>1</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+<tr><td><strong>Byte 2</strong></td><td>1</td><td>0</td><td>1</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+</tbody>
+</table>
+</div>
+<p>In other words, to set bit 7 of byte 1 of Configuration register we
+must use a <code>write</code> operation for address <code>0x48</code>, with a write of
+<code>0x01 0xe0 0xa0</code>:</p>
+<pre><code class="language-console">$ gallo i2c write --address 0x48 --bytes 0x01 0xe0 0xa0
+</code></pre>
+<p>The resulting temperature will be in the Temperature register. To
+access this one we need a <code>write-read</code> operation that will select
+temperature register with the pointer byte and follow that with a read
+of 2 bytes:</p>
+<pre><code class="language-console">$ gallo i2c write-read --address 0x48 --bytes 0x00 --count 2
+6b 15
+</code></pre>
+<p>Converting this raw ADC conversion using the details of the datasheet,
+we get:</p>
+<p>$$ \frac{5843 \cdot 0.0625}{16} = \frac{342.6875}{16} \approx
+21.4^\circ\text{C} $$</p>
+<p>At this point, we should be fairly confident that we understand enough
+of how the device works to start writing a real embedded rust
+driver. Let’s move on to the next section.</p>
+<h2 id="scaffolding-the-driver-crate"><a class="header" href="#scaffolding-the-driver-crate">Scaffolding the driver crate</a></h2>
+<p>Rust’s <code>cargo</code> tool does a lot of the manual work for us. Let’s create
+a new library crate and add a few necessary dependencies.</p>
+<pre><code class="language-console">$ cargo new --lib tmp102
+    Creating library `tmp102` package
+</code></pre>
+<p>Justs a couple files are created:</p>
+<pre><code class="language-console">Cargo.toml
+src\
+src\lib.rs
+</code></pre>
+<p>We will add our driver code to <code>lib.rs</code>, but before that we know we
+will need <code>embedded-hal</code>, <code>embedded-hal-async</code>, and <code>device-driver</code>
+crates as dependencies. Additionaly, we will bring <code>pico-de-gallo-hal</code>
+as a dev-dependency, therefore:</p>
+<pre><code class="language-console">$ cargo add embedded-hal
+    Updating crates.io index
+      Adding embedded-hal v1.0.0 to dependencies
+             Features:
+             - defmt-03
+$ cargo add embedded-hal-async
+    Updating crates.io index
+      Adding embedded-hal-async v1.0.0 to dependencies
+             Features:
+             - defmt-03
+$ cargo add device-driver --no-default-features -F toml
+    Updating crates.io index
+      Adding device-driver v1.0.7 to dependencies
+             Features:
+             + _macros
+             + toml
+             - defmt-03
+             - dsl
+             - json
+             - yaml
+    Updating crates.io index
+     Locking 65 packages to latest Rust 1.90.0 compatible versions
+      Adding winnow v0.6.24 (available: v0.6.26)
+$ cargo add --dev pico-de-gallo-hal --git https://github.com/OpenDevicePartnership/pico-de-gallo
+    Updating git repository `https://github.com/OpenDevicePartnership/pico-de-gallo`
+      Adding pico-de-gallo-hal (git) to dev-dependencies
+cargo add --dev tokio -F rt-multi-thread,time
+    Updating crates.io index
+      Adding tokio v1.47.1 to dev-dependencies
+             Features:
+             + rt
+             + rt-multi-thread
+             + time
+             - bytes
+             - fs
+             - full
+             - io-std
+             - io-util
+             - libc
+             - macros
+             - mio
+             - net
+             - parking_lot
+             - process
+             - signal
+             - signal-hook-registry
+             - socket2
+             - sync
+             - test-util
+             - tokio-macros
+             - tracing
+             - windows-sys
+</code></pre>
+<p>Our <code>Cargo.toml</code> file should look like the one below:</p>
+<pre><code>[package]
+name = "tmp102"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+device-driver = { version = "1.0.7", default-features = false, features = ["toml"] }
+embedded-hal = "1.0.0"
+embedded-hal-async = "1.0.0"
+
+[dev-dependencies]
+pico-de-gallo-hal = { git = "https://github.com/OpenDevicePartnership/pico-de-gallo" }
+tokio = { version = "1.47.1", features = ["rt-multi-thread", "time"] }
+</code></pre>
+<p>We will rely on <code>device-driver-cli</code> to generate some code for us based
+on a <code>toml</code> file we will write. So let’s install that one too:</p>
+<pre><code class="language-console">$ cargo install device-driver-cli
+    Updating crates.io index
+  Downloaded device-driver-cli v1.0.7
+  Downloaded 1 crate (8.4KiB) in 0.27s
+  Installing device-driver-cli v1.0.7
+    Updating crates.io index
+     Locking 86 packages to latest compatible versions
+      Adding winnow v0.6.24 (available: v0.6.26)
+  Downloaded anstream v0.6.21
+  Downloaded serde_core v1.0.228
+  Downloaded anstyle v1.0.13
+  Downloaded quote v1.0.41
+  Downloaded serde v1.0.228
+  Downloaded 5 crates (220.1KiB) in 1.89s
+[...]
+   Installed package `device-driver-cli v1.0.7` (executable `device-driver-cli`)
+</code></pre>
+<h2 id="describing-the-device-using-the-toml-file"><a class="header" href="#describing-the-device-using-the-toml-file">Describing the device using the <code>toml</code> file</a></h2>
+<p>Create a new <code>tmp102.toml</code> file at the root of your crate. We will
+describe all registers and their contents within this file.
+We start with the <code>config</code> section, like so:</p>
+<pre><code class="language-toml">[config]
+register_address_type = "u8"
+default_byte_order = "LE"
+name_word_boundaries = ["Hyphen"]
+</code></pre>
+<p>This tells <code>device-driver-cli</code> that all registers are addressed by a
+single byte and the response byte order is <em>big-endian</em>. Because
+TMP112 only has four registers, our <code>toml</code> manifest file will be
+rather short. Let’s add the temperature register:</p>
+<pre><code class="language-toml">[Temperature]
+type = "register"
+address = 0
+size_bits = 16
+access = "RO"
+description = "Temperature register"
+</code></pre>
+<p>Here we’re telling <code>device-driver-cli</code> that this device has a
+read-only Temperature register at address 0 and the register is
+16-bits wide.</p>
+<p>Let’s add the remaining three registers:</p>
+<pre><code class="language-toml">[Configuration]
+type = "register"
+address = 1
+size_bits = 16
+access = "RW"
+description = "Configuration register"
+
+[Tlow]
+type = "register"
+address = 2
+size_bits = 16
+access = "RW"
+description = "T-low register"
+
+[Thigh]
+type = "register"
+address = 3
+size_bits = 16
+access = "RW"
+description = "T-high register"
+</code></pre>
+<p>While this is sufficient, we can also define the various fields within
+the Configuration register such that we can some more type-safety for
+free. Let’s do so:</p>
+<pre><code class="language-toml">[Configuration.fields.SD]
+description = "Shutdown mode"
+base = "uint"
+start = 0
+end = 1
+
+[Configuration.fields.SD.conversion]
+name = "shutdown-mode"
+description = "Shutdown mode"
+running = 0
+power-off = 1
+
+[Configuration.fields.TM]
+description = "Thermostat mode"
+base = "uint"
+start = 1
+end = 2
+
+[Configuration.fields.TM.conversion]
+name = "thermostat-mode"
+description = "Thermostat mode of operation"
+comparator = 0
+interrupt = 1
+
+[Configuration.fields.POL]
+description = "Alert pin polarity"
+base = "uint"
+start = 2
+end = 3
+
+[Configuration.fields.POL.conversion]
+name = "Polarity"
+description = "Alert pin polarity"
+active-low = 0
+active-high = 1
+
+[Configuration.fields.F]
+description = "Fault queue"
+base = "uint"
+start = 3
+end = 5
+
+[Configuration.fields.F.conversion]
+name = "fault-queue"
+description = "Fault queue depth"
+_1 = 0
+_2 = 1
+_4 = 2
+_6 = 3
+
+[Configuration.fields.R]
+description = "Resolution"
+access = "RO"
+base = "uint"
+start = 5
+end = 7
+
+[Configuration.fields.OS]
+description = "One-shot"
+base = "bool"
+start = 7
+end = 8
+
+[Configuration.fields.EM]
+description = "extended-mode"
+base = "uint"
+start = 12
+end = 13
+
+[Configuration.fields.EM.conversion]
+name = "extended-mode"
+description = "Extended mode"
+disable = 0
+enable = 1
+
+[Configuration.fields.AL]
+description = "Alert"
+base = "bool"
+start = 13
+end = 14
+
+[Configuration.fields.CR]
+description = "Conversion rate"
+base = "uint"
+start = 14
+end = 16
+
+[Configuration.fields.CR.conversion]
+name = "conversion-rate"
+description = "Conversion rate"
+_0_25Hz = 0
+_1Hz = 1
+_4Hz = 2
+_8Hz = 3
+</code></pre>
+<h2 id="generating-the-code-from-our-toml-manifest"><a class="header" href="#generating-the-code-from-our-toml-manifest">Generating the code from our <code>toml</code> manifest</a></h2>
+<p>With a completed manifest file, we can let <code>device-driver-cli</code> handle
+a lot of the work for us. Time to generate some code:</p>
+<blockquote class="blockquote-tag blockquote-tag-tip">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>Tip</p>
+<p>We’re placing the auto-generated code onto a separate file. The idea
+is that we will build a more ergonomic API on top of what
+<code>device-driver-cli</code> generates for us.</p>
+</blockquote>
+<pre><code class="language-console">$ device-driver-cli -m tm102.toml -d Inner -o src\inner.rs
+</code></pre>
+<p>If everything ran without any errors, we should have a fairly
+extensive <code>inner.rs</code> which needs only some minor work to get it
+working.</p>
+<h2 id="implementing-registerinterface-and-asyncregisterinterface"><a class="header" href="#implementing-registerinterface-and-asyncregisterinterface">Implementing <code>RegisterInterface</code> and <code>AsyncRegisterInterface</code></a></h2>
+<p>We must implement <code>RegisterInterface</code> and <code>AsyncRegisterInterface</code> for
+our driver to function correctly. In order to do that, we must create
+a private <code>Interface</code> structure that will own the underlying
+I<sup>2</sup>C bus representation. While at that, it’s wise to make
+sure the user is unable to pass an invalid address for our TMP102
+device. We know all four addresses that can be used, so let’s
+represent them with a rust <code>enum</code>:</p>
+<pre><code class="language-rust noplayground">/// A0 pin logic level representation.
+#[derive(Debug)]
+pub enum A0 {
+    /// A0 tied to GND (default).
+    Gnd,
+    /// A0 tied to V+.
+    Vplus,
+    /// A0 tied to SDA.
+    Sda,
+    /// A0 tied to SCL.
+    Scl,
+}</code></pre>
+<p>And we add a <code>Default</code> implementation and a conversion to <code>u8</code> for
+convenience:</p>
+<pre><code class="language-rust noplayground">impl Default for A0 {
+    fn default() -&gt; Self {
+        Self::Gnd
+    }
+}
+
+impl From&lt;A0&gt; for u8 {
+    fn from(connection: A0) -&gt; Self {
+        match connection {
+            A0::Gnd =&gt; 0b100_1000,
+            A0::Vplus =&gt; 0b100_1001,
+            A0::Sda =&gt; 0b100_1010,
+            A0::Scl =&gt; 0b100_1011,
+        }
+    }
+}</code></pre>
+<p>With those in place, we can add our <code>Interface</code> declaration and its
+constructor to <code>lib.rs</code>:</p>
+<pre><code class="language-rust noplayground">struct Interface&lt;I2C: I2c&gt; {
+    i2c: I2C,
+    addr: u8,
+}
+
+impl&lt;I2C: I2c&gt; Interface&lt;I2C&gt; {
+    /// Create a new Interface instance.
+    fn new(i2c: I2C, a0: A0) -&gt; Self {
+        Self {
+            i2c,
+            addr: a0.into(),
+        }
+    }
+}</code></pre>
+<p>Now we can impl <code>AsyncRegisterInterface</code>, like so:</p>
+<pre><code class="language-rust noplayground">use embedded_hal_async::i2c::{Error, ErrorKind, I2c};
+
+impl&lt;I2C: AsyncI2c&gt; AsyncRegisterInterface for Interface&lt;I2C&gt; {
+    type Error = ErrorKind;
+    type AddressType = u8;
+
+    async fn write_register(
+        &amp;mut self,
+        address: Self::AddressType,
+        _size_bits: u32,
+        data: &amp;[u8],
+    ) -&gt; Result&lt;(), Self::Error&gt; {
+        let mut buf = [0; 3];
+
+        buf[0] = address;
+        buf[1..].copy_from_slice(data);
+
+        self.i2c.write(self.addr, &amp;buf).await.map_err(|e| e.kind())
+    }
+
+    async fn read_register(
+        &amp;mut self,
+        address: Self::AddressType,
+        _size_bits: u32,
+        data: &amp;mut [u8],
+    ) -&gt; Result&lt;(), Self::Error&gt; {
+        self.i2c
+            .write_read(self.addr, &amp;[address], data)
+            .await
+            .map_err(|e| e.kind())
+    }
+}</code></pre>
+<p>It should be fairly easy to understand what’s happening here, but
+we’re just converting the register access request originating from
+code generated by <code>device-driver-cli</code> into actual I<sup>2</sup>C
+accesses.</p>
+<p>With this, the driver is technically functional, but there should be a
+few warnings for unused functions, let’s see them. Run the compiler
+and look at the output:</p>
+<pre><code class="language-console">$ cargo build
+   Compiling tmp102 v0.1.0 (D:\workspace\pico-de-gallo\tmp\tmp102)
+warning: field `inner` is never read
+  --&gt; src\lib.rs:52:5
+   |
+51 | pub struct Tmp102&lt;I2C: I2c&gt; {
+   |            ------ field in this struct
+52 |     inner: Inner&lt;Interface&lt;I2C&gt;&gt;,
+   |     ^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: fields `interface` and `base_address` are never read
+ --&gt; src\inner.rs:5:16
+  |
+4 | pub struct Inner&lt;I&gt; {
+  |            ----------- fields in this struct
+5 |     pub(crate) interface: I,
+  |                ^^^^^^^^^
+...
+8 |     base_address: u8,
+  |     ^^^^^^^^^^^^
+  |
+  = note: `Inner` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: multiple methods are never used
+   --&gt; src\inner.rs:21:19
+    |
+ 11 | impl&lt;I&gt; Inner&lt;I&gt; {
+    | ---------------------- methods in this implementation
+...
+ 21 |     pub(crate) fn interface(&amp;mut self) -&gt; &amp;mut I {
+    |                   ^^^^^^^^^
+...
+ 40 |     pub fn read_all_registers(
+    |            ^^^^^^^^^^^^^^^^^^
+...
+ 81 |     pub async fn read_all_registers_async(
+    |                  ^^^^^^^^^^^^^^^^^^^^^^^^
+...
+109 |     pub fn temperature(
+    |            ^^^^^^^^^^^
+...
+126 |     pub fn configuration(
+    |            ^^^^^^^^^^^^^
+...
+147 |     pub fn tlow(
+    |            ^^^^
+...
+161 |     pub fn thigh(
+    |            ^^^^^
+
+warning: enum `FieldSetValue` is never used
+   --&gt; src\inner.rs:882:14
+    |
+882 |     pub enum FieldSetValue {
+    |              ^^^^^^^^^^^^^
+
+warning: `tmp102` (lib) generated 4 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.36s
+</code></pre>
+<h2 id="implementing-a-higher-level-api"><a class="header" href="#implementing-a-higher-level-api">Implementing a higher level API</a></h2>
+<p>Our users are mainly concerned with monitoring temperatures, so if we
+can make the API higher level and safer to use, everybody wins. To put
+it another way, when writing rust drivers, we want to <strong>make invalid
+states unrepresentable</strong> such that the user is incapable of
+accidentally placing our device in an unknown state.</p>
+<p>We can expect a few simple APIs:</p>
+<ol>
+<li><code>configure()</code> to set configuration parameters such as enabling
+extended mode, or changing the conversion rate</li>
+<li><code>set_high_limit()</code> and <code>set_low_limit()</code> to configure alert limits
+within the sensor</li>
+<li><code>temperature()</code> for reading the current temperature in Celsius</li>
+<li><code>continuous()</code> to continuously read the latest temperature</li>
+<li><code>shutdown()</code> and <code>run()</code> to, respectively, enter and exit low power
+mode</li>
+</ol>
+<p>To reduce the amount of arguments passed to the <code>configure()</code>, we
+define a <code>Config</code> structure and implement <code>Default</code> for it, as shown
+below:</p>
+<pre><code class="language-rust noplayground">/// Tmp102 configuration parameters
+#[derive(Clone, Copy, Debug)]
+pub struct Config {
+    thermostat_mode: ThermostatMode,
+    polarity: Polarity,
+    extended_mode: ExtendedMode,
+    conversion_rate: ConversionRate,
+}
+
+impl Default for Config {
+    fn default() -&gt; Self {
+        Self {
+            thermostat_mode: ThermostatMode::Comparator,
+            polarity: Polarity::ActiveLow,
+            extended_mode: ExtendedMode::Disable,
+            conversion_rate: ConversionRate::_4hz,
+        }
+    }
+}</code></pre>
+<p>Finally, here’s the remainder of the higher-level API changes:</p>
+<pre><code class="language-rust noplayground">impl&lt;I2C: I2c&gt; Tmp102&lt;I2C&gt; {
+    const RAW_TO_CELSIUS: f32 = 0.0625;
+
+    /// Configure device parameters.
+    pub async fn configure(&amp;mut self, config: Config) -&gt; Result&lt;(), ErrorKind&gt; {
+        self.extended_mode = config.extended_mode == ExtendedMode::Enable;
+
+        self.inner
+            .configuration()
+            .modify_async(|r| {
+                r.set_tm(config.thermostat_mode);
+                r.set_pol(config.polarity);
+                r.set_em(config.extended_mode);
+                r.set_cr(config.conversion_rate);
+            })
+            .await
+    }
+
+    /// Shutdown sensor to conserve power
+    pub async fn shutdown(&amp;mut self) -&gt; Result&lt;(), ErrorKind&gt; {
+        self.inner
+            .configuration()
+            .modify_async(|r| r.set_sd(ShutdownMode::PowerOff))
+            .await
+    }
+
+    /// Set sensor to always running mode
+    pub async fn run(&amp;mut self) -&gt; Result&lt;(), ErrorKind&gt; {
+        self.inner
+            .configuration()
+            .modify_async(|r| r.set_sd(ShutdownMode::Running))
+            .await
+    }
+
+    /// Set temperature low limit.
+    pub async fn set_low_limit(&amp;mut self, limit: f32) -&gt; Result&lt;(), ErrorKind&gt; {
+        self.inner
+            .tlow()
+            .write_async(|w| {
+                let raw = limit / Self::RAW_TO_CELSIUS;
+                let raw = ((raw * 16.0) as i16).to_be_bytes();
+
+                *w = raw.into();
+            })
+            .await?;
+        Ok(())
+    }
+
+    /// Set temperature high limit.
+    pub async fn set_high_limit(&amp;mut self, limit: f32) -&gt; Result&lt;(), ErrorKind&gt; {
+        self.inner
+            .thigh()
+            .write_async(|w| {
+                let raw = limit / Self::RAW_TO_CELSIUS;
+                let raw = ((raw * 16.0) as i16).to_be_bytes();
+
+                *w = raw.into();
+            })
+            .await?;
+        Ok(())
+    }
+
+    /// Read current temperature in Celsius
+    pub async fn temperature(&amp;mut self) -&gt; Result&lt;f32, ErrorKind&gt; {
+        let mut temp = i16::from_be_bytes(self.inner.temperature().read_async().await?.into());
+
+        if self.extended_mode {
+            temp /= 8;
+        } else {
+            temp /= 16;
+        }
+
+        let temp = (temp as f32) * Self::RAW_TO_CELSIUS;
+        Ok(temp)
+    }
+
+    /// Initiate continuous conversions
+    ///
+    /// # Errors
+    ///
+    /// `I2C::Error` when the I2C transaction fails
+    pub async fn continuous&lt;F, Fut&gt;(&amp;mut self, f: F) -&gt; Result&lt;(), ErrorKind&gt;
+    where
+        F: FnOnce(&amp;mut Self) -&gt; Fut,
+        Fut: Future&lt;Output = Result&lt;(), ErrorKind&gt;&gt; + Send,
+    {
+        self.run().await?;
+        f(self).await?;
+        self.shutdown().await
+    }
+}</code></pre>
+<p>With that in place, we have a respectable first draft of our driver in
+about 250 lines of code. The driver is asynchronous and provides a lot
+of type-safety guarantees. We should be able to integrate it with
+<em>Pico de Gallo</em> next.</p>
+<h2 id="integrating-with-pico-de-gallo"><a class="header" href="#integrating-with-pico-de-gallo">Integrating with <em>Pico de Gallo</em></a></h2>
+<p>Start by creating a new <code>examples</code> directory in our driver repository:</p>
+<pre><code class="language-console">$ mkdir examples
+</code></pre>
+<p>Each file within this directory will be able to use anything defined
+by the driver, including its dependencies and, more importantly, dev
+dependencies.</p>
+<p>Here’s how we would read a one-shot conversion from TMP102 using <em>Pico
+de Gallo</em>.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>Place the code below under e.g. <code>examples/one-shot.rs</code>. <code>cargo</code> will
+be able to run this file for us.</p>
+</blockquote>
+<pre><code class="language-rust noplayground">use pico_de_gallo_hal::Hal;
+use tmp102::*;
+
+#[tokio::main]
+async fn main() {
+    let hal = Hal::new();
+    let i2c = hal.i2c();
+
+    let mut tmp = Tmp102::new_with_a0_gnd(i2c);
+    let temperature = tmp.temperature().await.unwrap();
+    println!("Temperature: {:.1} C", temperature);
+}</code></pre>
+<p>This example can be executed with the following <code>cargo</code> command:</p>
+<pre><code class="language-console">$ cargo run --example one-shot
+Temperature 21.4 C
+</code></pre>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="gallo-crates.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="gallo-crates.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr-ef4e11c1.min.js"></script>
+        <script src="mark-09e88c2c.min.js"></script>
+        <script src="searcher-c2a407aa.js"></script>
+
+        <script src="clipboard-1626706a.min.js"></script>
+        <script src="highlight-abc7f01d.js"></script>
+        <script src="book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>
