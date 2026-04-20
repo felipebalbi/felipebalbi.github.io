@@ -38,7 +38,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-1ee565ed.js";
+            window.path_to_searchindex_js = "searchindex-f876aa63.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-aa45779d.js"></script>
@@ -354,13 +354,13 @@ Firmware.</p>
 our expectation. Grab the <code>pico-de-gallo-app</code> suitable for your host
 Operating System from our
 <a href="https://github.com/OpenDevicePartnership/pico-de-gallo/releases">Releases</a>
-page. At the time of this writing, the latest version is <a href="https://github.com/OpenDevicePartnership/pico-de-gallo/releases/tag/application-v0.2.1">Application
-v0.2.1</a>. We
+page. At the time of this writing, the latest version is <a href="https://github.com/OpenDevicePartnership/pico-de-gallo/releases/tag/application-v0.4.0">Application
+v0.4.0</a>. We
 currently support <code>x86_64</code> and <code>Aarch64</code> for both Windows and Linux,
 and <code>Aarch64</code> for macOS.</p>
 <p>Once you have the correct binary, run the <code>version</code> command:</p>
 <pre><code class="language-console">$ gallo version
-Pico de Gallo FW v0.5.0
+Pico de Gallo FW v0.7.0
 </code></pre>
 <p>Success 🎉. With this completed we can get familiarized with the other
 parts of the <em>Pico de Gallo</em> ecosystem and write a driver for the
@@ -380,16 +380,24 @@ Access I2C/SPI devices through Pico De Gallo
 Usage: gallo.exe [OPTIONS] [COMMAND]
 
 Commands:
-  version     Get firmware version
-  i2c         I2C access methods
-  spi         SPI access methods
-  set-config  Set bus parameters for I2C and SPI
-  help        Print this message or the help of the given subcommand(s)
+  list     List connected Pico de Gallo devices
+  version  Get firmware version
+  i2c      I2C access methods
+  spi      SPI access methods
+  help     Print this message or the help of the given subcommand(s)
 
 Options:
   -s, --serial-number &lt;SERIAL_NUMBER&gt;
   -h, --help                           Print help
   -V, --version                        Print version
+</code></pre>
+<h4 id="listing-connected-devices"><a class="header" href="#listing-connected-devices">Listing Connected Devices</a></h4>
+<p>When multiple <em>Pico de Gallo</em> boards are connected, use the <code>list</code>
+command to discover them:</p>
+<pre><code class="language-console">$ gallo list
+Serial Number         Bus    Address
+E6633861A34B8C24      2      14
+E6633861A34B9F17      1      8
 </code></pre>
 <p>If you have more than one <em>Pico de Gallo</em> attached to your host
 computer, the <code>gallo</code> app will always attempt to use the first device
@@ -497,6 +505,7 @@ Usage: gallo.exe spi [COMMAND]
 Commands:
   read        Read bytes through SPI bus
   write       Write bytes through SPI bus
+  transfer    Full-duplex SPI transfer
   write-read  Write bytes followed by read bytes
   help        Print this message or the help of the given subcommand(s)
 
@@ -510,9 +519,26 @@ Options:
 <h4 id="writing-1"><a class="header" href="#writing-1">Writing</a></h4>
 <pre><code class="language-console">$ gallo spi write --bytes 0x00 0x01 0x02 0x03 0x04 0x05
 </code></pre>
+<h4 id="full-duplex-transfer"><a class="header" href="#full-duplex-transfer">Full-Duplex Transfer</a></h4>
+<p>A true full-duplex SPI transfer that simultaneously transmits and
+receives:</p>
+<pre><code class="language-console">$ gallo spi transfer --bytes 0x01 0x02 0x03 0x04
+00 00 00 00
+</code></pre>
 <h4 id="write-then-read-1"><a class="header" href="#write-then-read-1">Write-Then-Read</a></h4>
 <pre><code class="language-console">$ gallo spi write-read --bytes 0x00 0x01 0x02 0x03 0x04 0x05 --count 10
 00 00 00 00 00 00 00 00 00 00
+</code></pre>
+<h3 id="output-formats"><a class="header" href="#output-formats">Output Formats</a></h3>
+<p>Read operations (both I<sup>2</sup>C and SPI) support three output
+formats via the <code>-f</code> / <code>--format</code> flag:</p>
+<ul>
+<li><code>hex</code> (default): hexadecimal byte dump</li>
+<li><code>binary</code>: raw bytes written to stdout</li>
+<li><code>ascii</code>: printable characters shown, non-printable replaced with <code>.</code></li>
+</ul>
+<pre><code class="language-console">$ gallo i2c read --address 0x68 -c 10 -f ascii
+..Q.,...
 </code></pre>
 <h2 id="gallo-lib"><a class="header" href="#gallo-lib">Gallo Lib</a></h2>
 <p>The library implements a series of methods to communicate with the
@@ -541,6 +567,7 @@ endpoints exposed by the firmware. The table below provides a summary.</p>
 <tr><td><code>i2c_write</code></td><td><code>address</code>, <code>contents</code></td><td>Attempts to write <code>contents</code> to the  I<sup>2</sup>C device at <code>address</code></td></tr>
 <tr><td><code>spi_read</code></td><td><code>count</code></td><td>Attempts to read <code>count</code> bytes via SPI</td></tr>
 <tr><td><code>spi_write</code></td><td><code>contents</code></td><td>Attempts to write <code>contents</code> via SPI</td></tr>
+<tr><td><code>spi_transfer</code></td><td><code>contents</code></td><td>Full-duplex SPI transfer (simultaneous TX and RX)</td></tr>
 <tr><td><code>spi_flush</code></td><td></td><td>Flushes the SPI bus</td></tr>
 <tr><td><code>gpio_get</code></td><td><code>pin</code></td><td>Reads the current state of the GPIO #<code>pin</code></td></tr>
 <tr><td><code>gpio_put</code></td><td><code>pin</code>, <code>state</code></td><td>Sets the state of GPIO #<code>pin</code> to <code>state</code></td></tr>
@@ -549,7 +576,8 @@ endpoints exposed by the firmware. The table below provides a summary.</p>
 <tr><td><code>gpio_wait_for_rising_edge</code></td><td><code>pin</code></td><td>Waits until a rising edge is seen on GPIO #<code>pin</code></td></tr>
 <tr><td><code>gpio_wait_for_falling_edge</code></td><td><code>pin</code></td><td>Waits until a falling edge is seen on GPIO #<code>pin</code></td></tr>
 <tr><td><code>gpio_wait_for_any_edge</code></td><td><code>pin</code></td><td>Waits until any edge is seen on GPIO #<code>pin</code></td></tr>
-<tr><td><code>set_config</code></td><td><code>i2c_frequency</code>, <code>spi_frequency</code>, <code>spi_phase</code>, <code>spi_polarity</code></td><td>Sets configuration parameters for I<sup>2</sup>C and SPI buses</td></tr>
+<tr><td><code>i2c_set_config</code></td><td><code>frequency</code> (Standard/Fast/FastPlus)</td><td>Sets I<sup>2</sup>C bus clock frequency</td></tr>
+<tr><td><code>spi_set_config</code></td><td><code>spi_frequency</code>, <code>spi_phase</code>, <code>spi_polarity</code></td><td>Sets SPI bus clock frequency, phase, and polarity</td></tr>
 <tr><td><code>version</code></td><td></td><td>Reads the current Firmware version from <em>Pico de Gallo</em></td></tr>
 </tbody>
 </table>
