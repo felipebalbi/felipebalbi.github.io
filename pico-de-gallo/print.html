@@ -38,7 +38,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f876aa63.js";
+            window.path_to_searchindex_js = "searchindex-b411034d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-aa45779d.js"></script>
@@ -384,6 +384,7 @@ Commands:
   version  Get firmware version
   i2c      I2C access methods
   spi      SPI access methods
+  gpio     GPIO access methods
   help     Print this message or the help of the given subcommand(s)
 
 Options:
@@ -423,7 +424,8 @@ Options:
 <h3 id="communicating-via-i2c"><a class="header" href="#communicating-via-i2c">Communicating via I<sup>2</sup>C</a></h3>
 <p>The <code>i2c</code> subcommand groups all I<sup>2</sup>C functionality. We
 support a regular <code>read</code>, <code>write</code>, and <code>write-read</code>
-operation. Additionally, a minimal <code>scan</code> facility is implemented.</p>
+operation. Additionally, a dedicated <code>scan</code> endpoint probes all
+addresses in a single USB round-trip.</p>
 <h4 id="scanning"><a class="header" href="#scanning">Scanning</a></h4>
 <blockquote class="blockquote-tag blockquote-tag-warning">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
@@ -565,6 +567,7 @@ endpoints exposed by the firmware. The table below provides a summary.</p>
 <tr><td><code>ping</code></td><td><code>id</code></td><td>Sends the <code>id</code> to <em>Pico de Gallo</em> and waits for a response.</td></tr>
 <tr><td><code>i2c_read</code></td><td><code>address</code>, <code>count</code></td><td>Attempts to read <code>count</code> bytes from the I<sup>2</sup>C device at <code>address</code></td></tr>
 <tr><td><code>i2c_write</code></td><td><code>address</code>, <code>contents</code></td><td>Attempts to write <code>contents</code> to the  I<sup>2</sup>C device at <code>address</code></td></tr>
+<tr><td><code>i2c_scan</code></td><td><code>include_reserved</code></td><td>Scans the I<sup>2</sup>C bus and returns responding addresses</td></tr>
 <tr><td><code>spi_read</code></td><td><code>count</code></td><td>Attempts to read <code>count</code> bytes via SPI</td></tr>
 <tr><td><code>spi_write</code></td><td><code>contents</code></td><td>Attempts to write <code>contents</code> via SPI</td></tr>
 <tr><td><code>spi_transfer</code></td><td><code>contents</code></td><td>Full-duplex SPI transfer (simultaneous TX and RX)</td></tr>
@@ -576,8 +579,11 @@ endpoints exposed by the firmware. The table below provides a summary.</p>
 <tr><td><code>gpio_wait_for_rising_edge</code></td><td><code>pin</code></td><td>Waits until a rising edge is seen on GPIO #<code>pin</code></td></tr>
 <tr><td><code>gpio_wait_for_falling_edge</code></td><td><code>pin</code></td><td>Waits until a falling edge is seen on GPIO #<code>pin</code></td></tr>
 <tr><td><code>gpio_wait_for_any_edge</code></td><td><code>pin</code></td><td>Waits until any edge is seen on GPIO #<code>pin</code></td></tr>
+<tr><td><code>gpio_set_config</code></td><td><code>pin</code>, <code>direction</code> (Input/Output), <code>pull</code> (None/Up/Down)</td><td>Configures GPIO #<code>pin</code> direction and pull resistor. Enters explicit mode.</td></tr>
 <tr><td><code>i2c_set_config</code></td><td><code>frequency</code> (Standard/Fast/FastPlus)</td><td>Sets I<sup>2</sup>C bus clock frequency</td></tr>
 <tr><td><code>spi_set_config</code></td><td><code>spi_frequency</code>, <code>spi_phase</code>, <code>spi_polarity</code></td><td>Sets SPI bus clock frequency, phase, and polarity</td></tr>
+<tr><td><code>i2c_get_config</code></td><td></td><td>Returns the active I<sup>2</sup>C bus configuration (frequency)</td></tr>
+<tr><td><code>spi_get_config</code></td><td></td><td>Returns the active SPI bus configuration (frequency, phase, polarity)</td></tr>
 <tr><td><code>version</code></td><td></td><td>Reads the current Firmware version from <em>Pico de Gallo</em></td></tr>
 </tbody>
 </table>
@@ -592,6 +598,25 @@ lot more by relying on <em>Pico de Gallo</em> to do the heavy-lifting.</p>
 <p>To clarify what we mean, a driver <em>crate</em> would add
 <code>pico-de-gallo-hal</code> as a dev dependency and use it for tests and
 examples.</p>
+<h3 id="implemented-traits"><a class="header" href="#implemented-traits">Implemented Traits</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Peripheral</th><th>Blocking Trait</th><th>Async Trait</th></tr>
+</thead>
+<tbody>
+<tr><td>GPIO</td><td><code>OutputPin</code>, <code>InputPin</code>, <code>StatefulOutputPin</code></td><td><code>Wait</code></td></tr>
+<tr><td>I2C</td><td><code>I2c</code></td><td><code>I2c</code></td></tr>
+<tr><td>SPI</td><td><code>SpiBus</code>, <code>SpiDevice</code></td><td><code>SpiBus</code>, <code>SpiDevice</code></td></tr>
+<tr><td>Delay</td><td><code>DelayNs</code></td><td><code>DelayNs</code></td></tr>
+</tbody>
+</table>
+</div>
+<blockquote>
+<p><strong>Note:</strong> <code>SpiDevice</code> manages chip-select (CS) automatically via a
+GPIO pin. Use <code>hal.spi_device(cs_pin)</code> to create an <code>SpiDevice</code>
+handle. For raw bus access without CS management, use <code>hal.spi()</code>.</p>
+</blockquote>
 <p>Here’s a minimalistic example of how to use <code>pico-de-gallo-hal</code> to
 communicate with an I<sup>2</sup>C device.</p>
 <pre><code class="language-rust noplayground">use embedded_hal::i2c::I2c;
