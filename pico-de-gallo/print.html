@@ -38,7 +38,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-b411034d.js";
+            window.path_to_searchindex_js = "searchindex-2b40418f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-aa45779d.js"></script>
@@ -372,7 +372,7 @@ comfortable and ergonomic experience to its users. The most relevant
 crates are discussed below.</p>
 <h2 id="gallo-app"><a class="header" href="#gallo-app">Gallo App</a></h2>
 <p>The <code>gallo</code> app’s main purpose is that of one-off, or batch-mode
-communication with <em>Pico de Gallo</em>’s I<sup>2</sup>C and SPI buses. The
+communication with <em>Pico de Gallo</em>’s I<sup>2</sup>C, SPI, UART, GPIO, and PWM buses. The
 built-in help text gives us a little more information.</p>
 <pre><code class="language-console">$ gallo help
 Access I2C/SPI devices through Pico De Gallo
@@ -385,6 +385,9 @@ Commands:
   i2c      I2C access methods
   spi      SPI access methods
   gpio     GPIO access methods
+  uart     UART access methods
+  pwm      PWM control methods
+  adc      ADC access methods
   help     Print this message or the help of the given subcommand(s)
 
 Options:
@@ -585,6 +588,14 @@ endpoints exposed by the firmware. The table below provides a summary.</p>
 <tr><td><code>i2c_get_config</code></td><td></td><td>Returns the active I<sup>2</sup>C bus configuration (frequency)</td></tr>
 <tr><td><code>spi_get_config</code></td><td></td><td>Returns the active SPI bus configuration (frequency, phase, polarity)</td></tr>
 <tr><td><code>version</code></td><td></td><td>Reads the current Firmware version from <em>Pico de Gallo</em></td></tr>
+<tr><td><code>uart_read</code></td><td><code>count</code>, <code>timeout_ms</code></td><td>Reads up to <code>count</code> bytes from UART with timeout (0 = non-blocking)</td></tr>
+<tr><td><code>uart_write</code></td><td><code>contents</code></td><td>Writes <code>contents</code> to the UART transmit buffer</td></tr>
+<tr><td><code>uart_flush</code></td><td></td><td>Flushes the UART transmit buffer</td></tr>
+<tr><td><code>uart_set_config</code></td><td><code>baud_rate</code></td><td>Sets the UART baud rate (must be &gt; 0)</td></tr>
+<tr><td><code>uart_get_config</code></td><td></td><td>Returns the active UART configuration (baud rate)</td></tr>
+<tr><td><code>adc_read</code></td><td><code>channel</code> (AdcChannel enum)</td><td>Reads a single 12-bit sample from the given ADC channel</td></tr>
+<tr><td><code>adc_read_temperature</code></td><td></td><td>Reads the on-die temperature sensor (returns millidegrees Celsius)</td></tr>
+<tr><td><code>adc_get_config</code></td><td></td><td>Returns the ADC configuration (resolution, reference, channels)</td></tr>
 </tbody>
 </table>
 </div>
@@ -608,6 +619,7 @@ examples.</p>
 <tr><td>GPIO</td><td><code>OutputPin</code>, <code>InputPin</code>, <code>StatefulOutputPin</code></td><td><code>Wait</code></td></tr>
 <tr><td>I2C</td><td><code>I2c</code></td><td><code>I2c</code></td></tr>
 <tr><td>SPI</td><td><code>SpiBus</code>, <code>SpiDevice</code></td><td><code>SpiBus</code>, <code>SpiDevice</code></td></tr>
+<tr><td>UART</td><td><code>embedded_io::Read</code>, <code>embedded_io::Write</code></td><td><code>embedded_io_async::Read</code>, <code>embedded_io_async::Write</code></td></tr>
 <tr><td>Delay</td><td><code>DelayNs</code></td><td><code>DelayNs</code></td></tr>
 </tbody>
 </table>
