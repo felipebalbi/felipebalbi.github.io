@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-67e7fb50.js";
+            window.path_to_searchindex_js = "searchindex-04682e64.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-ce601ddd.js"></script>
@@ -303,12 +303,9 @@ gallo_free(gallo);
 <tr><td><code>OneWireReadFailed</code></td><td style="text-align: right">−59</td><td>1-Wire: read failed</td></tr>
 <tr><td><code>OneWireWriteFailed</code></td><td style="text-align: right">−60</td><td>1-Wire: write failed</td></tr>
 <tr><td><code>OneWireSearchFailed</code></td><td style="text-align: right">−61</td><td>1-Wire: ROM search failed</td></tr>
-<tr><td><code>CaptureInvalidPin</code></td><td style="text-align: right">−62</td><td>Capture: pin outside valid range</td></tr>
-<tr><td><code>CaptureInvalidRate</code></td><td style="text-align: right">−63</td><td>Capture: invalid sample rate</td></tr>
-<tr><td><code>CaptureTooManyChannels</code></td><td style="text-align: right">−64</td><td>Capture: too many channels</td></tr>
-<tr><td><code>CaptureAlreadyRunning</code></td><td style="text-align: right">−65</td><td>Capture: session already running</td></tr>
-<tr><td><code>CaptureNotRunning</code></td><td style="text-align: right">−66</td><td>Capture: no session running</td></tr>
-<tr><td><code>CaptureNoPins</code></td><td style="text-align: right">−67</td><td>Capture: no pins specified</td></tr>
+<tr><td><code>DeviceInfoFailed</code></td><td style="text-align: right">−62</td><td>Device info query failed</td></tr>
+<tr><td><code>SchemaMismatch</code></td><td style="text-align: right">−63</td><td>Schema version mismatch</td></tr>
+<tr><td><code>LegacyFirmware</code></td><td style="text-align: right">−64</td><td>Firmware too old for device info</td></tr>
 </tbody>
 </table>
 </div>
@@ -327,6 +324,36 @@ value. Useful for verifying connectivity.</p>
 </code></pre>
 <p>Queries the firmware version and writes the semver components to the output
 pointers.</p>
+<h3 id="device-info"><a class="header" href="#device-info">Device Info</a></h3>
+<pre><code class="language-c">typedef struct {
+    uint16_t fw_major;
+    uint16_t fw_minor;
+    uint32_t fw_patch;
+    uint16_t schema_major;
+    uint16_t schema_minor;
+    uint32_t schema_patch;
+    uint8_t  hw_version;
+    uint64_t capabilities;
+} GalloDeviceInfo;
+
+#define GALLO_CAP_I2C     ((uint64_t)1 &lt;&lt; 0)
+#define GALLO_CAP_SPI     ((uint64_t)1 &lt;&lt; 1)
+#define GALLO_CAP_UART    ((uint64_t)1 &lt;&lt; 2)
+#define GALLO_CAP_GPIO    ((uint64_t)1 &lt;&lt; 3)
+#define GALLO_CAP_PWM     ((uint64_t)1 &lt;&lt; 4)
+#define GALLO_CAP_ADC     ((uint64_t)1 &lt;&lt; 5)
+#define GALLO_CAP_ONEWIRE ((uint64_t)1 &lt;&lt; 6)
+
+Status gallo_get_device_info(PicoDeGallo *gallo, GalloDeviceInfo *info);
+</code></pre>
+<p>Queries the device for firmware version, schema version, hardware revision, and
+peripheral capabilities. The <code>capabilities</code> field is a bitfield — test individual
+peripherals with bitwise AND and the <code>GALLO_CAP_*</code> constants:</p>
+<pre><code class="language-c">if (info.capabilities &amp; GALLO_CAP_I2C) { /* I2C available */ }
+</code></pre>
+<p>Returns <code>SchemaMismatch</code> (−63) if the firmware’s schema
+version is incompatible with the library, or <code>LegacyFirmware</code> (−64) if the
+firmware does not support the <code>device/info</code> endpoint.</p>
 <h3 id="i2c"><a class="header" href="#i2c">I2C</a></h3>
 <pre><code class="language-c">Status gallo_i2c_read(PicoDeGallo *gallo,
                       uint8_t address, uint8_t *buf, size_t len);
@@ -574,6 +601,17 @@ int main(void) {
     s = gallo_version((PicoDeGallo *)gallo, &amp;major, &amp;minor, &amp;patch);
     if (s == Ok) {
         printf("Firmware v%u.%u.%u\n", major, minor, patch);
+    }
+
+    /* Query device info (schema version, HW revision, capabilities) */
+    GalloDeviceInfo info;
+    s = gallo_get_device_info((PicoDeGallo *)gallo, &amp;info);
+    if (s == Ok) {
+        printf("Schema v%u.%u.%u, HW rev %u\n",
+               info.schema_major, info.schema_minor,
+               info.schema_patch, info.hw_version);
+    } else if (s == SchemaMismatch) {
+        fprintf(stderr, "Schema version mismatch — update firmware or library\n");
     }
 
     /* Read 2 bytes from I2C address 0x50 */

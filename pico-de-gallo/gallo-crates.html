@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-67e7fb50.js";
+            window.path_to_searchindex_js = "searchindex-04682e64.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-ce601ddd.js"></script>
@@ -400,6 +400,8 @@ endpoints exposed by the firmware. The table below provides a summary.</p>
 <tr><td><code>i2c_get_config</code></td><td></td><td>Returns the active I<sup>2</sup>C bus configuration (frequency)</td></tr>
 <tr><td><code>spi_get_config</code></td><td></td><td>Returns the active SPI bus configuration (frequency, phase, polarity)</td></tr>
 <tr><td><code>version</code></td><td></td><td>Reads the current Firmware version from <em>Pico de Gallo</em></td></tr>
+<tr><td><code>device_info</code></td><td></td><td>Reads firmware version, schema version, HW revision, and capabilities</td></tr>
+<tr><td><code>validate</code></td><td></td><td>Queries device info and checks schema version compatibility</td></tr>
 <tr><td><code>uart_read</code></td><td><code>count</code>, <code>timeout_ms</code></td><td>Reads up to <code>count</code> bytes from UART with timeout (0 = non-blocking)</td></tr>
 <tr><td><code>uart_write</code></td><td><code>contents</code></td><td>Writes <code>contents</code> to the UART transmit buffer</td></tr>
 <tr><td><code>uart_flush</code></td><td></td><td>Flushes the UART transmit buffer</td></tr>
