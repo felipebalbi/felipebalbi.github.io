@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-2b40418f.js";
+            window.path_to_searchindex_js = "searchindex-a2bafc4c.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-aa45779d.js"></script>
+        <script src="toc-ce601ddd.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -179,15 +179,28 @@
                         <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
 <p><em>Pico de Gallo</em> is an open hardware design built around the <a href="https://www.raspberrypi.com/products/raspberry-pi-pico-2/">Raspberry
 Pi Pico2</a>
-board that simplifies the process of validating Embedded Rust drivers
-for I<sup>2</sup>C and SPI discrete devices.</p>
-<p>With <em>Pico de Gallo</em>, one can focus on writing the standalone driver
-polymorphic on either <a href="https://docs.rs/embedded-hal">embedded-hal</a> or
-<a href="https://docs.rs/embedded-hal-async">embedded-hal-async</a> traits
-because <code>pico-de-gallo-hal</code> implements those traits directly.</p>
-<p>In the following chapters we will look at the process of writing a
-small temperature sensor driver and how <em>Pico de Gallo</em> can help
-with testing and examples.</p>
+board that turns a Pico 2 into a versatile USB bridge for embedded
+development. It exposes the following interfaces to a host PC:</p>
+<ul>
+<li><strong>I²C</strong> — read, write, write-read, bus scan, runtime frequency
+configuration, transaction batching</li>
+<li><strong>SPI</strong> — read, write, transfer, flush, runtime mode/frequency
+configuration, transaction batching</li>
+<li><strong>UART</strong> — read, write, flush, runtime baud/config changes</li>
+<li><strong>GPIO</strong> — get, put, direction control, edge/level event subscription</li>
+<li><strong>PWM</strong> — duty cycle control, enable/disable, frequency/config changes</li>
+<li><strong>ADC</strong> — single-shot analog reads on 4 GPIO-based channels (12-bit)</li>
+<li><strong>1-Wire</strong> — bus reset, read, write, ROM search (PIO hardware)
+The <code>pico-de-gallo-hal</code> crate implements standard
+<a href="https://docs.rs/embedded-hal">embedded-hal</a> and
+<a href="https://docs.rs/embedded-hal-async">embedded-hal-async</a> traits, so
+existing device drivers work out of the box — no code changes needed.</li>
+</ul>
+<p>A companion <strong>CLI application</strong> (<code>gallo</code>) provides interactive access to
+every interface.</p>
+<p>In the following chapters we will look at the <em>Pico de Gallo</em> ecosystem
+in detail: hardware assembly, the crate architecture, each supported
+interface, writing device drivers, and the FFI/C bindings.</p>
 <h2 id="the-hardware"><a class="header" href="#the-hardware">The Hardware</a></h2>
 <p>At its most basic, <em>Pico de Gallo</em> is merely a landing board
 containing Pico 2 castelated pads where a Pico 2 can be soldered

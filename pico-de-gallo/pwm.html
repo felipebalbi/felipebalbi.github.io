@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Introduction - Pico de Gallo</title>
+        <title>PWM - Pico de Gallo</title>
 
 
         <!-- Custom HTML head -->
@@ -176,55 +176,239 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
-<p><em>Pico de Gallo</em> is an open hardware design built around the <a href="https://www.raspberrypi.com/products/raspberry-pi-pico-2/">Raspberry
-Pi Pico2</a>
-board that turns a Pico 2 into a versatile USB bridge for embedded
-development. It exposes the following interfaces to a host PC:</p>
-<ul>
-<li><strong>I²C</strong> — read, write, write-read, bus scan, runtime frequency
-configuration, transaction batching</li>
-<li><strong>SPI</strong> — read, write, transfer, flush, runtime mode/frequency
-configuration, transaction batching</li>
-<li><strong>UART</strong> — read, write, flush, runtime baud/config changes</li>
-<li><strong>GPIO</strong> — get, put, direction control, edge/level event subscription</li>
-<li><strong>PWM</strong> — duty cycle control, enable/disable, frequency/config changes</li>
-<li><strong>ADC</strong> — single-shot analog reads on 4 GPIO-based channels (12-bit)</li>
-<li><strong>1-Wire</strong> — bus reset, read, write, ROM search (PIO hardware)
-The <code>pico-de-gallo-hal</code> crate implements standard
-<a href="https://docs.rs/embedded-hal">embedded-hal</a> and
-<a href="https://docs.rs/embedded-hal-async">embedded-hal-async</a> traits, so
-existing device drivers work out of the box — no code changes needed.</li>
-</ul>
-<p>A companion <strong>CLI application</strong> (<code>gallo</code>) provides interactive access to
-every interface.</p>
-<p>In the following chapters we will look at the <em>Pico de Gallo</em> ecosystem
-in detail: hardware assembly, the crate architecture, each supported
-interface, writing device drivers, and the FFI/C bindings.</p>
-<h2 id="the-hardware"><a class="header" href="#the-hardware">The Hardware</a></h2>
-<p>At its most basic, <em>Pico de Gallo</em> is merely a landing board
-containing Pico 2 castelated pads where a Pico 2 can be soldered
-directly. This means that anything <em>Pico de Gallo</em> can do, can also be
-achieved without <em>Pico de Gallo</em>’s landing board; however, the landing
-board is a lot easier to work with, especially when it comes to
-tracking which pins the Firmware expects you to use.</p>
-<p>The assembled landing board also contains headers which allows for
-connecting peripherals using DuPont wires.</p>
-<p>You can get a feeling for how the board looks from the rendering
-below:</p>
-<p><img src="pico-de-gallo.png" title="Pico de Gallo" alt="Pico de Gallo"></p>
-<h2 id="the-case"><a class="header" href="#the-case">The Case</a></h2>
-<p>We also provide a 3D-printable (see below), snap-fit case where you
-can house your <em>Pico de Gallo</em> if you so desire. It’s entirely
-optional.</p>
-<p><img src="case.png" title="Pico de Gallo Case" alt="3D printable case"></p>
+                        <h1 id="pwm"><a class="header" href="#pwm">PWM</a></h1>
+<p>Pico de Gallo provides 4 PWM output channels through the RP2350’s hardware
+PWM slices. Each channel maps to a specific GPIO pin and slice/channel
+combination.</p>
+<h2 id="pin-mapping"><a class="header" href="#pin-mapping">Pin Mapping</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>PWM Channel</th><th>GPIO</th><th>Slice</th><th>Slice Channel</th></tr>
+</thead>
+<tbody>
+<tr><td>0</td><td>12</td><td>6</td><td>A</td></tr>
+<tr><td>1</td><td>13</td><td>6</td><td>B</td></tr>
+<tr><td>2</td><td>14</td><td>7</td><td>A</td></tr>
+<tr><td>3</td><td>15</td><td>7</td><td>B</td></tr>
+</tbody>
+</table>
+</div>
+<p>The total number of available channels is defined by the constant
+<code>NUM_PWM_CHANNELS = 4</code>. Channel indices are 0–3 in all APIs.</p>
+<h2 id="operations"><a class="header" href="#operations">Operations</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operation</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Set Duty</strong></td><td>Sets the duty cycle for a channel (0–65535)</td></tr>
+<tr><td><strong>Get Duty</strong></td><td>Returns current and maximum duty cycle</td></tr>
+<tr><td><strong>Enable</strong></td><td>Enables PWM output on a channel</td></tr>
+<tr><td><strong>Disable</strong></td><td>Disables PWM output on a channel</td></tr>
+<tr><td><strong>Set Config</strong></td><td>Configures frequency and phase-correct mode</td></tr>
+<tr><td><strong>Get Config</strong></td><td>Returns current configuration</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="led-brightness-example"><a class="header" href="#led-brightness-example">LED Brightness Example</a></h2>
+<p>A common use case is driving an LED at variable brightness. Connect an LED
+(with appropriate current-limiting resistor) to one of the PWM pins and
+control its brightness through the duty cycle.</p>
+<h3 id="cli"><a class="header" href="#cli">CLI</a></h3>
+<pre><code class="language-bash"># 1. Configure channel 0 for 1 kHz, normal (not phase-correct) mode
+gallo pwm set-config --channel 0 --frequency 1000
+
+# 2. Enable PWM output on channel 0
+gallo pwm enable --channel 0
+
+# 3. Set duty cycle to 50% (32768 out of 65535)
+gallo pwm set-duty --channel 0 --duty 32768
+
+# 4. Read back the current duty cycle
+gallo pwm get-duty --channel 0
+
+# 5. Dim the LED to ~25%
+gallo pwm set-duty --channel 0 --duty 16384
+
+# 6. Read back the current configuration
+gallo pwm get-config --channel 0
+
+# 7. Switch to phase-correct mode at 500 Hz
+gallo pwm set-config --channel 0 --frequency 500 --phase-correct
+
+# 8. Disable the channel when done
+gallo pwm disable --channel 0
+</code></pre>
+<h3 id="rust-library"><a class="header" href="#rust-library">Rust Library</a></h3>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use pico_de_gallo_lib::PicoDeGallo;
+
+async fn led_brightness(gallo: &amp;PicoDeGallo) {
+    // Configure channel 0: 1 kHz, no phase-correct
+    gallo.pwm_set_config(0, 1_000, false).await.unwrap();
+
+    // Enable PWM output
+    gallo.pwm_enable(0).await.unwrap();
+
+    // Set 50% duty cycle
+    gallo.pwm_set_duty_cycle(0, 32_768).await.unwrap();
+
+    // Read back duty info
+    let duty_info = gallo.pwm_get_duty_cycle(0).await.unwrap();
+    println!(
+        "Duty: {}/{} ({:.1}%)",
+        duty_info.current_duty,
+        duty_info.max_duty,
+        duty_info.current_duty as f32 / duty_info.max_duty as f32 * 100.0
+    );
+
+    // Read back configuration
+    let config = gallo.pwm_get_config(0).await.unwrap();
+    println!(
+        "Frequency: {} Hz, Phase-correct: {}, Enabled: {}",
+        config.frequency_hz, config.phase_correct, config.enabled
+    );
+
+    // Disable when done
+    gallo.pwm_disable(0).await.unwrap();
+}
+<span class="boring">}</span></code></pre>
+<h3 id="c-ffi"><a class="header" href="#c-ffi">C (FFI)</a></h3>
+<pre><code class="language-c">#include "pico_de_gallo.h"
+#include &lt;stdio.h&gt;
+
+void led_brightness(PicoDeGallo *gallo) {
+    /* Configure channel 0: 1 kHz, no phase-correct */
+    gallo_pwm_set_config(gallo, 0, 1000, false);
+
+    /* Enable PWM output */
+    gallo_pwm_enable(gallo, 0);
+
+    /* Set 50% duty cycle */
+    gallo_pwm_set_duty_cycle(gallo, 0, 32768);
+
+    /* Read back duty info */
+    GalloPwmDutyCycleInfo duty_info;
+    gallo_pwm_get_duty_cycle(gallo, 0, &amp;duty_info);
+    printf("Duty: %u/%u\n", duty_info.current_duty, duty_info.max_duty);
+
+    /* Read back configuration */
+    GalloPwmConfigurationInfo config_info;
+    gallo_pwm_get_config(gallo, 0, &amp;config_info);
+    printf("Frequency: %u Hz, Phase-correct: %d, Enabled: %d\n",
+           config_info.frequency_hz, config_info.phase_correct,
+           config_info.enabled);
+
+    /* Disable when done */
+    gallo_pwm_disable(gallo, 0);
+}
+</code></pre>
+<h3 id="hal"><a class="header" href="#hal">HAL</a></h3>
+<p>The HAL crate exposes individual PWM channels as <code>embedded_hal::pwm::SetDutyCycle</code>
+implementors, allowing use with any driver that accepts the standard trait.</p>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use pico_de_gallo_hal::Hal;
+use embedded_hal::pwm::SetDutyCycle;
+
+fn servo_control(hal: &amp;Hal) {
+    let mut pwm = hal.pwm_channel(0);
+
+    // SetDutyCycle trait methods
+    pwm.set_duty_cycle(32_768).unwrap();
+
+    let max = pwm.max_duty_cycle();
+    println!("Max duty: {max}");
+
+    // 75% duty cycle
+    pwm.set_duty_cycle(max * 3 / 4).unwrap();
+
+    // Fully on / fully off
+    pwm.set_duty_cycle_fully_on().unwrap();
+    pwm.set_duty_cycle_fully_off().unwrap();
+
+    // Percentage-based (if available via trait extension)
+    pwm.set_duty_cycle_percent(50).unwrap();
+}
+<span class="boring">}</span></code></pre>
+<h2 id="lib-api-reference"><a class="header" href="#lib-api-reference">Lib API Reference</a></h2>
+<p>All library methods are <code>async</code> and return <code>Result</code> types. The
+<code>PicoDeGallo</code> instance is created with <code>PicoDeGallo::new()</code> (which is
+<strong>not</strong> async).</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Method</th><th>Return Type</th></tr>
+</thead>
+<tbody>
+<tr><td><code>pwm_set_duty_cycle(channel: u8, duty: u16)</code></td><td><code>Result&lt;(), PicoDeGalloError&lt;PwmError&gt;&gt;</code></td></tr>
+<tr><td><code>pwm_get_duty_cycle(channel: u8)</code></td><td><code>Result&lt;PwmDutyCycleInfo, PicoDeGalloError&lt;PwmError&gt;&gt;</code></td></tr>
+<tr><td><code>pwm_enable(channel: u8)</code></td><td><code>Result&lt;(), PicoDeGalloError&lt;PwmError&gt;&gt;</code></td></tr>
+<tr><td><code>pwm_disable(channel: u8)</code></td><td><code>Result&lt;(), PicoDeGalloError&lt;PwmError&gt;&gt;</code></td></tr>
+<tr><td><code>pwm_set_config(channel: u8, frequency_hz: u32, phase_correct: bool)</code></td><td><code>Result&lt;(), PicoDeGalloError&lt;PwmError&gt;&gt;</code></td></tr>
+<tr><td><code>pwm_get_config(channel: u8)</code></td><td><code>Result&lt;PwmConfigurationInfo, PicoDeGalloError&lt;PwmError&gt;&gt;</code></td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="response-types"><a class="header" href="#response-types">Response Types</a></h3>
+<p><strong><code>PwmDutyCycleInfo</code></strong></p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Field</th><th>Type</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>max_duty</code></td><td><code>u16</code></td><td>Maximum duty cycle value (65535)</td></tr>
+<tr><td><code>current_duty</code></td><td><code>u16</code></td><td>Currently configured duty cycle</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong><code>PwmConfigurationInfo</code></strong></p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Field</th><th>Type</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>frequency_hz</code></td><td><code>u32</code></td><td>Configured PWM frequency in Hz</td></tr>
+<tr><td><code>phase_correct</code></td><td><code>bool</code></td><td>Whether phase-correct mode is enabled</td></tr>
+<tr><td><code>enabled</code></td><td><code>bool</code></td><td>Whether the channel is currently enabled</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="ffi-reference"><a class="header" href="#ffi-reference">FFI Reference</a></h2>
+<p>All FFI functions follow the <code>gallo_pwm_*</code> naming convention and return
+a <code>Status</code> code.</p>
+<pre><code class="language-c">Status gallo_pwm_set_duty_cycle(PicoDeGallo *gallo, uint8_t channel, uint16_t duty);
+Status gallo_pwm_get_duty_cycle(PicoDeGallo *gallo, uint8_t channel, GalloPwmDutyCycleInfo *out_info);
+Status gallo_pwm_enable(PicoDeGallo *gallo, uint8_t channel);
+Status gallo_pwm_disable(PicoDeGallo *gallo, uint8_t channel);
+Status gallo_pwm_set_config(PicoDeGallo *gallo, uint8_t channel, uint32_t frequency, bool phase_correct);
+Status gallo_pwm_get_config(PicoDeGallo *gallo, uint8_t channel, GalloPwmConfigurationInfo *out_info);
+</code></pre>
+<h2 id="hardware-setup"><a class="header" href="#hardware-setup">Hardware Setup</a></h2>
+<p>Connect an LED (or other PWM-compatible load) to one of the PWM pins with
+a current-limiting resistor:</p>
+<pre><code>GPIO 12 (PWM 0) ── 330Ω ──┬── LED ── GND
+                           │
+GPIO 13 (PWM 1) ── 330Ω ──┘  (or separate LEDs)
+</code></pre>
+<p>For servo motors, connect the signal wire directly to a PWM pin and
+configure for the servo’s expected frequency (typically 50 Hz). Adjust
+the duty cycle to control the servo position.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="uart.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
 
-                            <a rel="next prefetch" href="getting-started.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="adc.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -234,8 +418,11 @@ optional.</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="uart.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
 
-                    <a rel="next prefetch" href="getting-started.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="adc.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

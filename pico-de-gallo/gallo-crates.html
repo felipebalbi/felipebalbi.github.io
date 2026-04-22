@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-2b40418f.js";
+            window.path_to_searchindex_js = "searchindex-a2bafc4c.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-aa45779d.js"></script>
+        <script src="toc-ce601ddd.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -198,6 +198,7 @@ Commands:
   uart     UART access methods
   pwm      PWM control methods
   adc      ADC access methods
+  onewire  1-Wire bus access methods
   help     Print this message or the help of the given subcommand(s)
 
 Options:
@@ -228,7 +229,10 @@ Commands:
   scan        Scan I2C bus for existing devices
   read        Read bytes through the I2C bus from device at given address
   write       Write bytes through I2C bus to device at given address
-  write-read  Write bytes follwed by read bytes
+  write-read  Write bytes followed by read bytes
+  set-config  Set I2C bus configuration (frequency)
+  get-config  Get current I2C bus configuration
+  batch       Execute multiple I2C operations in a single transfer
   help        Print this message or the help of the given subcommand(s)
 
 Options:
@@ -304,14 +308,6 @@ written.</p>
 <h3 id="communicating-via-spi"><a class="header" href="#communicating-via-spi">Communicating via SPI</a></h3>
 <p>Exactly the same as I<sup>2</sup>C but without the extra <code>address</code>
 option.</p>
-<blockquote class="blockquote-tag blockquote-tag-note">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p>At the time of this writing, the app does not <strong>yet</strong> support
-controlling GPIOs, meaning that if you have a SPI device attached to
-<em>Pico de Gallo</em> that only responds when a <em>CS</em> pin is pulled low,
-then you must use either <em>pico-de-gallo-hal</em> or <em>pico-de-gallo-lib</em>,
-both of which will be discussed later.</p>
-</blockquote>
 <pre><code class="language-console">$ gallo spi help
 SPI access methods
 
@@ -322,6 +318,9 @@ Commands:
   write       Write bytes through SPI bus
   transfer    Full-duplex SPI transfer
   write-read  Write bytes followed by read bytes
+  set-config  Set SPI bus configuration (frequency, phase, polarity)
+  get-config  Get current SPI bus configuration
+  batch       Execute multiple SPI operations atomically under chip-select
   help        Print this message or the help of the given subcommand(s)
 
 Options:
@@ -393,6 +392,9 @@ endpoints exposed by the firmware. The table below provides a summary.</p>
 <tr><td><code>gpio_wait_for_falling_edge</code></td><td><code>pin</code></td><td>Waits until a falling edge is seen on GPIO #<code>pin</code></td></tr>
 <tr><td><code>gpio_wait_for_any_edge</code></td><td><code>pin</code></td><td>Waits until any edge is seen on GPIO #<code>pin</code></td></tr>
 <tr><td><code>gpio_set_config</code></td><td><code>pin</code>, <code>direction</code> (Input/Output), <code>pull</code> (None/Up/Down)</td><td>Configures GPIO #<code>pin</code> direction and pull resistor. Enters explicit mode.</td></tr>
+<tr><td><code>gpio_subscribe</code></td><td><code>pin</code>, <code>edge</code> (Rising/Falling/Any)</td><td>Subscribes to edge events on GPIO #<code>pin</code>. Pin becomes monitored.</td></tr>
+<tr><td><code>gpio_unsubscribe</code></td><td><code>pin</code></td><td>Unsubscribes from edge events on GPIO #<code>pin</code>. Pin returns to normal.</td></tr>
+<tr><td><code>subscribe_gpio_events</code></td><td><code>depth</code></td><td>Opens a topic subscription for <code>GpioEvent</code> messages from the device.</td></tr>
 <tr><td><code>i2c_set_config</code></td><td><code>frequency</code> (Standard/Fast/FastPlus)</td><td>Sets I<sup>2</sup>C bus clock frequency</td></tr>
 <tr><td><code>spi_set_config</code></td><td><code>spi_frequency</code>, <code>spi_phase</code>, <code>spi_polarity</code></td><td>Sets SPI bus clock frequency, phase, and polarity</td></tr>
 <tr><td><code>i2c_get_config</code></td><td></td><td>Returns the active I<sup>2</sup>C bus configuration (frequency)</td></tr>
@@ -404,8 +406,24 @@ endpoints exposed by the firmware. The table below provides a summary.</p>
 <tr><td><code>uart_set_config</code></td><td><code>baud_rate</code></td><td>Sets the UART baud rate (must be &gt; 0)</td></tr>
 <tr><td><code>uart_get_config</code></td><td></td><td>Returns the active UART configuration (baud rate)</td></tr>
 <tr><td><code>adc_read</code></td><td><code>channel</code> (AdcChannel enum)</td><td>Reads a single 12-bit sample from the given ADC channel</td></tr>
-<tr><td><code>adc_read_temperature</code></td><td></td><td>Reads the on-die temperature sensor (returns millidegrees Celsius)</td></tr>
 <tr><td><code>adc_get_config</code></td><td></td><td>Returns the ADC configuration (resolution, reference, channels)</td></tr>
+<tr><td><code>i2c_batch</code></td><td><code>address</code>, <code>ops</code> (encoded byte stream)</td><td>Executes multiple I<sup>2</sup>C operations in a single USB transfer</td></tr>
+<tr><td><code>spi_batch</code></td><td><code>cs_pin</code>, <code>ops</code> (encoded byte stream)</td><td>Executes multiple SPI operations atomically under chip-select</td></tr>
+<tr><td><code>onewire_reset</code></td><td></td><td>Resets the 1-Wire bus and detects device presence</td></tr>
+<tr><td><code>onewire_read</code></td><td><code>len</code></td><td>Reads N bytes from the 1-Wire bus</td></tr>
+<tr><td><code>onewire_write</code></td><td><code>data</code></td><td>Writes raw bytes to the 1-Wire bus</td></tr>
+<tr><td><code>onewire_write_pullup</code></td><td><code>data</code>, <code>pullup_duration_ms</code></td><td>Writes bytes then applies strong pullup for parasitic-power devices</td></tr>
+<tr><td><code>onewire_search</code></td><td></td><td>Starts a new ROM search and returns the first device</td></tr>
+<tr><td><code>onewire_search_next</code></td><td></td><td>Continues the current ROM search</td></tr>
+<tr><td><code>pwm_set_duty_cycle</code></td><td><code>channel</code>, <code>duty</code></td><td>Sets the duty cycle for PWM channel</td></tr>
+<tr><td><code>pwm_get_duty_cycle</code></td><td><code>channel</code></td><td>Returns the current and maximum duty cycle</td></tr>
+<tr><td><code>pwm_enable</code></td><td><code>channel</code></td><td>Enables a PWM channel</td></tr>
+<tr><td><code>pwm_disable</code></td><td><code>channel</code></td><td>Disables a PWM channel</td></tr>
+<tr><td><code>pwm_set_config</code></td><td><code>channel</code>, <code>frequency_hz</code>, <code>phase_correct</code></td><td>Configures PWM frequency and phase-correct mode</td></tr>
+<tr><td><code>pwm_get_config</code></td><td><code>channel</code></td><td>Returns the active PWM configuration</td></tr>
+<tr><td><code>i2c_write_read</code></td><td><code>address</code>, <code>contents</code>, <code>count</code></td><td>Writes bytes then reads from the same I²C address (repeated start)</td></tr>
+<tr><td><code>list_devices</code></td><td></td><td>Lists all connected Pico de Gallo devices (static method)</td></tr>
+<tr><td><code>wait_closed</code></td><td></td><td>Waits until the USB connection is closed</td></tr>
 </tbody>
 </table>
 </div>
@@ -430,7 +448,20 @@ examples.</p>
 <tr><td>I2C</td><td><code>I2c</code></td><td><code>I2c</code></td></tr>
 <tr><td>SPI</td><td><code>SpiBus</code>, <code>SpiDevice</code></td><td><code>SpiBus</code>, <code>SpiDevice</code></td></tr>
 <tr><td>UART</td><td><code>embedded_io::Read</code>, <code>embedded_io::Write</code></td><td><code>embedded_io_async::Read</code>, <code>embedded_io_async::Write</code></td></tr>
+<tr><td>PWM</td><td><code>SetDutyCycle</code></td><td>—</td></tr>
 <tr><td>Delay</td><td><code>DelayNs</code></td><td><code>DelayNs</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Additional handle types that don’t map to standard traits:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Type</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>OneWire</code></td><td>1-Wire bus operations (reset, read, write, ROM search)</td></tr>
+<tr><td><code>Adc</code></td><td>ADC reads and configuration (via <code>Hal::adc_read()</code>, <code>Hal::adc_get_config()</code>)</td></tr>
 </tbody>
 </table>
 </div>
@@ -449,7 +480,7 @@ struct Driver&lt;I2C: I2c&gt;;
 fn main() {
     let hal = Hal::new();
     let i2c = hal.i2c();
-    let delay = hal.Delay();
+    let delay = hal.delay();
 
     let mut drv = Driver::new(i2c, delay);
 
@@ -464,7 +495,7 @@ fn main() {
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="driver.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="gpio.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -478,7 +509,7 @@ fn main() {
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="driver.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="gpio.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

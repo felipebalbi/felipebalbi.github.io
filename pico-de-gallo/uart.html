@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Introduction - Pico de Gallo</title>
+        <title>UART - Pico de Gallo</title>
 
 
         <!-- Custom HTML head -->
@@ -176,55 +176,271 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
-<p><em>Pico de Gallo</em> is an open hardware design built around the <a href="https://www.raspberrypi.com/products/raspberry-pi-pico-2/">Raspberry
-Pi Pico2</a>
-board that turns a Pico 2 into a versatile USB bridge for embedded
-development. It exposes the following interfaces to a host PC:</p>
-<ul>
-<li><strong>I²C</strong> — read, write, write-read, bus scan, runtime frequency
-configuration, transaction batching</li>
-<li><strong>SPI</strong> — read, write, transfer, flush, runtime mode/frequency
-configuration, transaction batching</li>
-<li><strong>UART</strong> — read, write, flush, runtime baud/config changes</li>
-<li><strong>GPIO</strong> — get, put, direction control, edge/level event subscription</li>
-<li><strong>PWM</strong> — duty cycle control, enable/disable, frequency/config changes</li>
-<li><strong>ADC</strong> — single-shot analog reads on 4 GPIO-based channels (12-bit)</li>
-<li><strong>1-Wire</strong> — bus reset, read, write, ROM search (PIO hardware)
-The <code>pico-de-gallo-hal</code> crate implements standard
-<a href="https://docs.rs/embedded-hal">embedded-hal</a> and
-<a href="https://docs.rs/embedded-hal-async">embedded-hal-async</a> traits, so
-existing device drivers work out of the box — no code changes needed.</li>
-</ul>
-<p>A companion <strong>CLI application</strong> (<code>gallo</code>) provides interactive access to
-every interface.</p>
-<p>In the following chapters we will look at the <em>Pico de Gallo</em> ecosystem
-in detail: hardware assembly, the crate architecture, each supported
-interface, writing device drivers, and the FFI/C bindings.</p>
-<h2 id="the-hardware"><a class="header" href="#the-hardware">The Hardware</a></h2>
-<p>At its most basic, <em>Pico de Gallo</em> is merely a landing board
-containing Pico 2 castelated pads where a Pico 2 can be soldered
-directly. This means that anything <em>Pico de Gallo</em> can do, can also be
-achieved without <em>Pico de Gallo</em>’s landing board; however, the landing
-board is a lot easier to work with, especially when it comes to
-tracking which pins the Firmware expects you to use.</p>
-<p>The assembled landing board also contains headers which allows for
-connecting peripherals using DuPont wires.</p>
-<p>You can get a feeling for how the board looks from the rendering
-below:</p>
-<p><img src="pico-de-gallo.png" title="Pico de Gallo" alt="Pico de Gallo"></p>
-<h2 id="the-case"><a class="header" href="#the-case">The Case</a></h2>
-<p>We also provide a 3D-printable (see below), snap-fit case where you
-can house your <em>Pico de Gallo</em> if you so desire. It’s entirely
-optional.</p>
-<p><img src="case.png" title="Pico de Gallo Case" alt="3D printable case"></p>
+                        <h1 id="uart"><a class="header" href="#uart">UART</a></h1>
+<p>Pico de Gallo provides UART support through the RP2350’s hardware <strong>UART0</strong>
+peripheral. The TX pin is on <strong>GPIO 0</strong> and RX is on <strong>GPIO 1</strong>. The UART
+is buffered and interrupt-driven, so reads and writes do not block the
+firmware’s main loop.</p>
+<h2 id="operations"><a class="header" href="#operations">Operations</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operation</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Read</strong></td><td>Reads up to N bytes from the receive buffer with an optional timeout</td></tr>
+<tr><td><strong>Write</strong></td><td>Writes raw bytes to the transmit buffer</td></tr>
+<tr><td><strong>Flush</strong></td><td>Flushes the transmit buffer, blocking until all bytes are sent</td></tr>
+<tr><td><strong>Set Config</strong></td><td>Updates the baud rate (and future line parameters)</td></tr>
+<tr><td><strong>Get Config</strong></td><td>Returns the current UART configuration</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="loopback-example"><a class="header" href="#loopback-example">Loopback Example</a></h2>
+<p>The simplest way to verify UART operation is a loopback test: connect
+<strong>GPIO 0 (TX)</strong> directly to <strong>GPIO 1 (RX)</strong> with a jumper wire. Everything
+you write will be received back.</p>
+<h3 id="cli"><a class="header" href="#cli">CLI</a></h3>
+<pre><code class="language-bash"># 1. Check the current configuration
+gallo uart get-config
+
+# 2. Set baud rate to 115200 (default)
+gallo uart set-config --baud-rate 115200
+
+# 3. Write "Hello" (ASCII bytes)
+gallo uart write --bytes 0x48 0x65 0x6C 0x6C 0x6F
+
+# 4. Read back 5 bytes with a 100ms timeout
+gallo uart read --count 5 --timeout 100
+
+# 5. Flush the transmit buffer
+gallo uart flush
+</code></pre>
+<h3 id="rust-library"><a class="header" href="#rust-library">Rust Library</a></h3>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use pico_de_gallo_lib::PicoDeGallo;
+
+async fn uart_loopback(gallo: &amp;PicoDeGallo) {
+    // Configure baud rate
+    gallo.uart_set_config(115_200).await.unwrap();
+
+    // Verify configuration
+    let config = gallo.uart_get_config().await.unwrap();
+    println!("Baud rate: {}", config.baud_rate);
+
+    // Write "Hello"
+    gallo.uart_write(&amp;[0x48, 0x65, 0x6C, 0x6C, 0x6F]).await.unwrap();
+
+    // Flush to ensure all bytes are transmitted
+    gallo.uart_flush().await.unwrap();
+
+    // Read back with 100ms timeout
+    let data = gallo.uart_read(5, 100).await.unwrap();
+    assert_eq!(&amp;data, &amp;[0x48, 0x65, 0x6C, 0x6C, 0x6F]);
+    println!("Received: {:?}", String::from_utf8_lossy(&amp;data));
+}
+<span class="boring">}</span></code></pre>
+<h3 id="c-ffi"><a class="header" href="#c-ffi">C (FFI)</a></h3>
+<pre><code class="language-c">#include "pico_de_gallo.h"
+#include &lt;stdio.h&gt;
+#include &lt;string.h&gt;
+
+void uart_loopback(PicoDeGallo *gallo) {
+    /* Configure baud rate */
+    GalloStatus rc = gallo_uart_set_config(gallo, 115200);
+    if (rc != GALLO_STATUS_OK) {
+        fprintf(stderr, "set-config failed: %d\n", rc);
+        return;
+    }
+
+    /* Read back current config */
+    GalloUartConfigurationInfo info;
+    rc = gallo_uart_get_config(gallo, &amp;info);
+    if (rc != GALLO_STATUS_OK) {
+        fprintf(stderr, "get-config failed: %d\n", rc);
+        return;
+    }
+    printf("Baud rate: %u\n", info.baud_rate);
+
+    /* Write "Hello" */
+    uint8_t tx[] = {0x48, 0x65, 0x6C, 0x6C, 0x6F};
+    rc = gallo_uart_write(gallo, tx, sizeof(tx));
+    if (rc != GALLO_STATUS_OK) {
+        fprintf(stderr, "write failed: %d\n", rc);
+        return;
+    }
+
+    /* Flush */
+    gallo_uart_flush(gallo);
+
+    /* Read back */
+    uint8_t rx[5];
+    uint16_t out_read;
+    rc = gallo_uart_read(gallo, rx, sizeof(rx), 100, &amp;out_read);
+    if (rc != GALLO_STATUS_OK) {
+        fprintf(stderr, "read failed: %d\n", rc);
+        return;
+    }
+
+    printf("Received %u bytes: %.*s\n", out_read, out_read, rx);
+}
+</code></pre>
+<h3 id="hal"><a class="header" href="#hal">HAL</a></h3>
+<p>The HAL layer implements the standard <code>embedded_io</code> and <code>embedded_io_async</code>
+traits, so the UART can be used with any driver that accepts generic
+readers or writers.</p>
+<p><strong>Blocking</strong> — <code>embedded_io::Read</code> + <code>embedded_io::Write</code>:</p>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use embedded_io::{Read, Write};
+use pico_de_gallo_hal::Hal;
+
+fn uart_loopback_blocking(hal: &amp;Hal) {
+    let mut uart = hal.uart();
+
+    // Write "Hello"
+    uart.write_all(&amp;[0x48, 0x65, 0x6C, 0x6C, 0x6F]).unwrap();
+    uart.flush().unwrap();
+
+    // Read back
+    let mut buf = [0u8; 5];
+    uart.read_exact(&amp;mut buf).unwrap();
+    assert_eq!(&amp;buf, b"Hello");
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Async</strong> — <code>embedded_io_async::Read</code> + <code>embedded_io_async::Write</code>:</p>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use embedded_io_async::{Read, Write};
+use pico_de_gallo_hal::Hal;
+
+async fn uart_loopback_async(hal: &amp;Hal) {
+    let mut uart = hal.uart_async();
+
+    uart.write_all(&amp;[0x48, 0x65, 0x6C, 0x6C, 0x6F]).await.unwrap();
+    uart.flush().await.unwrap();
+
+    let mut buf = [0u8; 5];
+    uart.read_exact(&amp;mut buf).await.unwrap();
+    assert_eq!(&amp;buf, b"Hello");
+}
+<span class="boring">}</span></code></pre>
+<h2 id="connecting-an-external-device"><a class="header" href="#connecting-an-external-device">Connecting an External Device</a></h2>
+<p>To communicate with an external UART device (e.g., a GPS module or
+microcontroller), connect:</p>
+<pre><code>Pico de Gallo          External Device
+──────────────         ───────────────
+GPIO 0 (TX) ────────── RX
+GPIO 1 (RX) ────────── TX
+GND ────────────────── GND
+</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>Cross the TX/RX lines: the transmit pin of one device connects to the
+receive pin of the other.</p>
+</blockquote>
+<h2 id="non-blocking-read"><a class="header" href="#non-blocking-read">Non-blocking Read</a></h2>
+<p>A timeout of <strong>0</strong> performs a non-blocking read — it returns immediately
+with whatever bytes are already in the receive buffer (possibly none):</p>
+<pre><code class="language-bash"># Non-blocking: return whatever is buffered right now
+gallo uart read --count 64 --timeout 0
+</code></pre>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use pico_de_gallo_lib::PicoDeGallo;
+
+async fn drain_buffer(gallo: &amp;PicoDeGallo) -&gt; Vec&lt;u8&gt; {
+    // timeout_ms = 0 → non-blocking
+    gallo.uart_read(64, 0).await.unwrap()
+}
+<span class="boring">}</span></code></pre>
+<h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
+<p>UART operations return <code>PicoDeGalloError&lt;UartError&gt;</code> on failure. The
+<code>UartError</code> variants cover both protocol-level and configuration errors:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Variant</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>BufferTooLong</code></td><td>Requested read/write exceeds the firmware buffer size</td></tr>
+<tr><td><code>Overrun</code></td><td>Receive buffer overflowed before host read the data</td></tr>
+<tr><td><code>Break</code></td><td>Break condition detected on the line</td></tr>
+<tr><td><code>Parity</code></td><td>Parity check failed</td></tr>
+<tr><td><code>Framing</code></td><td>Invalid stop bit detected</td></tr>
+<tr><td><code>InvalidBaudRate</code></td><td>Requested baud rate is out of range or unsupported</td></tr>
+<tr><td><code>Other</code></td><td>Catch-all for unexpected firmware errors</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="api-reference"><a class="header" href="#api-reference">API Reference</a></h2>
+<h3 id="lib-methods"><a class="header" href="#lib-methods">Lib Methods</a></h3>
+<p>All methods are <code>async</code> and available on <code>PicoDeGallo</code>:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Method</th><th>Signature</th></tr>
+</thead>
+<tbody>
+<tr><td><code>uart_read</code></td><td><code>uart_read(count: u16, timeout_ms: u32) -&gt; Result&lt;Vec&lt;u8&gt;, PicoDeGalloError&lt;UartError&gt;&gt;</code></td></tr>
+<tr><td><code>uart_write</code></td><td><code>uart_write(contents: &amp;[u8]) -&gt; Result&lt;(), PicoDeGalloError&lt;UartError&gt;&gt;</code></td></tr>
+<tr><td><code>uart_flush</code></td><td><code>uart_flush() -&gt; Result&lt;(), PicoDeGalloError&lt;UartError&gt;&gt;</code></td></tr>
+<tr><td><code>uart_set_config</code></td><td><code>uart_set_config(baud_rate: u32) -&gt; Result&lt;(), PicoDeGalloError&lt;UartError&gt;&gt;</code></td></tr>
+<tr><td><code>uart_get_config</code></td><td><code>uart_get_config() -&gt; Result&lt;UartConfigurationInfo, PicoDeGalloError&lt;UartError&gt;&gt;</code></td></tr>
+</tbody>
+</table>
+</div>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p><code>PicoDeGallo::new()</code> is <strong>not</strong> async. Only the peripheral methods
+listed above are async.</p>
+</blockquote>
+<h3 id="ffi-functions"><a class="header" href="#ffi-functions">FFI Functions</a></h3>
+<p>All FFI functions return a <code>GalloStatus</code> code:</p>
+<pre><code class="language-c">GalloStatus gallo_uart_read(PicoDeGallo *gallo,
+                            uint8_t *buf, uint16_t buf_len,
+                            uint32_t timeout_ms, uint16_t *out_read);
+
+GalloStatus gallo_uart_write(PicoDeGallo *gallo,
+                             const uint8_t *buf, uint16_t len);
+
+GalloStatus gallo_uart_flush(PicoDeGallo *gallo);
+
+GalloStatus gallo_uart_set_config(PicoDeGallo *gallo, uint32_t baud_rate);
+
+GalloStatus gallo_uart_get_config(PicoDeGallo *gallo,
+                                  GalloUartConfigurationInfo *out_info);
+</code></pre>
+<h3 id="cli-commands"><a class="header" href="#cli-commands">CLI Commands</a></h3>
+<pre><code>gallo uart read       --count &lt;N&gt; --timeout &lt;MS&gt;
+gallo uart write      --bytes &lt;BYTE&gt;...
+gallo uart flush
+gallo uart set-config --baud-rate &lt;RATE&gt;
+gallo uart get-config
+</code></pre>
+<h2 id="pin-mapping"><a class="header" href="#pin-mapping">Pin Mapping</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Function</th><th>GPIO</th><th>RP2350 Peripheral</th></tr>
+</thead>
+<tbody>
+<tr><td>TX</td><td>0</td><td>UART0 TX</td></tr>
+<tr><td>RX</td><td>1</td><td>UART0 RX</td></tr>
+</tbody>
+</table>
+</div>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="gpio.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
 
-                            <a rel="next prefetch" href="getting-started.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="pwm.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -234,8 +450,11 @@ optional.</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="gpio.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
 
-                    <a rel="next prefetch" href="getting-started.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="pwm.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

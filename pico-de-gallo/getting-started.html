@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-2b40418f.js";
+            window.path_to_searchindex_js = "searchindex-a2bafc4c.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-aa45779d.js"></script>
+        <script src="toc-ce601ddd.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -305,7 +305,7 @@ latest Firmware. In order to do so, we download the latest
 <code>firmware.uf2</code> from the <a href="https://github.com/OpenDevicePartnership/pico-de-gallo/releases">Releases</a>
 page from our <a href="https://github.com/OpenDevicePartnership/pico-de-gallo">Github
 repository</a>. At
-the time of this writing, that is <a href="https://github.com/OpenDevicePartnership/pico-de-gallo/releases/tag/firmware-v0.5.0">Fimware
+the time of this writing, that is <a href="https://github.com/OpenDevicePartnership/pico-de-gallo/releases/tag/firmware-v0.5.0">Firmware
 v0.5.0</a>.</p>
 <p>It’s very easy to update firmware on <em>Pico de Gallo</em>, simply:</p>
 <ol>
@@ -334,6 +334,62 @@ Pico de Gallo FW v0.7.0
 <p>Success 🎉. With this completed we can get familiarized with the other
 parts of the <em>Pico de Gallo</em> ecosystem and write a driver for the
 <code>tmp102</code> temperature sensor.</p>
+<h2 id="pin-map"><a class="header" href="#pin-map">Pin Map</a></h2>
+<p>The table below shows every function exposed by the firmware and the
+RP2350 GPIO it maps to. This is the authoritative pin assignment —
+refer to this when wiring peripherals.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Function</th><th>GPIO</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td>UART TX</td><td>GPIO 0</td><td>Buffered, interrupt-driven</td></tr>
+<tr><td>UART RX</td><td>GPIO 1</td><td></td></tr>
+<tr><td>I²C SDA</td><td>GPIO 2</td><td>7-bit addressing, async DMA</td></tr>
+<tr><td>I²C SCL</td><td>GPIO 3</td><td></td></tr>
+<tr><td>SPI RX (MISO)</td><td>GPIO 4</td><td>DMA-backed full-duplex</td></tr>
+<tr><td>SPI SCK</td><td>GPIO 6</td><td></td></tr>
+<tr><td>SPI TX (MOSI)</td><td>GPIO 7</td><td></td></tr>
+<tr><td>GPIO 0</td><td>GPIO 8</td><td>Input/output/edge events</td></tr>
+<tr><td>GPIO 1</td><td>GPIO 9</td><td>Input/output/edge events</td></tr>
+<tr><td>GPIO 2</td><td>GPIO 10</td><td>Input/output/edge events</td></tr>
+<tr><td>GPIO 3</td><td>GPIO 11</td><td>Input/output/edge events</td></tr>
+<tr><td>PWM 0</td><td>GPIO 12</td><td>Slice 6 channel A</td></tr>
+<tr><td>PWM 1</td><td>GPIO 13</td><td>Slice 6 channel B</td></tr>
+<tr><td>PWM 2</td><td>GPIO 14</td><td>Slice 7 channel A</td></tr>
+<tr><td>PWM 3</td><td>GPIO 15</td><td>Slice 7 channel B</td></tr>
+<tr><td>1-Wire</td><td>GPIO 16</td><td>PIO0/SM0, open-drain</td></tr>
+<tr><td>ADC 0</td><td>GPIO 26</td><td>12-bit, 0–3.3 V nominal</td></tr>
+<tr><td>ADC 1</td><td>GPIO 27</td><td>12-bit</td></tr>
+<tr><td>ADC 2</td><td>GPIO 28</td><td>12-bit</td></tr>
+<tr><td>ADC 3</td><td>GPIO 29</td><td>12-bit</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="software-prerequisites"><a class="header" href="#software-prerequisites">Software Prerequisites</a></h2>
+<p>To use <em>Pico de Gallo</em> you need the <code>gallo</code> CLI application. Pre-built
+binaries for Windows (x86_64, Aarch64), Linux (x86_64, Aarch64), and
+macOS (Aarch64) are available on the
+<a href="https://github.com/OpenDevicePartnership/pico-de-gallo/releases">Releases</a> page.</p>
+<p>If you prefer to build from source:</p>
+<ol>
+<li>Install <a href="https://rustup.rs/">Rust</a> (stable toolchain)</li>
+<li>Clone the repository: <code>git clone https://github.com/OpenDevicePartnership/pico-de-gallo</code></li>
+<li>Build the CLI: <code>cd crates &amp;&amp; cargo build --release -p gallo</code></li>
+<li>The binary will be at <code>target/release/gallo</code> (or <code>gallo.exe</code> on Windows)</li>
+</ol>
+<h3 id="usb-driver-notes"><a class="header" href="#usb-driver-notes">USB Driver Notes</a></h3>
+<ul>
+<li><strong>Linux</strong> — you may need a udev rule to allow non-root access. Create
+<code>/etc/udev/rules.d/99-pico-de-gallo.rules</code> with:
+<pre><code>SUBSYSTEM=="usb", ATTR{idVendor}=="045e", ATTR{idProduct}=="ffff", MODE="0666"
+</code></pre>
+Then run <code>sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</code>.</li>
+<li><strong>Windows</strong> — the device should be recognized automatically. If not,
+use <a href="https://zadig.akeo.ie/">Zadig</a> to install the WinUSB driver.</li>
+<li><strong>macOS</strong> — no additional drivers needed.</li>
+</ul>
 
                     </main>
 

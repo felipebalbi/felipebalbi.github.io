@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Introduction - Pico de Gallo</title>
+        <title>Transaction Batching - Pico de Gallo</title>
 
 
         <!-- Custom HTML head -->
@@ -176,55 +176,262 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
-<p><em>Pico de Gallo</em> is an open hardware design built around the <a href="https://www.raspberrypi.com/products/raspberry-pi-pico-2/">Raspberry
-Pi Pico2</a>
-board that turns a Pico 2 into a versatile USB bridge for embedded
-development. It exposes the following interfaces to a host PC:</p>
-<ul>
-<li><strong>I²C</strong> — read, write, write-read, bus scan, runtime frequency
-configuration, transaction batching</li>
-<li><strong>SPI</strong> — read, write, transfer, flush, runtime mode/frequency
-configuration, transaction batching</li>
-<li><strong>UART</strong> — read, write, flush, runtime baud/config changes</li>
-<li><strong>GPIO</strong> — get, put, direction control, edge/level event subscription</li>
-<li><strong>PWM</strong> — duty cycle control, enable/disable, frequency/config changes</li>
-<li><strong>ADC</strong> — single-shot analog reads on 4 GPIO-based channels (12-bit)</li>
-<li><strong>1-Wire</strong> — bus reset, read, write, ROM search (PIO hardware)
-The <code>pico-de-gallo-hal</code> crate implements standard
-<a href="https://docs.rs/embedded-hal">embedded-hal</a> and
-<a href="https://docs.rs/embedded-hal-async">embedded-hal-async</a> traits, so
-existing device drivers work out of the box — no code changes needed.</li>
-</ul>
-<p>A companion <strong>CLI application</strong> (<code>gallo</code>) provides interactive access to
-every interface.</p>
-<p>In the following chapters we will look at the <em>Pico de Gallo</em> ecosystem
-in detail: hardware assembly, the crate architecture, each supported
-interface, writing device drivers, and the FFI/C bindings.</p>
-<h2 id="the-hardware"><a class="header" href="#the-hardware">The Hardware</a></h2>
-<p>At its most basic, <em>Pico de Gallo</em> is merely a landing board
-containing Pico 2 castelated pads where a Pico 2 can be soldered
-directly. This means that anything <em>Pico de Gallo</em> can do, can also be
-achieved without <em>Pico de Gallo</em>’s landing board; however, the landing
-board is a lot easier to work with, especially when it comes to
-tracking which pins the Firmware expects you to use.</p>
-<p>The assembled landing board also contains headers which allows for
-connecting peripherals using DuPont wires.</p>
-<p>You can get a feeling for how the board looks from the rendering
-below:</p>
-<p><img src="pico-de-gallo.png" title="Pico de Gallo" alt="Pico de Gallo"></p>
-<h2 id="the-case"><a class="header" href="#the-case">The Case</a></h2>
-<p>We also provide a 3D-printable (see below), snap-fit case where you
-can house your <em>Pico de Gallo</em> if you so desire. It’s entirely
-optional.</p>
-<p><img src="case.png" title="Pico de Gallo Case" alt="3D printable case"></p>
+                        <h1 id="transaction-batching"><a class="header" href="#transaction-batching">Transaction Batching</a></h1>
+<p>When talking to I<sup>2</sup>C or SPI devices, a single logical operation
+often requires <strong>multiple bus transactions</strong> — for example, writing a
+register address and then reading back its value. Without batching, each
+of these operations is a separate USB round-trip:</p>
+<pre><code class="language-text">Host ──write──▸ USB ──▸ Firmware ──▸ I²C bus    (~1 ms)
+Host ◂──ack──── USB ◂── Firmware ◂── I²C bus    (~1 ms)
+Host ──read───▸ USB ──▸ Firmware ──▸ I²C bus    (~1 ms)
+Host ◂──data─── USB ◂── Firmware ◂── I²C bus    (~1 ms)
+                                            Total: ~4 ms
+</code></pre>
+<p>Transaction batching packs all operations into a <strong>single USB
+transfer</strong>. The firmware executes them back-to-back on the bus and
+returns all results at once:</p>
+<pre><code class="language-text">Host ──[write, read]──▸ USB ──▸ Firmware ──▸ I²C bus    (~1 ms)
+Host ◂──[data]──────── USB ◂── Firmware ◂── I²C bus    (~1 ms)
+                                            Total: ~2 ms
+</code></pre>
+<p>For transactions with many operations, this is a <strong>10–50× speedup</strong> —
+USB latency dominates, not bus time.</p>
+<h2 id="using-batched-transactions-from-the-cli"><a class="header" href="#using-batched-transactions-from-the-cli">Using Batched Transactions from the CLI</a></h2>
+<p>The <code>gallo</code> CLI exposes batch operations directly. Each <code>--op</code> flag
+specifies one bus operation.</p>
+<h3 id="i2c-batch"><a class="header" href="#i2c-batch">I<sup>2</sup>C Batch</a></h3>
+<p>Write a register address, then read back 2 bytes:</p>
+<pre><code class="language-console">$ gallo i2c batch -a 0x48 --op write:0x00 --op read:2
+Read data (2 bytes):
+  0000: 19 80                                              ..
+</code></pre>
+<p>Write 3 bytes to an EEPROM at address 0x50, then read them back:</p>
+<pre><code class="language-console">$ gallo i2c batch -a 0x50 --op write:0x00,0x10,0xab,0xcd,0xef --op write:0x00,0x10 --op read:3
+Read data (3 bytes):
+  0000: ab cd ef                                           ...
+</code></pre>
+<p>The operations execute as a single I<sup>2</sup>C transaction — the bus
+is not released between them (no STOP condition until the batch
+completes).</p>
+<h4 id="available-i2c-operations"><a class="header" href="#available-i2c-operations">Available I<sup>2</sup>C operations</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operation</th><th>Syntax</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Read</td><td><code>read:N</code></td><td>Read <em>N</em> bytes from the device</td></tr>
+<tr><td>Write</td><td><code>write:B1,B2,...</code></td><td>Write the given bytes (hex <code>0x..</code> or decimal)</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="spi-batch"><a class="header" href="#spi-batch">SPI Batch</a></h3>
+<p>Read a JEDEC ID from a SPI flash (command <code>0x9F</code>, 3-byte response):</p>
+<pre><code class="language-console">$ gallo spi batch --cs 0 --op write:0x9f --op read:3
+Read data (3 bytes):
+  0000: ef 40 18                                           .@.
+</code></pre>
+<p>Full-duplex transfer followed by a delay:</p>
+<pre><code class="language-console">$ gallo spi batch --cs 1 --op transfer:0x01,0x02,0x03 --op delay:1000 --op read:4
+Read data (7 bytes):
+  0000: ff ff ff 00 00 00 00                               .......
+</code></pre>
+<p>The <code>--cs</code> flag specifies which GPIO pin (0–3) is used as chip-select.
+The firmware asserts CS low before the first operation and deasserts it
+after the last — all operations run atomically under chip-select.</p>
+<h4 id="available-spi-operations"><a class="header" href="#available-spi-operations">Available SPI operations</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operation</th><th>Syntax</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Read</td><td><code>read:N</code></td><td>Clock in <em>N</em> bytes (MISO only)</td></tr>
+<tr><td>Write</td><td><code>write:B1,B2,...</code></td><td>Clock out the given bytes (MOSI only)</td></tr>
+<tr><td>Transfer</td><td><code>transfer:B1,B2,...</code></td><td>Full-duplex: send on MOSI, receive same count on MISO</td></tr>
+<tr><td>DelayNs</td><td><code>delay:NS</code></td><td>Delay for <em>NS</em> nanoseconds (best-effort, firmware resolution)</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="using-the-lib-crate-directly"><a class="header" href="#using-the-lib-crate-directly">Using the Lib Crate Directly</a></h2>
+<p>If you need batch transactions from Rust code, use the
+<code>i2c_batch</code> and <code>spi_batch</code> methods on the <code>PicoDeGallo</code> client. These
+accept typed operation slices (<code>&amp;[I2cBatchOp]</code> / <code>&amp;[SpiBatchOp]</code>)
+directly — no manual encoding needed.</p>
+<h3 id="i2c-batch-example"><a class="header" href="#i2c-batch-example">I<sup>2</sup>C batch example</a></h3>
+<pre class="playground"><code class="language-rust no_run">use pico_de_gallo_lib::{PicoDeGallo, I2cBatchOp};
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let pg = PicoDeGallo::new();
+
+    // Build a "write register pointer, then read 2 bytes" transaction
+    let ops = [
+        I2cBatchOp::Write { data: &amp;[0x00] },       // pointer register
+        I2cBatchOp::Read { len: 2 },                // read temperature
+    ];
+
+    let result = pg.i2c_batch(0x48, &amp;ops).await?;
+    let temp_raw = u16::from_be_bytes([result[0], result[1]]);
+    let celsius = (temp_raw &gt;&gt; 4) as f32 * 0.0625;
+    println!("Temperature: {celsius:.2} °C");
+
+    Ok(())
+}</code></pre>
+<h3 id="spi-batch-example"><a class="header" href="#spi-batch-example">SPI batch example</a></h3>
+<pre class="playground"><code class="language-rust no_run">use pico_de_gallo_lib::{PicoDeGallo, SpiBatchOp};
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let pg = PicoDeGallo::new();
+
+    // Read JEDEC ID: send command 0x9F, then read 3 bytes
+    let ops = [
+        SpiBatchOp::Write { data: &amp;[0x9F] },
+        SpiBatchOp::Read { len: 3 },
+    ];
+
+    let result = pg.spi_batch(0, &amp;ops).await?;
+    println!(
+        "JEDEC ID: manufacturer=0x{:02x}, type=0x{:02x}, capacity=0x{:02x}",
+        result[0], result[1], result[2]
+    );
+
+    Ok(())
+}</code></pre>
+<h2 id="transparent-batching-via-the-hal-crate"><a class="header" href="#transparent-batching-via-the-hal-crate">Transparent Batching via the HAL Crate</a></h2>
+<p>The most powerful aspect of transaction batching is that <strong>you don’t
+need to use it explicitly</strong>. The HAL crate’s <code>embedded-hal</code> trait
+implementations use batch endpoints automatically.</p>
+<p>When you call <code>I2c::transaction()</code> or <code>SpiDevice::transaction()</code> from
+the HAL crate, the implementation encodes all operations into a single
+batch request, sends it over USB, and unpacks the results — all
+transparently.</p>
+<p>This means any existing device driver that uses the standard
+<code>embedded-hal</code> transaction API gets the performance benefit for free:</p>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use embedded_hal::i2c::I2c;
+use embedded_hal::i2c::Operation;
+use pico_de_gallo_hal::Hal;
+
+fn read_tmp102(hal: &amp;Hal) -&gt; Result&lt;f32, Box&lt;dyn std::error::Error&gt;&gt; {
+    let mut i2c = hal.i2c();
+    let mut buf = [0u8; 2];
+
+    // This entire transaction is ONE USB round-trip
+    i2c.transaction(
+        0x48,
+        &amp;mut [
+            Operation::Write(&amp;[0x00]),   // set pointer to temperature register
+            Operation::Read(&amp;mut buf),   // read 2-byte temperature
+        ],
+    )?;
+
+    let raw = u16::from_be_bytes(buf);
+    Ok((raw &gt;&gt; 4) as f32 * 0.0625)
+}
+<span class="boring">}</span></code></pre>
+<p>Similarly, <code>SpiDevice::transaction()</code> batches all SPI operations and
+manages chip-select automatically:</p>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use embedded_hal::spi::SpiDevice;
+use embedded_hal::spi::Operation;
+use pico_de_gallo_hal::Hal;
+
+fn read_spi_jedec(hal: &amp;Hal) -&gt; Result&lt;[u8; 3], Box&lt;dyn std::error::Error&gt;&gt; {
+    let mut spi = hal.spi_device(0);  // CS on GPIO 0
+    let mut id = [0u8; 3];
+
+    // One USB round-trip: CS asserted, command sent, ID read, CS deasserted
+    spi.transaction(&amp;mut [
+        Operation::Write(&amp;[0x9F]),
+        Operation::Read(&amp;mut id),
+    ])?;
+
+    Ok(id)
+}
+<span class="boring">}</span></code></pre>
+<h3 id="before-vs-after"><a class="header" href="#before-vs-after">Before vs. After</a></h3>
+<p>Consider an EEPROM page write that requires a write-enable command
+followed by the actual page write, then a status poll:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Approach</th><th>USB Round-Trips</th><th>Approx. Latency</th></tr>
+</thead>
+<tbody>
+<tr><td>Without batching (3 × write/read)</td><td>6</td><td>~6 ms</td></tr>
+<tr><td>With batching (1 × batch)</td><td>2</td><td>~2 ms</td></tr>
+</tbody>
+</table>
+</div>
+<p>The improvement grows with the number of operations in each transaction.</p>
+<h2 id="wire-format-details"><a class="header" href="#wire-format-details">Wire Format Details</a></h2>
+<p>For those interested in the protocol internals, batch operations use
+postcard serialization. Each <code>I2cBatchOp</code> or <code>SpiBatchOp</code> is serialized
+individually using <code>postcard::to_slice</code>, and the resulting bytes are
+concatenated into the <code>ops</code> field. The firmware decodes them one at a
+time using <code>postcard::take_from_bytes</code>.</p>
+<h3 id="i2c-operation-encoding-postcard"><a class="header" href="#i2c-operation-encoding-postcard">I<sup>2</sup>C operation encoding (postcard)</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Variant</th><th>Encoding</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Read { len }</code></td><td>varint <code>0</code> (variant index) + varint <code>len</code></td></tr>
+<tr><td><code>Write { data }</code></td><td>varint <code>1</code> + varint data length + raw bytes</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="spi-operation-encoding-postcard"><a class="header" href="#spi-operation-encoding-postcard">SPI operation encoding (postcard)</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Variant</th><th>Encoding</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Read { len }</code></td><td>varint <code>0</code> + varint <code>len</code></td></tr>
+<tr><td><code>Write { data }</code></td><td>varint <code>1</code> + varint data length + raw bytes</td></tr>
+<tr><td><code>Transfer { data }</code></td><td>varint <code>2</code> + varint data length + raw bytes</td></tr>
+<tr><td><code>DelayNs { ns }</code></td><td>varint <code>3</code> + varint <code>ns</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>The <code>count</code> field in each batch request struct tells the firmware how
+many operations to expect, providing an additional safety check during
+decoding.</p>
+<p>The response for both I<sup>2</sup>C and SPI is simply the concatenated
+read (and transfer) data. The host already knows the expected lengths
+from the request, so no framing is needed in the response.</p>
+<h3 id="limits"><a class="header" href="#limits">Limits</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Parameter</th><th>Value</th></tr>
+</thead>
+<tbody>
+<tr><td>Maximum operations per batch</td><td>64 (<code>MAX_BATCH_OPS</code>)</td></tr>
+<tr><td>Maximum total payload</td><td>4096 bytes (<code>MAX_TRANSFER_SIZE</code>)</td></tr>
+<tr><td>Maximum response data</td><td>4096 bytes</td></tr>
+</tbody>
+</table>
+</div>
+<p>If a batch exceeds these limits, the firmware returns an error
+indicating which limit was violated and, for operation-level failures,
+which operation failed (zero-indexed).</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="adc.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
 
-                            <a rel="next prefetch" href="getting-started.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="onewire.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -234,8 +441,11 @@ optional.</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="adc.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
 
-                    <a rel="next prefetch" href="getting-started.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="onewire.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

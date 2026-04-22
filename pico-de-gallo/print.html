@@ -38,10 +38,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-2b40418f.js";
+            window.path_to_searchindex_js = "searchindex-a2bafc4c.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-aa45779d.js"></script>
+        <script src="toc-ce601ddd.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -180,15 +180,28 @@
                         <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
 <p><em>Pico de Gallo</em> is an open hardware design built around the <a href="https://www.raspberrypi.com/products/raspberry-pi-pico-2/">Raspberry
 Pi Pico2</a>
-board that simplifies the process of validating Embedded Rust drivers
-for I<sup>2</sup>C and SPI discrete devices.</p>
-<p>With <em>Pico de Gallo</em>, one can focus on writing the standalone driver
-polymorphic on either <a href="https://docs.rs/embedded-hal">embedded-hal</a> or
-<a href="https://docs.rs/embedded-hal-async">embedded-hal-async</a> traits
-because <code>pico-de-gallo-hal</code> implements those traits directly.</p>
-<p>In the following chapters we will look at the process of writing a
-small temperature sensor driver and how <em>Pico de Gallo</em> can help
-with testing and examples.</p>
+board that turns a Pico 2 into a versatile USB bridge for embedded
+development. It exposes the following interfaces to a host PC:</p>
+<ul>
+<li><strong>I²C</strong> — read, write, write-read, bus scan, runtime frequency
+configuration, transaction batching</li>
+<li><strong>SPI</strong> — read, write, transfer, flush, runtime mode/frequency
+configuration, transaction batching</li>
+<li><strong>UART</strong> — read, write, flush, runtime baud/config changes</li>
+<li><strong>GPIO</strong> — get, put, direction control, edge/level event subscription</li>
+<li><strong>PWM</strong> — duty cycle control, enable/disable, frequency/config changes</li>
+<li><strong>ADC</strong> — single-shot analog reads on 4 GPIO-based channels (12-bit)</li>
+<li><strong>1-Wire</strong> — bus reset, read, write, ROM search (PIO hardware)
+The <code>pico-de-gallo-hal</code> crate implements standard
+<a href="https://docs.rs/embedded-hal">embedded-hal</a> and
+<a href="https://docs.rs/embedded-hal-async">embedded-hal-async</a> traits, so
+existing device drivers work out of the box — no code changes needed.</li>
+</ul>
+<p>A companion <strong>CLI application</strong> (<code>gallo</code>) provides interactive access to
+every interface.</p>
+<p>In the following chapters we will look at the <em>Pico de Gallo</em> ecosystem
+in detail: hardware assembly, the crate architecture, each supported
+interface, writing device drivers, and the FFI/C bindings.</p>
 <h2 id="the-hardware"><a class="header" href="#the-hardware">The Hardware</a></h2>
 <p>At its most basic, <em>Pico de Gallo</em> is merely a landing board
 containing Pico 2 castelated pads where a Pico 2 can be soldered
@@ -336,7 +349,7 @@ latest Firmware. In order to do so, we download the latest
 <code>firmware.uf2</code> from the <a href="https://github.com/OpenDevicePartnership/pico-de-gallo/releases">Releases</a>
 page from our <a href="https://github.com/OpenDevicePartnership/pico-de-gallo">Github
 repository</a>. At
-the time of this writing, that is <a href="https://github.com/OpenDevicePartnership/pico-de-gallo/releases/tag/firmware-v0.5.0">Fimware
+the time of this writing, that is <a href="https://github.com/OpenDevicePartnership/pico-de-gallo/releases/tag/firmware-v0.5.0">Firmware
 v0.5.0</a>.</p>
 <p>It’s very easy to update firmware on <em>Pico de Gallo</em>, simply:</p>
 <ol>
@@ -365,6 +378,62 @@ Pico de Gallo FW v0.7.0
 <p>Success 🎉. With this completed we can get familiarized with the other
 parts of the <em>Pico de Gallo</em> ecosystem and write a driver for the
 <code>tmp102</code> temperature sensor.</p>
+<h2 id="pin-map"><a class="header" href="#pin-map">Pin Map</a></h2>
+<p>The table below shows every function exposed by the firmware and the
+RP2350 GPIO it maps to. This is the authoritative pin assignment —
+refer to this when wiring peripherals.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Function</th><th>GPIO</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td>UART TX</td><td>GPIO 0</td><td>Buffered, interrupt-driven</td></tr>
+<tr><td>UART RX</td><td>GPIO 1</td><td></td></tr>
+<tr><td>I²C SDA</td><td>GPIO 2</td><td>7-bit addressing, async DMA</td></tr>
+<tr><td>I²C SCL</td><td>GPIO 3</td><td></td></tr>
+<tr><td>SPI RX (MISO)</td><td>GPIO 4</td><td>DMA-backed full-duplex</td></tr>
+<tr><td>SPI SCK</td><td>GPIO 6</td><td></td></tr>
+<tr><td>SPI TX (MOSI)</td><td>GPIO 7</td><td></td></tr>
+<tr><td>GPIO 0</td><td>GPIO 8</td><td>Input/output/edge events</td></tr>
+<tr><td>GPIO 1</td><td>GPIO 9</td><td>Input/output/edge events</td></tr>
+<tr><td>GPIO 2</td><td>GPIO 10</td><td>Input/output/edge events</td></tr>
+<tr><td>GPIO 3</td><td>GPIO 11</td><td>Input/output/edge events</td></tr>
+<tr><td>PWM 0</td><td>GPIO 12</td><td>Slice 6 channel A</td></tr>
+<tr><td>PWM 1</td><td>GPIO 13</td><td>Slice 6 channel B</td></tr>
+<tr><td>PWM 2</td><td>GPIO 14</td><td>Slice 7 channel A</td></tr>
+<tr><td>PWM 3</td><td>GPIO 15</td><td>Slice 7 channel B</td></tr>
+<tr><td>1-Wire</td><td>GPIO 16</td><td>PIO0/SM0, open-drain</td></tr>
+<tr><td>ADC 0</td><td>GPIO 26</td><td>12-bit, 0–3.3 V nominal</td></tr>
+<tr><td>ADC 1</td><td>GPIO 27</td><td>12-bit</td></tr>
+<tr><td>ADC 2</td><td>GPIO 28</td><td>12-bit</td></tr>
+<tr><td>ADC 3</td><td>GPIO 29</td><td>12-bit</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="software-prerequisites"><a class="header" href="#software-prerequisites">Software Prerequisites</a></h2>
+<p>To use <em>Pico de Gallo</em> you need the <code>gallo</code> CLI application. Pre-built
+binaries for Windows (x86_64, Aarch64), Linux (x86_64, Aarch64), and
+macOS (Aarch64) are available on the
+<a href="https://github.com/OpenDevicePartnership/pico-de-gallo/releases">Releases</a> page.</p>
+<p>If you prefer to build from source:</p>
+<ol>
+<li>Install <a href="https://rustup.rs/">Rust</a> (stable toolchain)</li>
+<li>Clone the repository: <code>git clone https://github.com/OpenDevicePartnership/pico-de-gallo</code></li>
+<li>Build the CLI: <code>cd crates &amp;&amp; cargo build --release -p gallo</code></li>
+<li>The binary will be at <code>target/release/gallo</code> (or <code>gallo.exe</code> on Windows)</li>
+</ol>
+<h3 id="usb-driver-notes"><a class="header" href="#usb-driver-notes">USB Driver Notes</a></h3>
+<ul>
+<li><strong>Linux</strong> — you may need a udev rule to allow non-root access. Create
+<code>/etc/udev/rules.d/99-pico-de-gallo.rules</code> with:
+<pre><code>SUBSYSTEM=="usb", ATTR{idVendor}=="045e", ATTR{idProduct}=="ffff", MODE="0666"
+</code></pre>
+Then run <code>sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</code>.</li>
+<li><strong>Windows</strong> — the device should be recognized automatically. If not,
+use <a href="https://zadig.akeo.ie/">Zadig</a> to install the WinUSB driver.</li>
+<li><strong>macOS</strong> — no additional drivers needed.</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="gallo-crates"><a class="header" href="#gallo-crates">Gallo Crates</a></h1>
 <p><em>Pico de Gallo</em> provides several different crates to provide a
@@ -388,6 +457,7 @@ Commands:
   uart     UART access methods
   pwm      PWM control methods
   adc      ADC access methods
+  onewire  1-Wire bus access methods
   help     Print this message or the help of the given subcommand(s)
 
 Options:
@@ -418,7 +488,10 @@ Commands:
   scan        Scan I2C bus for existing devices
   read        Read bytes through the I2C bus from device at given address
   write       Write bytes through I2C bus to device at given address
-  write-read  Write bytes follwed by read bytes
+  write-read  Write bytes followed by read bytes
+  set-config  Set I2C bus configuration (frequency)
+  get-config  Get current I2C bus configuration
+  batch       Execute multiple I2C operations in a single transfer
   help        Print this message or the help of the given subcommand(s)
 
 Options:
@@ -494,14 +567,6 @@ written.</p>
 <h3 id="communicating-via-spi"><a class="header" href="#communicating-via-spi">Communicating via SPI</a></h3>
 <p>Exactly the same as I<sup>2</sup>C but without the extra <code>address</code>
 option.</p>
-<blockquote class="blockquote-tag blockquote-tag-note">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p>At the time of this writing, the app does not <strong>yet</strong> support
-controlling GPIOs, meaning that if you have a SPI device attached to
-<em>Pico de Gallo</em> that only responds when a <em>CS</em> pin is pulled low,
-then you must use either <em>pico-de-gallo-hal</em> or <em>pico-de-gallo-lib</em>,
-both of which will be discussed later.</p>
-</blockquote>
 <pre><code class="language-console">$ gallo spi help
 SPI access methods
 
@@ -512,6 +577,9 @@ Commands:
   write       Write bytes through SPI bus
   transfer    Full-duplex SPI transfer
   write-read  Write bytes followed by read bytes
+  set-config  Set SPI bus configuration (frequency, phase, polarity)
+  get-config  Get current SPI bus configuration
+  batch       Execute multiple SPI operations atomically under chip-select
   help        Print this message or the help of the given subcommand(s)
 
 Options:
@@ -583,6 +651,9 @@ endpoints exposed by the firmware. The table below provides a summary.</p>
 <tr><td><code>gpio_wait_for_falling_edge</code></td><td><code>pin</code></td><td>Waits until a falling edge is seen on GPIO #<code>pin</code></td></tr>
 <tr><td><code>gpio_wait_for_any_edge</code></td><td><code>pin</code></td><td>Waits until any edge is seen on GPIO #<code>pin</code></td></tr>
 <tr><td><code>gpio_set_config</code></td><td><code>pin</code>, <code>direction</code> (Input/Output), <code>pull</code> (None/Up/Down)</td><td>Configures GPIO #<code>pin</code> direction and pull resistor. Enters explicit mode.</td></tr>
+<tr><td><code>gpio_subscribe</code></td><td><code>pin</code>, <code>edge</code> (Rising/Falling/Any)</td><td>Subscribes to edge events on GPIO #<code>pin</code>. Pin becomes monitored.</td></tr>
+<tr><td><code>gpio_unsubscribe</code></td><td><code>pin</code></td><td>Unsubscribes from edge events on GPIO #<code>pin</code>. Pin returns to normal.</td></tr>
+<tr><td><code>subscribe_gpio_events</code></td><td><code>depth</code></td><td>Opens a topic subscription for <code>GpioEvent</code> messages from the device.</td></tr>
 <tr><td><code>i2c_set_config</code></td><td><code>frequency</code> (Standard/Fast/FastPlus)</td><td>Sets I<sup>2</sup>C bus clock frequency</td></tr>
 <tr><td><code>spi_set_config</code></td><td><code>spi_frequency</code>, <code>spi_phase</code>, <code>spi_polarity</code></td><td>Sets SPI bus clock frequency, phase, and polarity</td></tr>
 <tr><td><code>i2c_get_config</code></td><td></td><td>Returns the active I<sup>2</sup>C bus configuration (frequency)</td></tr>
@@ -594,8 +665,24 @@ endpoints exposed by the firmware. The table below provides a summary.</p>
 <tr><td><code>uart_set_config</code></td><td><code>baud_rate</code></td><td>Sets the UART baud rate (must be &gt; 0)</td></tr>
 <tr><td><code>uart_get_config</code></td><td></td><td>Returns the active UART configuration (baud rate)</td></tr>
 <tr><td><code>adc_read</code></td><td><code>channel</code> (AdcChannel enum)</td><td>Reads a single 12-bit sample from the given ADC channel</td></tr>
-<tr><td><code>adc_read_temperature</code></td><td></td><td>Reads the on-die temperature sensor (returns millidegrees Celsius)</td></tr>
 <tr><td><code>adc_get_config</code></td><td></td><td>Returns the ADC configuration (resolution, reference, channels)</td></tr>
+<tr><td><code>i2c_batch</code></td><td><code>address</code>, <code>ops</code> (encoded byte stream)</td><td>Executes multiple I<sup>2</sup>C operations in a single USB transfer</td></tr>
+<tr><td><code>spi_batch</code></td><td><code>cs_pin</code>, <code>ops</code> (encoded byte stream)</td><td>Executes multiple SPI operations atomically under chip-select</td></tr>
+<tr><td><code>onewire_reset</code></td><td></td><td>Resets the 1-Wire bus and detects device presence</td></tr>
+<tr><td><code>onewire_read</code></td><td><code>len</code></td><td>Reads N bytes from the 1-Wire bus</td></tr>
+<tr><td><code>onewire_write</code></td><td><code>data</code></td><td>Writes raw bytes to the 1-Wire bus</td></tr>
+<tr><td><code>onewire_write_pullup</code></td><td><code>data</code>, <code>pullup_duration_ms</code></td><td>Writes bytes then applies strong pullup for parasitic-power devices</td></tr>
+<tr><td><code>onewire_search</code></td><td></td><td>Starts a new ROM search and returns the first device</td></tr>
+<tr><td><code>onewire_search_next</code></td><td></td><td>Continues the current ROM search</td></tr>
+<tr><td><code>pwm_set_duty_cycle</code></td><td><code>channel</code>, <code>duty</code></td><td>Sets the duty cycle for PWM channel</td></tr>
+<tr><td><code>pwm_get_duty_cycle</code></td><td><code>channel</code></td><td>Returns the current and maximum duty cycle</td></tr>
+<tr><td><code>pwm_enable</code></td><td><code>channel</code></td><td>Enables a PWM channel</td></tr>
+<tr><td><code>pwm_disable</code></td><td><code>channel</code></td><td>Disables a PWM channel</td></tr>
+<tr><td><code>pwm_set_config</code></td><td><code>channel</code>, <code>frequency_hz</code>, <code>phase_correct</code></td><td>Configures PWM frequency and phase-correct mode</td></tr>
+<tr><td><code>pwm_get_config</code></td><td><code>channel</code></td><td>Returns the active PWM configuration</td></tr>
+<tr><td><code>i2c_write_read</code></td><td><code>address</code>, <code>contents</code>, <code>count</code></td><td>Writes bytes then reads from the same I²C address (repeated start)</td></tr>
+<tr><td><code>list_devices</code></td><td></td><td>Lists all connected Pico de Gallo devices (static method)</td></tr>
+<tr><td><code>wait_closed</code></td><td></td><td>Waits until the USB connection is closed</td></tr>
 </tbody>
 </table>
 </div>
@@ -620,7 +707,20 @@ examples.</p>
 <tr><td>I2C</td><td><code>I2c</code></td><td><code>I2c</code></td></tr>
 <tr><td>SPI</td><td><code>SpiBus</code>, <code>SpiDevice</code></td><td><code>SpiBus</code>, <code>SpiDevice</code></td></tr>
 <tr><td>UART</td><td><code>embedded_io::Read</code>, <code>embedded_io::Write</code></td><td><code>embedded_io_async::Read</code>, <code>embedded_io_async::Write</code></td></tr>
+<tr><td>PWM</td><td><code>SetDutyCycle</code></td><td>—</td></tr>
 <tr><td>Delay</td><td><code>DelayNs</code></td><td><code>DelayNs</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Additional handle types that don’t map to standard traits:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Type</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>OneWire</code></td><td>1-Wire bus operations (reset, read, write, ROM search)</td></tr>
+<tr><td><code>Adc</code></td><td>ADC reads and configuration (via <code>Hal::adc_read()</code>, <code>Hal::adc_get_config()</code>)</td></tr>
 </tbody>
 </table>
 </div>
@@ -639,12 +739,1977 @@ struct Driver&lt;I2C: I2c&gt;;
 fn main() {
     let hal = Hal::new();
     let i2c = hal.i2c();
-    let delay = hal.Delay();
+    let delay = hal.delay();
 
     let mut drv = Driver::new(i2c, delay);
 
     println!("Device ID: {:02x}", drv.read_manufacturer_id());
 }</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="gpio"><a class="header" href="#gpio">GPIO</a></h1>
+<p>Pico de Gallo exposes 4 general-purpose I/O pins (<strong>GPIO 0–3</strong>) mapped to
+RP2350 <strong>GPIO 8–11</strong>. These pins are shared with the
+<a href="logic-capture.html">Logic Capture</a> channels 0–3 — when a capture session
+is active, the corresponding GPIO pins are unavailable for normal GPIO
+operations.</p>
+<h2 id="pin-mapping"><a class="header" href="#pin-mapping">Pin Mapping</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Gallo Pin</th><th>RP2350 GPIO</th><th>Logic Capture Channel</th></tr>
+</thead>
+<tbody>
+<tr><td>0</td><td>8</td><td>Channel 0</td></tr>
+<tr><td>1</td><td>9</td><td>Channel 1</td></tr>
+<tr><td>2</td><td>10</td><td>Channel 2</td></tr>
+<tr><td>3</td><td>11</td><td>Channel 3</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="operations"><a class="header" href="#operations">Operations</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operation</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Get</strong></td><td>Read the current pin state (High or Low)</td></tr>
+<tr><td><strong>Put</strong></td><td>Drive a pin High or Low</td></tr>
+<tr><td><strong>Set Config</strong></td><td>Configure pin direction (input/output) and pull resistor (none/up/down)</td></tr>
+<tr><td><strong>Monitor</strong></td><td>Subscribe to edge events on a pin (rising, falling, or any)</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="pin-configuration"><a class="header" href="#pin-configuration">Pin Configuration</a></h2>
+<p>Before using a GPIO pin, configure its direction and pull resistor. Pins
+default to input with no pull resistor after power-on.</p>
+<h3 id="cli"><a class="header" href="#cli">CLI</a></h3>
+<pre><code class="language-bash"># Configure pin 0 as input with pull-up
+gallo gpio set-config --pin 0 --direction input --pull up
+
+# Configure pin 2 as output with no pull
+gallo gpio set-config --pin 2 --direction output --pull none
+</code></pre>
+<h3 id="rust-library"><a class="header" href="#rust-library">Rust Library</a></h3>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use pico_de_gallo_lib::{PicoDeGallo, GpioDirection, GpioPull};
+
+fn configure_pins(gallo: &amp;PicoDeGallo) {
+    // Configure pin 0 as input with pull-up
+    smol::block_on(async {
+        gallo
+            .gpio_set_config(0, GpioDirection::Input, GpioPull::Up)
+            .await
+            .unwrap();
+
+        // Configure pin 2 as output with no pull
+        gallo
+            .gpio_set_config(2, GpioDirection::Output, GpioPull::None)
+            .await
+            .unwrap();
+    });
+}
+<span class="boring">}</span></code></pre>
+<h3 id="c-ffi"><a class="header" href="#c-ffi">C (FFI)</a></h3>
+<pre><code class="language-c">#include "pico_de_gallo.h"
+
+void configure_pins(PicoDeGallo *gallo) {
+    /* Configure pin 0 as input with pull-up */
+    GalloStatus rc = gallo_gpio_set_config(
+        gallo, 0, GpioDirection_Input, GpioPull_Up
+    );
+    if (rc != GalloStatus_Ok) {
+        fprintf(stderr, "set-config failed: %d\n", rc);
+    }
+
+    /* Configure pin 2 as output with no pull */
+    gallo_gpio_set_config(gallo, 2, GpioDirection_Output, GpioPull_None);
+}
+</code></pre>
+<h2 id="reading-and-writing-pins"><a class="header" href="#reading-and-writing-pins">Reading and Writing Pins</a></h2>
+<h3 id="cli-1"><a class="header" href="#cli-1">CLI</a></h3>
+<pre><code class="language-bash"># Read the state of pin 0
+gallo gpio get --pin 0
+# Output: Pin 0: High
+
+# Drive pin 2 high
+gallo gpio put --pin 2 --high
+
+# Drive pin 2 low
+gallo gpio put --pin 2 --high false
+</code></pre>
+<h3 id="rust-library-1"><a class="header" href="#rust-library-1">Rust Library</a></h3>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use pico_de_gallo_lib::{PicoDeGallo, GpioState};
+
+async fn read_write(gallo: &amp;PicoDeGallo) {
+    // Read pin 0
+    let state = gallo.gpio_get(0).await.unwrap();
+    println!("Pin 0 is {:?}", state);
+
+    // Drive pin 2 high
+    gallo.gpio_put(2, GpioState::High).await.unwrap();
+
+    // Drive pin 2 low
+    gallo.gpio_put(2, GpioState::Low).await.unwrap();
+}
+<span class="boring">}</span></code></pre>
+<h3 id="c-ffi-1"><a class="header" href="#c-ffi-1">C (FFI)</a></h3>
+<pre><code class="language-c">#include "pico_de_gallo.h"
+#include &lt;stdio.h&gt;
+
+void read_write(PicoDeGallo *gallo) {
+    /* Read pin 0 */
+    bool high;
+    GalloStatus rc = gallo_gpio_get(gallo, 0, &amp;high);
+    if (rc == GalloStatus_Ok) {
+        printf("Pin 0: %s\n", high ? "High" : "Low");
+    }
+
+    /* Drive pin 2 high */
+    gallo_gpio_put(gallo, 2, true);
+
+    /* Drive pin 2 low */
+    gallo_gpio_put(gallo, 2, false);
+}
+</code></pre>
+<h2 id="waiting-for-pin-state-changes"><a class="header" href="#waiting-for-pin-state-changes">Waiting for Pin State Changes</a></h2>
+<p>The library provides async methods that block until a pin reaches the
+requested state or edge transition. These are useful for waiting on
+external signals without polling.</p>
+<h3 id="rust-library-2"><a class="header" href="#rust-library-2">Rust Library</a></h3>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use pico_de_gallo_lib::PicoDeGallo;
+
+async fn wait_for_button(gallo: &amp;PicoDeGallo) {
+    // Wait until pin 1 goes high
+    gallo.gpio_wait_for_high(1).await.unwrap();
+    println!("Pin 1 is now high");
+
+    // Wait until pin 1 goes low
+    gallo.gpio_wait_for_low(1).await.unwrap();
+    println!("Pin 1 is now low");
+
+    // Wait for a rising edge on pin 1
+    gallo.gpio_wait_for_rising_edge(1).await.unwrap();
+    println!("Rising edge detected on pin 1");
+
+    // Wait for a falling edge on pin 1
+    gallo.gpio_wait_for_falling_edge(1).await.unwrap();
+    println!("Falling edge detected on pin 1");
+
+    // Wait for any edge on pin 1
+    gallo.gpio_wait_for_any_edge(1).await.unwrap();
+    println!("Edge detected on pin 1");
+}
+<span class="boring">}</span></code></pre>
+<h3 id="c-ffi-2"><a class="header" href="#c-ffi-2">C (FFI)</a></h3>
+<pre><code class="language-c">#include "pico_de_gallo.h"
+#include &lt;stdio.h&gt;
+
+void wait_for_button(PicoDeGallo *gallo) {
+    /* These calls block until the requested edge/state occurs */
+    gallo_gpio_wait_for_high(gallo, 1);
+    printf("Pin 1 is now high\n");
+
+    gallo_gpio_wait_for_low(gallo, 1);
+    printf("Pin 1 is now low\n");
+
+    gallo_gpio_wait_for_rising_edge(gallo, 1);
+    printf("Rising edge detected on pin 1\n");
+
+    gallo_gpio_wait_for_falling_edge(gallo, 1);
+    printf("Falling edge detected on pin 1\n");
+
+    gallo_gpio_wait_for_any_edge(gallo, 1);
+    printf("Edge detected on pin 1\n");
+}
+</code></pre>
+<h2 id="edge-event-monitoring"><a class="header" href="#edge-event-monitoring">Edge Event Monitoring</a></h2>
+<p>For continuous monitoring, subscribe to GPIO edge events on a pin. The
+firmware streams <code>GpioEvent</code> structs to the host whenever the subscribed
+edge is detected. Each event carries:</p>
+<pre><code class="language-rust ignore">pub struct GpioEvent {
+    pub pin: u8,
+    pub edge: GpioEdge,
+    pub state: GpioState,
+    pub timestamp_us: u64,
+}</code></pre>
+<ul>
+<li><strong><code>pin</code></strong> — the Gallo pin number (0–3)</li>
+<li><strong><code>edge</code></strong> — the edge that triggered the event (<code>Rising</code> or <code>Falling</code>)</li>
+<li><strong><code>state</code></strong> — the pin state after the edge</li>
+<li><strong><code>timestamp_us</code></strong> — firmware timestamp in microseconds</li>
+</ul>
+<h3 id="cli-2"><a class="header" href="#cli-2">CLI</a></h3>
+<p>The <code>monitor</code> subcommand subscribes to edge events and prints them until
+you press <strong>Ctrl+C</strong>:</p>
+<pre><code class="language-bash"># Monitor rising edges on pin 0
+gallo gpio monitor --pin 0 --edge rising
+
+# Monitor any edge on pin 1
+gallo gpio monitor --pin 1 --edge any
+</code></pre>
+<p>Example output:</p>
+<pre><code>[  12345 µs] Pin 0: Rising  → High
+[  12890 µs] Pin 0: Rising  → High
+[  45012 µs] Pin 0: Rising  → High
+^C
+Unsubscribed from pin 0.
+</code></pre>
+<h3 id="rust-library-3"><a class="header" href="#rust-library-3">Rust Library</a></h3>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use pico_de_gallo_lib::{PicoDeGallo, GpioEdge};
+
+async fn monitor_pin(gallo: &amp;PicoDeGallo) {
+    // Subscribe to rising edges on pin 0
+    gallo.gpio_subscribe(0, GpioEdge::Rising).await.unwrap();
+
+    // Open a subscription to receive GpioEvent values (buffer depth 16)
+    let mut sub = gallo.subscribe_gpio_events(16).await.unwrap();
+
+    // Process events
+    for _ in 0..100 {
+        let event = sub.recv().await.unwrap();
+        println!(
+            "[{:&gt;8} µs] Pin {}: {:?} → {:?}",
+            event.timestamp_us, event.pin, event.edge, event.state
+        );
+    }
+
+    // Unsubscribe when done
+    gallo.gpio_unsubscribe(0).await.unwrap();
+}
+<span class="boring">}</span></code></pre>
+<h3 id="c-ffi-3"><a class="header" href="#c-ffi-3">C (FFI)</a></h3>
+<pre><code class="language-c">#include "pico_de_gallo.h"
+#include &lt;stdio.h&gt;
+
+void monitor_pin(PicoDeGallo *gallo) {
+    /* Subscribe to rising edges on pin 0 */
+    gallo_gpio_subscribe(gallo, 0, GpioEdge_Rising);
+
+    /* ... receive events via topic subscription API ... */
+
+    /* Unsubscribe when done */
+    gallo_gpio_unsubscribe(gallo, 0);
+}
+</code></pre>
+<h2 id="hal-usage"><a class="header" href="#hal-usage">HAL Usage</a></h2>
+<p>The <code>pico-de-gallo-hal</code> crate implements the standard <code>embedded-hal</code>
+traits over the GPIO pins, providing a familiar interface for portable
+device drivers.</p>
+<h3 id="blocking-traits"><a class="header" href="#blocking-traits">Blocking Traits</a></h3>
+<p>The HAL implements these blocking traits from <code>embedded-hal</code>:</p>
+<ul>
+<li><strong><code>OutputPin</code></strong> — <code>set_high()</code> / <code>set_low()</code></li>
+<li><strong><code>InputPin</code></strong> — <code>is_high()</code> / <code>is_low()</code></li>
+<li><strong><code>StatefulOutputPin</code></strong> — <code>is_set_high()</code> / <code>is_set_low()</code></li>
+</ul>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use embedded_hal::digital::{InputPin, OutputPin, StatefulOutputPin};
+use pico_de_gallo_hal::Hal;
+
+fn blink_and_read(hal: &amp;Hal) {
+    let mut led = hal.output_pin(2);
+    let button = hal.input_pin(0);
+
+    // Drive pin 2 high
+    led.set_high().unwrap();
+
+    // Read pin 0
+    if button.is_high().unwrap() {
+        println!("Button pressed");
+    }
+
+    // Check what we're currently driving
+    if led.is_set_high().unwrap() {
+        println!("LED is on");
+    }
+
+    led.set_low().unwrap();
+}
+<span class="boring">}</span></code></pre>
+<h3 id="async-trait"><a class="header" href="#async-trait">Async Trait</a></h3>
+<p>The HAL implements the <code>embedded-hal-async</code> <strong><code>Wait</code></strong> trait for
+non-blocking edge/level detection:</p>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use embedded_hal_async::digital::Wait;
+use pico_de_gallo_hal::Hal;
+
+async fn wait_for_signal(hal: &amp;Hal) {
+    let mut pin = hal.input_pin(1);
+
+    pin.wait_for_high().await.unwrap();
+    println!("Pin went high");
+
+    pin.wait_for_rising_edge().await.unwrap();
+    println!("Rising edge detected");
+}
+<span class="boring">}</span></code></pre>
+<h2 id="complete-example-button-controlled-led"><a class="header" href="#complete-example-button-controlled-led">Complete Example: Button-Controlled LED</a></h2>
+<p>This example configures pin 0 as an input (button with pull-up) and
+pin 2 as an output (LED). It toggles the LED on each button press.</p>
+<h3 id="cli-3"><a class="header" href="#cli-3">CLI</a></h3>
+<pre><code class="language-bash"># Configure pins
+gallo gpio set-config --pin 0 --direction input --pull up
+gallo gpio set-config --pin 2 --direction output --pull none
+
+# Read button, toggle LED manually
+STATE=$(gallo gpio get --pin 0)
+gallo gpio put --pin 2 --high
+
+# Or monitor button presses
+gallo gpio monitor --pin 0 --edge falling
+</code></pre>
+<h3 id="rust-library-4"><a class="header" href="#rust-library-4">Rust Library</a></h3>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use pico_de_gallo_lib::{
+    PicoDeGallo, GpioDirection, GpioPull, GpioState, GpioEdge,
+    PicoDeGalloError, GpioError,
+};
+
+async fn button_led() -&gt; Result&lt;(), PicoDeGalloError&lt;GpioError&gt;&gt; {
+    let gallo = PicoDeGallo::new();
+
+    // Configure pin 0 as input with pull-up (button)
+    gallo.gpio_set_config(0, GpioDirection::Input, GpioPull::Up).await?;
+
+    // Configure pin 2 as output (LED)
+    gallo.gpio_set_config(2, GpioDirection::Output, GpioPull::None).await?;
+
+    let mut led_on = false;
+
+    loop {
+        // Wait for button press (falling edge because of pull-up)
+        gallo.gpio_wait_for_falling_edge(0).await?;
+
+        led_on = !led_on;
+        let state = if led_on { GpioState::High } else { GpioState::Low };
+        gallo.gpio_put(2, state).await?;
+    }
+}
+<span class="boring">}</span></code></pre>
+<h3 id="c-ffi-4"><a class="header" href="#c-ffi-4">C (FFI)</a></h3>
+<pre><code class="language-c">#include "pico_de_gallo.h"
+#include &lt;stdbool.h&gt;
+
+int button_led(void) {
+    PicoDeGallo *gallo = gallo_new();
+    if (!gallo) return -1;
+
+    /* Configure pin 0 as input with pull-up (button) */
+    gallo_gpio_set_config(gallo, 0, GpioDirection_Input, GpioPull_Up);
+
+    /* Configure pin 2 as output (LED) */
+    gallo_gpio_set_config(gallo, 2, GpioDirection_Output, GpioPull_None);
+
+    bool led_on = false;
+
+    for (;;) {
+        /* Wait for button press (falling edge) */
+        gallo_gpio_wait_for_falling_edge(gallo, 0);
+
+        led_on = !led_on;
+        gallo_gpio_put(gallo, 2, led_on);
+    }
+
+    return 0;
+}
+</code></pre>
+<h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
+<p>All GPIO operations return errors through the standard <code>PicoDeGalloError</code>
+wrapper. GPIO-specific errors are represented as
+<code>PicoDeGalloError&lt;GpioError&gt;</code>:</p>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use pico_de_gallo_lib::{PicoDeGallo, PicoDeGalloError, GpioError, GpioState};
+
+async fn safe_read(gallo: &amp;PicoDeGallo) {
+    match gallo.gpio_get(0).await {
+        Ok(state) =&gt; println!("Pin 0: {:?}", state),
+        Err(PicoDeGalloError::Rpc(e)) =&gt; {
+            eprintln!("RPC error: {e:?}");
+        }
+        Err(PicoDeGalloError::Endpoint(gpio_err)) =&gt; {
+            eprintln!("GPIO error: {gpio_err:?}");
+        }
+        Err(e) =&gt; {
+            eprintln!("Other error: {e:?}");
+        }
+    }
+}
+<span class="boring">}</span></code></pre>
+<h2 id="api-reference"><a class="header" href="#api-reference">API Reference</a></h2>
+<h3 id="lib-methods"><a class="header" href="#lib-methods">Lib Methods</a></h3>
+<p>All methods are async and available on <code>PicoDeGallo</code>:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Method</th><th>Returns</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>gpio_get(pin: u8)</code></td><td><code>Result&lt;GpioState, ...&gt;</code></td><td>Read pin state</td></tr>
+<tr><td><code>gpio_put(pin: u8, state: GpioState)</code></td><td><code>Result&lt;(), ...&gt;</code></td><td>Set pin state</td></tr>
+<tr><td><code>gpio_set_config(pin, direction, pull)</code></td><td><code>Result&lt;(), ...&gt;</code></td><td>Configure direction and pull</td></tr>
+<tr><td><code>gpio_wait_for_high(pin: u8)</code></td><td><code>Result&lt;(), ...&gt;</code></td><td>Wait until pin is high</td></tr>
+<tr><td><code>gpio_wait_for_low(pin: u8)</code></td><td><code>Result&lt;(), ...&gt;</code></td><td>Wait until pin is low</td></tr>
+<tr><td><code>gpio_wait_for_rising_edge(pin: u8)</code></td><td><code>Result&lt;(), ...&gt;</code></td><td>Wait for low→high transition</td></tr>
+<tr><td><code>gpio_wait_for_falling_edge(pin: u8)</code></td><td><code>Result&lt;(), ...&gt;</code></td><td>Wait for high→low transition</td></tr>
+<tr><td><code>gpio_wait_for_any_edge(pin: u8)</code></td><td><code>Result&lt;(), ...&gt;</code></td><td>Wait for any transition</td></tr>
+<tr><td><code>gpio_subscribe(pin: u8, edge: GpioEdge)</code></td><td><code>Result&lt;(), ...&gt;</code></td><td>Subscribe to edge events on a pin</td></tr>
+<tr><td><code>gpio_unsubscribe(pin: u8)</code></td><td><code>Result&lt;(), ...&gt;</code></td><td>Unsubscribe from edge events</td></tr>
+<tr><td><code>subscribe_gpio_events(depth)</code></td><td><code>Result&lt;Subscription&lt;GpioEvent&gt;, ...&gt;</code></td><td>Open a subscription to receive GPIO events</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="ffi-functions"><a class="header" href="#ffi-functions">FFI Functions</a></h3>
+<p>All functions return <code>GalloStatus</code>:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Function</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>gallo_gpio_get(gallo, pin, out_high)</code></td><td>Read pin state into <code>*out_high</code></td></tr>
+<tr><td><code>gallo_gpio_put(gallo, pin, high)</code></td><td>Set pin state</td></tr>
+<tr><td><code>gallo_gpio_set_config(gallo, pin, direction, pull)</code></td><td>Configure direction and pull</td></tr>
+<tr><td><code>gallo_gpio_wait_for_high(gallo, pin)</code></td><td>Block until pin is high</td></tr>
+<tr><td><code>gallo_gpio_wait_for_low(gallo, pin)</code></td><td>Block until pin is low</td></tr>
+<tr><td><code>gallo_gpio_wait_for_rising_edge(gallo, pin)</code></td><td>Block until rising edge</td></tr>
+<tr><td><code>gallo_gpio_wait_for_falling_edge(gallo, pin)</code></td><td>Block until falling edge</td></tr>
+<tr><td><code>gallo_gpio_wait_for_any_edge(gallo, pin)</code></td><td>Block until any edge</td></tr>
+<tr><td><code>gallo_gpio_subscribe(gallo, pin, edge)</code></td><td>Subscribe to edge events</td></tr>
+<tr><td><code>gallo_gpio_unsubscribe(gallo, pin)</code></td><td>Unsubscribe from edge events</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="cli-commands"><a class="header" href="#cli-commands">CLI Commands</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Command</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>gallo gpio get --pin N</code></td><td>Read pin state</td></tr>
+<tr><td><code>gallo gpio put --pin N --high</code></td><td>Drive pin high</td></tr>
+<tr><td><code>gallo gpio put --pin N --high false</code></td><td>Drive pin low</td></tr>
+<tr><td><code>gallo gpio set-config --pin N --direction DIR --pull PULL</code></td><td>Configure pin</td></tr>
+<tr><td><code>gallo gpio monitor --pin N --edge EDGE</code></td><td>Stream edge events until Ctrl+C</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="limitations"><a class="header" href="#limitations">Limitations</a></h2>
+<ul>
+<li><strong>4 pins only</strong> — GPIO 0–3 (RP2350 GPIO 8–11).</li>
+<li><strong>Shared with Logic Capture</strong> — pins used by an active capture session
+cannot be used for GPIO operations. They are returned automatically
+when capture stops.</li>
+<li><strong>No analog</strong> — all pins are digital only.</li>
+<li><strong>Edge event timestamps</strong> come from the firmware’s microsecond timer,
+not the host clock. Events are timestamped when the edge is detected
+on the RP2350.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="uart"><a class="header" href="#uart">UART</a></h1>
+<p>Pico de Gallo provides UART support through the RP2350’s hardware <strong>UART0</strong>
+peripheral. The TX pin is on <strong>GPIO 0</strong> and RX is on <strong>GPIO 1</strong>. The UART
+is buffered and interrupt-driven, so reads and writes do not block the
+firmware’s main loop.</p>
+<h2 id="operations-1"><a class="header" href="#operations-1">Operations</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operation</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Read</strong></td><td>Reads up to N bytes from the receive buffer with an optional timeout</td></tr>
+<tr><td><strong>Write</strong></td><td>Writes raw bytes to the transmit buffer</td></tr>
+<tr><td><strong>Flush</strong></td><td>Flushes the transmit buffer, blocking until all bytes are sent</td></tr>
+<tr><td><strong>Set Config</strong></td><td>Updates the baud rate (and future line parameters)</td></tr>
+<tr><td><strong>Get Config</strong></td><td>Returns the current UART configuration</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="loopback-example"><a class="header" href="#loopback-example">Loopback Example</a></h2>
+<p>The simplest way to verify UART operation is a loopback test: connect
+<strong>GPIO 0 (TX)</strong> directly to <strong>GPIO 1 (RX)</strong> with a jumper wire. Everything
+you write will be received back.</p>
+<h3 id="cli-4"><a class="header" href="#cli-4">CLI</a></h3>
+<pre><code class="language-bash"># 1. Check the current configuration
+gallo uart get-config
+
+# 2. Set baud rate to 115200 (default)
+gallo uart set-config --baud-rate 115200
+
+# 3. Write "Hello" (ASCII bytes)
+gallo uart write --bytes 0x48 0x65 0x6C 0x6C 0x6F
+
+# 4. Read back 5 bytes with a 100ms timeout
+gallo uart read --count 5 --timeout 100
+
+# 5. Flush the transmit buffer
+gallo uart flush
+</code></pre>
+<h3 id="rust-library-5"><a class="header" href="#rust-library-5">Rust Library</a></h3>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use pico_de_gallo_lib::PicoDeGallo;
+
+async fn uart_loopback(gallo: &amp;PicoDeGallo) {
+    // Configure baud rate
+    gallo.uart_set_config(115_200).await.unwrap();
+
+    // Verify configuration
+    let config = gallo.uart_get_config().await.unwrap();
+    println!("Baud rate: {}", config.baud_rate);
+
+    // Write "Hello"
+    gallo.uart_write(&amp;[0x48, 0x65, 0x6C, 0x6C, 0x6F]).await.unwrap();
+
+    // Flush to ensure all bytes are transmitted
+    gallo.uart_flush().await.unwrap();
+
+    // Read back with 100ms timeout
+    let data = gallo.uart_read(5, 100).await.unwrap();
+    assert_eq!(&amp;data, &amp;[0x48, 0x65, 0x6C, 0x6C, 0x6F]);
+    println!("Received: {:?}", String::from_utf8_lossy(&amp;data));
+}
+<span class="boring">}</span></code></pre>
+<h3 id="c-ffi-5"><a class="header" href="#c-ffi-5">C (FFI)</a></h3>
+<pre><code class="language-c">#include "pico_de_gallo.h"
+#include &lt;stdio.h&gt;
+#include &lt;string.h&gt;
+
+void uart_loopback(PicoDeGallo *gallo) {
+    /* Configure baud rate */
+    GalloStatus rc = gallo_uart_set_config(gallo, 115200);
+    if (rc != GALLO_STATUS_OK) {
+        fprintf(stderr, "set-config failed: %d\n", rc);
+        return;
+    }
+
+    /* Read back current config */
+    GalloUartConfigurationInfo info;
+    rc = gallo_uart_get_config(gallo, &amp;info);
+    if (rc != GALLO_STATUS_OK) {
+        fprintf(stderr, "get-config failed: %d\n", rc);
+        return;
+    }
+    printf("Baud rate: %u\n", info.baud_rate);
+
+    /* Write "Hello" */
+    uint8_t tx[] = {0x48, 0x65, 0x6C, 0x6C, 0x6F};
+    rc = gallo_uart_write(gallo, tx, sizeof(tx));
+    if (rc != GALLO_STATUS_OK) {
+        fprintf(stderr, "write failed: %d\n", rc);
+        return;
+    }
+
+    /* Flush */
+    gallo_uart_flush(gallo);
+
+    /* Read back */
+    uint8_t rx[5];
+    uint16_t out_read;
+    rc = gallo_uart_read(gallo, rx, sizeof(rx), 100, &amp;out_read);
+    if (rc != GALLO_STATUS_OK) {
+        fprintf(stderr, "read failed: %d\n", rc);
+        return;
+    }
+
+    printf("Received %u bytes: %.*s\n", out_read, out_read, rx);
+}
+</code></pre>
+<h3 id="hal"><a class="header" href="#hal">HAL</a></h3>
+<p>The HAL layer implements the standard <code>embedded_io</code> and <code>embedded_io_async</code>
+traits, so the UART can be used with any driver that accepts generic
+readers or writers.</p>
+<p><strong>Blocking</strong> — <code>embedded_io::Read</code> + <code>embedded_io::Write</code>:</p>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use embedded_io::{Read, Write};
+use pico_de_gallo_hal::Hal;
+
+fn uart_loopback_blocking(hal: &amp;Hal) {
+    let mut uart = hal.uart();
+
+    // Write "Hello"
+    uart.write_all(&amp;[0x48, 0x65, 0x6C, 0x6C, 0x6F]).unwrap();
+    uart.flush().unwrap();
+
+    // Read back
+    let mut buf = [0u8; 5];
+    uart.read_exact(&amp;mut buf).unwrap();
+    assert_eq!(&amp;buf, b"Hello");
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Async</strong> — <code>embedded_io_async::Read</code> + <code>embedded_io_async::Write</code>:</p>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use embedded_io_async::{Read, Write};
+use pico_de_gallo_hal::Hal;
+
+async fn uart_loopback_async(hal: &amp;Hal) {
+    let mut uart = hal.uart_async();
+
+    uart.write_all(&amp;[0x48, 0x65, 0x6C, 0x6C, 0x6F]).await.unwrap();
+    uart.flush().await.unwrap();
+
+    let mut buf = [0u8; 5];
+    uart.read_exact(&amp;mut buf).await.unwrap();
+    assert_eq!(&amp;buf, b"Hello");
+}
+<span class="boring">}</span></code></pre>
+<h2 id="connecting-an-external-device"><a class="header" href="#connecting-an-external-device">Connecting an External Device</a></h2>
+<p>To communicate with an external UART device (e.g., a GPS module or
+microcontroller), connect:</p>
+<pre><code>Pico de Gallo          External Device
+──────────────         ───────────────
+GPIO 0 (TX) ────────── RX
+GPIO 1 (RX) ────────── TX
+GND ────────────────── GND
+</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>Cross the TX/RX lines: the transmit pin of one device connects to the
+receive pin of the other.</p>
+</blockquote>
+<h2 id="non-blocking-read"><a class="header" href="#non-blocking-read">Non-blocking Read</a></h2>
+<p>A timeout of <strong>0</strong> performs a non-blocking read — it returns immediately
+with whatever bytes are already in the receive buffer (possibly none):</p>
+<pre><code class="language-bash"># Non-blocking: return whatever is buffered right now
+gallo uart read --count 64 --timeout 0
+</code></pre>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use pico_de_gallo_lib::PicoDeGallo;
+
+async fn drain_buffer(gallo: &amp;PicoDeGallo) -&gt; Vec&lt;u8&gt; {
+    // timeout_ms = 0 → non-blocking
+    gallo.uart_read(64, 0).await.unwrap()
+}
+<span class="boring">}</span></code></pre>
+<h2 id="error-handling-1"><a class="header" href="#error-handling-1">Error Handling</a></h2>
+<p>UART operations return <code>PicoDeGalloError&lt;UartError&gt;</code> on failure. The
+<code>UartError</code> variants cover both protocol-level and configuration errors:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Variant</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>BufferTooLong</code></td><td>Requested read/write exceeds the firmware buffer size</td></tr>
+<tr><td><code>Overrun</code></td><td>Receive buffer overflowed before host read the data</td></tr>
+<tr><td><code>Break</code></td><td>Break condition detected on the line</td></tr>
+<tr><td><code>Parity</code></td><td>Parity check failed</td></tr>
+<tr><td><code>Framing</code></td><td>Invalid stop bit detected</td></tr>
+<tr><td><code>InvalidBaudRate</code></td><td>Requested baud rate is out of range or unsupported</td></tr>
+<tr><td><code>Other</code></td><td>Catch-all for unexpected firmware errors</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="api-reference-1"><a class="header" href="#api-reference-1">API Reference</a></h2>
+<h3 id="lib-methods-1"><a class="header" href="#lib-methods-1">Lib Methods</a></h3>
+<p>All methods are <code>async</code> and available on <code>PicoDeGallo</code>:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Method</th><th>Signature</th></tr>
+</thead>
+<tbody>
+<tr><td><code>uart_read</code></td><td><code>uart_read(count: u16, timeout_ms: u32) -&gt; Result&lt;Vec&lt;u8&gt;, PicoDeGalloError&lt;UartError&gt;&gt;</code></td></tr>
+<tr><td><code>uart_write</code></td><td><code>uart_write(contents: &amp;[u8]) -&gt; Result&lt;(), PicoDeGalloError&lt;UartError&gt;&gt;</code></td></tr>
+<tr><td><code>uart_flush</code></td><td><code>uart_flush() -&gt; Result&lt;(), PicoDeGalloError&lt;UartError&gt;&gt;</code></td></tr>
+<tr><td><code>uart_set_config</code></td><td><code>uart_set_config(baud_rate: u32) -&gt; Result&lt;(), PicoDeGalloError&lt;UartError&gt;&gt;</code></td></tr>
+<tr><td><code>uart_get_config</code></td><td><code>uart_get_config() -&gt; Result&lt;UartConfigurationInfo, PicoDeGalloError&lt;UartError&gt;&gt;</code></td></tr>
+</tbody>
+</table>
+</div>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p><code>PicoDeGallo::new()</code> is <strong>not</strong> async. Only the peripheral methods
+listed above are async.</p>
+</blockquote>
+<h3 id="ffi-functions-1"><a class="header" href="#ffi-functions-1">FFI Functions</a></h3>
+<p>All FFI functions return a <code>GalloStatus</code> code:</p>
+<pre><code class="language-c">GalloStatus gallo_uart_read(PicoDeGallo *gallo,
+                            uint8_t *buf, uint16_t buf_len,
+                            uint32_t timeout_ms, uint16_t *out_read);
+
+GalloStatus gallo_uart_write(PicoDeGallo *gallo,
+                             const uint8_t *buf, uint16_t len);
+
+GalloStatus gallo_uart_flush(PicoDeGallo *gallo);
+
+GalloStatus gallo_uart_set_config(PicoDeGallo *gallo, uint32_t baud_rate);
+
+GalloStatus gallo_uart_get_config(PicoDeGallo *gallo,
+                                  GalloUartConfigurationInfo *out_info);
+</code></pre>
+<h3 id="cli-commands-1"><a class="header" href="#cli-commands-1">CLI Commands</a></h3>
+<pre><code>gallo uart read       --count &lt;N&gt; --timeout &lt;MS&gt;
+gallo uart write      --bytes &lt;BYTE&gt;...
+gallo uart flush
+gallo uart set-config --baud-rate &lt;RATE&gt;
+gallo uart get-config
+</code></pre>
+<h2 id="pin-mapping-1"><a class="header" href="#pin-mapping-1">Pin Mapping</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Function</th><th>GPIO</th><th>RP2350 Peripheral</th></tr>
+</thead>
+<tbody>
+<tr><td>TX</td><td>0</td><td>UART0 TX</td></tr>
+<tr><td>RX</td><td>1</td><td>UART0 RX</td></tr>
+</tbody>
+</table>
+</div>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="pwm"><a class="header" href="#pwm">PWM</a></h1>
+<p>Pico de Gallo provides 4 PWM output channels through the RP2350’s hardware
+PWM slices. Each channel maps to a specific GPIO pin and slice/channel
+combination.</p>
+<h2 id="pin-mapping-2"><a class="header" href="#pin-mapping-2">Pin Mapping</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>PWM Channel</th><th>GPIO</th><th>Slice</th><th>Slice Channel</th></tr>
+</thead>
+<tbody>
+<tr><td>0</td><td>12</td><td>6</td><td>A</td></tr>
+<tr><td>1</td><td>13</td><td>6</td><td>B</td></tr>
+<tr><td>2</td><td>14</td><td>7</td><td>A</td></tr>
+<tr><td>3</td><td>15</td><td>7</td><td>B</td></tr>
+</tbody>
+</table>
+</div>
+<p>The total number of available channels is defined by the constant
+<code>NUM_PWM_CHANNELS = 4</code>. Channel indices are 0–3 in all APIs.</p>
+<h2 id="operations-2"><a class="header" href="#operations-2">Operations</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operation</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Set Duty</strong></td><td>Sets the duty cycle for a channel (0–65535)</td></tr>
+<tr><td><strong>Get Duty</strong></td><td>Returns current and maximum duty cycle</td></tr>
+<tr><td><strong>Enable</strong></td><td>Enables PWM output on a channel</td></tr>
+<tr><td><strong>Disable</strong></td><td>Disables PWM output on a channel</td></tr>
+<tr><td><strong>Set Config</strong></td><td>Configures frequency and phase-correct mode</td></tr>
+<tr><td><strong>Get Config</strong></td><td>Returns current configuration</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="led-brightness-example"><a class="header" href="#led-brightness-example">LED Brightness Example</a></h2>
+<p>A common use case is driving an LED at variable brightness. Connect an LED
+(with appropriate current-limiting resistor) to one of the PWM pins and
+control its brightness through the duty cycle.</p>
+<h3 id="cli-5"><a class="header" href="#cli-5">CLI</a></h3>
+<pre><code class="language-bash"># 1. Configure channel 0 for 1 kHz, normal (not phase-correct) mode
+gallo pwm set-config --channel 0 --frequency 1000
+
+# 2. Enable PWM output on channel 0
+gallo pwm enable --channel 0
+
+# 3. Set duty cycle to 50% (32768 out of 65535)
+gallo pwm set-duty --channel 0 --duty 32768
+
+# 4. Read back the current duty cycle
+gallo pwm get-duty --channel 0
+
+# 5. Dim the LED to ~25%
+gallo pwm set-duty --channel 0 --duty 16384
+
+# 6. Read back the current configuration
+gallo pwm get-config --channel 0
+
+# 7. Switch to phase-correct mode at 500 Hz
+gallo pwm set-config --channel 0 --frequency 500 --phase-correct
+
+# 8. Disable the channel when done
+gallo pwm disable --channel 0
+</code></pre>
+<h3 id="rust-library-6"><a class="header" href="#rust-library-6">Rust Library</a></h3>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use pico_de_gallo_lib::PicoDeGallo;
+
+async fn led_brightness(gallo: &amp;PicoDeGallo) {
+    // Configure channel 0: 1 kHz, no phase-correct
+    gallo.pwm_set_config(0, 1_000, false).await.unwrap();
+
+    // Enable PWM output
+    gallo.pwm_enable(0).await.unwrap();
+
+    // Set 50% duty cycle
+    gallo.pwm_set_duty_cycle(0, 32_768).await.unwrap();
+
+    // Read back duty info
+    let duty_info = gallo.pwm_get_duty_cycle(0).await.unwrap();
+    println!(
+        "Duty: {}/{} ({:.1}%)",
+        duty_info.current_duty,
+        duty_info.max_duty,
+        duty_info.current_duty as f32 / duty_info.max_duty as f32 * 100.0
+    );
+
+    // Read back configuration
+    let config = gallo.pwm_get_config(0).await.unwrap();
+    println!(
+        "Frequency: {} Hz, Phase-correct: {}, Enabled: {}",
+        config.frequency_hz, config.phase_correct, config.enabled
+    );
+
+    // Disable when done
+    gallo.pwm_disable(0).await.unwrap();
+}
+<span class="boring">}</span></code></pre>
+<h3 id="c-ffi-6"><a class="header" href="#c-ffi-6">C (FFI)</a></h3>
+<pre><code class="language-c">#include "pico_de_gallo.h"
+#include &lt;stdio.h&gt;
+
+void led_brightness(PicoDeGallo *gallo) {
+    /* Configure channel 0: 1 kHz, no phase-correct */
+    gallo_pwm_set_config(gallo, 0, 1000, false);
+
+    /* Enable PWM output */
+    gallo_pwm_enable(gallo, 0);
+
+    /* Set 50% duty cycle */
+    gallo_pwm_set_duty_cycle(gallo, 0, 32768);
+
+    /* Read back duty info */
+    GalloPwmDutyCycleInfo duty_info;
+    gallo_pwm_get_duty_cycle(gallo, 0, &amp;duty_info);
+    printf("Duty: %u/%u\n", duty_info.current_duty, duty_info.max_duty);
+
+    /* Read back configuration */
+    GalloPwmConfigurationInfo config_info;
+    gallo_pwm_get_config(gallo, 0, &amp;config_info);
+    printf("Frequency: %u Hz, Phase-correct: %d, Enabled: %d\n",
+           config_info.frequency_hz, config_info.phase_correct,
+           config_info.enabled);
+
+    /* Disable when done */
+    gallo_pwm_disable(gallo, 0);
+}
+</code></pre>
+<h3 id="hal-1"><a class="header" href="#hal-1">HAL</a></h3>
+<p>The HAL crate exposes individual PWM channels as <code>embedded_hal::pwm::SetDutyCycle</code>
+implementors, allowing use with any driver that accepts the standard trait.</p>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use pico_de_gallo_hal::Hal;
+use embedded_hal::pwm::SetDutyCycle;
+
+fn servo_control(hal: &amp;Hal) {
+    let mut pwm = hal.pwm_channel(0);
+
+    // SetDutyCycle trait methods
+    pwm.set_duty_cycle(32_768).unwrap();
+
+    let max = pwm.max_duty_cycle();
+    println!("Max duty: {max}");
+
+    // 75% duty cycle
+    pwm.set_duty_cycle(max * 3 / 4).unwrap();
+
+    // Fully on / fully off
+    pwm.set_duty_cycle_fully_on().unwrap();
+    pwm.set_duty_cycle_fully_off().unwrap();
+
+    // Percentage-based (if available via trait extension)
+    pwm.set_duty_cycle_percent(50).unwrap();
+}
+<span class="boring">}</span></code></pre>
+<h2 id="lib-api-reference"><a class="header" href="#lib-api-reference">Lib API Reference</a></h2>
+<p>All library methods are <code>async</code> and return <code>Result</code> types. The
+<code>PicoDeGallo</code> instance is created with <code>PicoDeGallo::new()</code> (which is
+<strong>not</strong> async).</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Method</th><th>Return Type</th></tr>
+</thead>
+<tbody>
+<tr><td><code>pwm_set_duty_cycle(channel: u8, duty: u16)</code></td><td><code>Result&lt;(), PicoDeGalloError&lt;PwmError&gt;&gt;</code></td></tr>
+<tr><td><code>pwm_get_duty_cycle(channel: u8)</code></td><td><code>Result&lt;PwmDutyCycleInfo, PicoDeGalloError&lt;PwmError&gt;&gt;</code></td></tr>
+<tr><td><code>pwm_enable(channel: u8)</code></td><td><code>Result&lt;(), PicoDeGalloError&lt;PwmError&gt;&gt;</code></td></tr>
+<tr><td><code>pwm_disable(channel: u8)</code></td><td><code>Result&lt;(), PicoDeGalloError&lt;PwmError&gt;&gt;</code></td></tr>
+<tr><td><code>pwm_set_config(channel: u8, frequency_hz: u32, phase_correct: bool)</code></td><td><code>Result&lt;(), PicoDeGalloError&lt;PwmError&gt;&gt;</code></td></tr>
+<tr><td><code>pwm_get_config(channel: u8)</code></td><td><code>Result&lt;PwmConfigurationInfo, PicoDeGalloError&lt;PwmError&gt;&gt;</code></td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="response-types"><a class="header" href="#response-types">Response Types</a></h3>
+<p><strong><code>PwmDutyCycleInfo</code></strong></p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Field</th><th>Type</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>max_duty</code></td><td><code>u16</code></td><td>Maximum duty cycle value (65535)</td></tr>
+<tr><td><code>current_duty</code></td><td><code>u16</code></td><td>Currently configured duty cycle</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong><code>PwmConfigurationInfo</code></strong></p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Field</th><th>Type</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>frequency_hz</code></td><td><code>u32</code></td><td>Configured PWM frequency in Hz</td></tr>
+<tr><td><code>phase_correct</code></td><td><code>bool</code></td><td>Whether phase-correct mode is enabled</td></tr>
+<tr><td><code>enabled</code></td><td><code>bool</code></td><td>Whether the channel is currently enabled</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="ffi-reference"><a class="header" href="#ffi-reference">FFI Reference</a></h2>
+<p>All FFI functions follow the <code>gallo_pwm_*</code> naming convention and return
+a <code>Status</code> code.</p>
+<pre><code class="language-c">Status gallo_pwm_set_duty_cycle(PicoDeGallo *gallo, uint8_t channel, uint16_t duty);
+Status gallo_pwm_get_duty_cycle(PicoDeGallo *gallo, uint8_t channel, GalloPwmDutyCycleInfo *out_info);
+Status gallo_pwm_enable(PicoDeGallo *gallo, uint8_t channel);
+Status gallo_pwm_disable(PicoDeGallo *gallo, uint8_t channel);
+Status gallo_pwm_set_config(PicoDeGallo *gallo, uint8_t channel, uint32_t frequency, bool phase_correct);
+Status gallo_pwm_get_config(PicoDeGallo *gallo, uint8_t channel, GalloPwmConfigurationInfo *out_info);
+</code></pre>
+<h2 id="hardware-setup"><a class="header" href="#hardware-setup">Hardware Setup</a></h2>
+<p>Connect an LED (or other PWM-compatible load) to one of the PWM pins with
+a current-limiting resistor:</p>
+<pre><code>GPIO 12 (PWM 0) ── 330Ω ──┬── LED ── GND
+                           │
+GPIO 13 (PWM 1) ── 330Ω ──┘  (or separate LEDs)
+</code></pre>
+<p>For servo motors, connect the signal wire directly to a PWM pin and
+configure for the servo’s expected frequency (typically 50 Hz). Adjust
+the duty cycle to control the servo position.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="adc-analog-to-digital-converter"><a class="header" href="#adc-analog-to-digital-converter">ADC (Analog-to-Digital Converter)</a></h1>
+<p>Pico de Gallo exposes the RP2350’s ADC peripheral for single-shot analog
+reads. Four GPIO-based channels are available, each providing 12-bit
+resolution over a 0–3.3 V nominal input range.</p>
+<h2 id="channel-mapping"><a class="header" href="#channel-mapping">Channel Mapping</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Channel</th><th>GPIO</th><th>Enum Variant</th></tr>
+</thead>
+<tbody>
+<tr><td>0</td><td>26</td><td><code>Adc0</code></td></tr>
+<tr><td>1</td><td>27</td><td><code>Adc1</code></td></tr>
+<tr><td>2</td><td>28</td><td><code>Adc2</code></td></tr>
+<tr><td>3</td><td>29</td><td><code>Adc3</code></td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="constants"><a class="header" href="#constants">Constants</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Constant</th><th>Value</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>NUM_ADC_GPIO_CHANNELS</code></td><td>4</td><td>Number of GPIO-based ADC channels</td></tr>
+<tr><td><code>ADC_RESOLUTION_BITS</code></td><td>12</td><td>Bits of resolution per sample</td></tr>
+<tr><td><code>ADC_NOMINAL_REFERENCE_MV</code></td><td>3300</td><td>Nominal reference voltage in millivolts</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="operations-3"><a class="header" href="#operations-3">Operations</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operation</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Read</strong></td><td>Reads a single 12-bit sample from the specified channel</td></tr>
+<tr><td><strong>Info</strong></td><td>Returns ADC configuration (resolution, reference voltage, channel count)</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="voltage-conversion"><a class="header" href="#voltage-conversion">Voltage Conversion</a></h2>
+<p>The ADC returns a raw 12-bit unsigned value (0–4095). Convert to
+millivolts with:</p>
+<pre><code>voltage_mv = (raw * 3300) / 4095
+</code></pre>
+<p>For example, a raw reading of <code>2048</code> corresponds to approximately
+<strong>1649 mV</strong>.</p>
+<h2 id="types"><a class="header" href="#types">Types</a></h2>
+<h3 id="adcchannel"><a class="header" href="#adcchannel">AdcChannel</a></h3>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>enum AdcChannel {
+    Adc0,
+    Adc1,
+    Adc2,
+    Adc3,
+}
+<span class="boring">}</span></code></pre>
+<h3 id="adcconfigurationinfo"><a class="header" href="#adcconfigurationinfo">AdcConfigurationInfo</a></h3>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>struct AdcConfigurationInfo {
+    resolution_bits: u8,
+    nominal_reference_mv: u16,
+    num_gpio_channels: u8,
+}
+<span class="boring">}</span></code></pre>
+<h3 id="adcerror"><a class="header" href="#adcerror">AdcError</a></h3>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>enum AdcError {
+    ConversionFailed,
+    Other,
+}
+<span class="boring">}</span></code></pre>
+<h2 id="cli-6"><a class="header" href="#cli-6">CLI</a></h2>
+<pre><code class="language-bash"># Read a single sample from channel 0
+gallo adc read --channel 0
+
+# Read from channel 2
+gallo adc read --channel 2
+
+# Show ADC configuration
+gallo adc info
+</code></pre>
+<p>Example output for <code>gallo adc read --channel 0</code>:</p>
+<pre><code>ADC channel 0: raw 2048 (≈ 1649 mV)
+</code></pre>
+<p>Example output for <code>gallo adc info</code>:</p>
+<pre><code>ADC Configuration:
+  Resolution:       12 bits
+  Reference:        3300 mV
+  GPIO channels:    4
+</code></pre>
+<h2 id="rust-library-7"><a class="header" href="#rust-library-7">Rust Library</a></h2>
+<p>All library methods are async. <code>PicoDeGallo::new()</code> is <strong>not</strong> async.</p>
+<pre class="playground"><code class="language-rust no_run">use pico_de_gallo_lib::{PicoDeGallo, AdcChannel};
+
+fn main() {
+    let gallo = PicoDeGallo::new().unwrap();
+
+    smol::block_on(async {
+        // Read a single sample from channel 0
+        let raw = gallo.adc_read(AdcChannel::Adc0).await.unwrap();
+        let voltage_mv = (raw as u32 * 3300) / 4095;
+        println!("ADC0: raw {raw}, ~{voltage_mv} mV");
+
+        // Query ADC configuration
+        let config = gallo.adc_get_config().await.unwrap();
+        println!(
+            "Resolution: {} bits, Reference: {} mV, Channels: {}",
+            config.resolution_bits,
+            config.nominal_reference_mv,
+            config.num_gpio_channels,
+        );
+    });
+}</code></pre>
+<h3 id="error-handling-2"><a class="header" href="#error-handling-2">Error Handling</a></h3>
+<p><code>adc_read</code> returns <code>Result&lt;u16, PicoDeGalloError&lt;AdcError&gt;&gt;</code>. The
+<code>AdcError</code> variants are:</p>
+<ul>
+<li><strong><code>ConversionFailed</code></strong> — the ADC hardware reported a conversion error.</li>
+<li><strong><code>Other</code></strong> — an unspecified ADC error.</li>
+</ul>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use pico_de_gallo_lib::{PicoDeGallo, AdcChannel, AdcError, PicoDeGalloError};
+
+async fn read_adc(gallo: &amp;PicoDeGallo) {
+    match gallo.adc_read(AdcChannel::Adc1).await {
+        Ok(raw) =&gt; println!("ADC1: {raw}"),
+        Err(PicoDeGalloError::Endpoint(AdcError::ConversionFailed)) =&gt; {
+            eprintln!("ADC conversion failed");
+        }
+        Err(e) =&gt; eprintln!("Unexpected error: {e:?}"),
+    }
+}
+<span class="boring">}</span></code></pre>
+<h2 id="c-ffi-7"><a class="header" href="#c-ffi-7">C (FFI)</a></h2>
+<pre><code class="language-c">#include "pico_de_gallo.h"
+#include &lt;stdio.h&gt;
+
+void read_adc(PicoDeGallo *gallo) {
+    uint16_t raw;
+    GalloStatus rc = gallo_adc_read(gallo, ADC_CHANNEL_0, &amp;raw);
+    if (rc != GALLO_STATUS_OK) {
+        fprintf(stderr, "ADC read failed: %d\n", rc);
+        return;
+    }
+
+    uint32_t voltage_mv = ((uint32_t)raw * 3300) / 4095;
+    printf("ADC0: raw %u, ~%u mV\n", raw, voltage_mv);
+}
+
+void adc_info(PicoDeGallo *gallo) {
+    GalloAdcConfigurationInfo info;
+    GalloStatus rc = gallo_adc_get_config(gallo, &amp;info);
+    if (rc != GALLO_STATUS_OK) {
+        fprintf(stderr, "ADC config failed: %d\n", rc);
+        return;
+    }
+
+    printf("Resolution: %u bits\n", info.resolution_bits);
+    printf("Reference:  %u mV\n", info.nominal_reference_mv);
+    printf("Channels:   %u\n", info.num_gpio_channels);
+}
+</code></pre>
+<h2 id="hal-2"><a class="header" href="#hal-2">HAL</a></h2>
+<p>At the HAL layer the ADC is accessed directly on the <code>Hal</code> struct
+(no sub-object needed):</p>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use pico_de_gallo_hal::Hal;
+use pico_de_gallo_internal::AdcChannel;
+
+fn read_adc(hal: &amp;Hal) {
+    let raw = hal.adc_read(AdcChannel::Adc0).unwrap();
+    let voltage_mv = (raw as u32 * 3300) / 4095;
+    println!("ADC0: raw {raw}, ~{voltage_mv} mV");
+
+    let config = hal.adc_get_config().unwrap();
+    println!("Resolution: {} bits", config.resolution_bits);
+}
+<span class="boring">}</span></code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="transaction-batching"><a class="header" href="#transaction-batching">Transaction Batching</a></h1>
+<p>When talking to I<sup>2</sup>C or SPI devices, a single logical operation
+often requires <strong>multiple bus transactions</strong> — for example, writing a
+register address and then reading back its value. Without batching, each
+of these operations is a separate USB round-trip:</p>
+<pre><code class="language-text">Host ──write──▸ USB ──▸ Firmware ──▸ I²C bus    (~1 ms)
+Host ◂──ack──── USB ◂── Firmware ◂── I²C bus    (~1 ms)
+Host ──read───▸ USB ──▸ Firmware ──▸ I²C bus    (~1 ms)
+Host ◂──data─── USB ◂── Firmware ◂── I²C bus    (~1 ms)
+                                            Total: ~4 ms
+</code></pre>
+<p>Transaction batching packs all operations into a <strong>single USB
+transfer</strong>. The firmware executes them back-to-back on the bus and
+returns all results at once:</p>
+<pre><code class="language-text">Host ──[write, read]──▸ USB ──▸ Firmware ──▸ I²C bus    (~1 ms)
+Host ◂──[data]──────── USB ◂── Firmware ◂── I²C bus    (~1 ms)
+                                            Total: ~2 ms
+</code></pre>
+<p>For transactions with many operations, this is a <strong>10–50× speedup</strong> —
+USB latency dominates, not bus time.</p>
+<h2 id="using-batched-transactions-from-the-cli"><a class="header" href="#using-batched-transactions-from-the-cli">Using Batched Transactions from the CLI</a></h2>
+<p>The <code>gallo</code> CLI exposes batch operations directly. Each <code>--op</code> flag
+specifies one bus operation.</p>
+<h3 id="i2c-batch"><a class="header" href="#i2c-batch">I<sup>2</sup>C Batch</a></h3>
+<p>Write a register address, then read back 2 bytes:</p>
+<pre><code class="language-console">$ gallo i2c batch -a 0x48 --op write:0x00 --op read:2
+Read data (2 bytes):
+  0000: 19 80                                              ..
+</code></pre>
+<p>Write 3 bytes to an EEPROM at address 0x50, then read them back:</p>
+<pre><code class="language-console">$ gallo i2c batch -a 0x50 --op write:0x00,0x10,0xab,0xcd,0xef --op write:0x00,0x10 --op read:3
+Read data (3 bytes):
+  0000: ab cd ef                                           ...
+</code></pre>
+<p>The operations execute as a single I<sup>2</sup>C transaction — the bus
+is not released between them (no STOP condition until the batch
+completes).</p>
+<h4 id="available-i2c-operations"><a class="header" href="#available-i2c-operations">Available I<sup>2</sup>C operations</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operation</th><th>Syntax</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Read</td><td><code>read:N</code></td><td>Read <em>N</em> bytes from the device</td></tr>
+<tr><td>Write</td><td><code>write:B1,B2,...</code></td><td>Write the given bytes (hex <code>0x..</code> or decimal)</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="spi-batch"><a class="header" href="#spi-batch">SPI Batch</a></h3>
+<p>Read a JEDEC ID from a SPI flash (command <code>0x9F</code>, 3-byte response):</p>
+<pre><code class="language-console">$ gallo spi batch --cs 0 --op write:0x9f --op read:3
+Read data (3 bytes):
+  0000: ef 40 18                                           .@.
+</code></pre>
+<p>Full-duplex transfer followed by a delay:</p>
+<pre><code class="language-console">$ gallo spi batch --cs 1 --op transfer:0x01,0x02,0x03 --op delay:1000 --op read:4
+Read data (7 bytes):
+  0000: ff ff ff 00 00 00 00                               .......
+</code></pre>
+<p>The <code>--cs</code> flag specifies which GPIO pin (0–3) is used as chip-select.
+The firmware asserts CS low before the first operation and deasserts it
+after the last — all operations run atomically under chip-select.</p>
+<h4 id="available-spi-operations"><a class="header" href="#available-spi-operations">Available SPI operations</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operation</th><th>Syntax</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Read</td><td><code>read:N</code></td><td>Clock in <em>N</em> bytes (MISO only)</td></tr>
+<tr><td>Write</td><td><code>write:B1,B2,...</code></td><td>Clock out the given bytes (MOSI only)</td></tr>
+<tr><td>Transfer</td><td><code>transfer:B1,B2,...</code></td><td>Full-duplex: send on MOSI, receive same count on MISO</td></tr>
+<tr><td>DelayNs</td><td><code>delay:NS</code></td><td>Delay for <em>NS</em> nanoseconds (best-effort, firmware resolution)</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="using-the-lib-crate-directly"><a class="header" href="#using-the-lib-crate-directly">Using the Lib Crate Directly</a></h2>
+<p>If you need batch transactions from Rust code, use the
+<code>i2c_batch</code> and <code>spi_batch</code> methods on the <code>PicoDeGallo</code> client. These
+accept typed operation slices (<code>&amp;[I2cBatchOp]</code> / <code>&amp;[SpiBatchOp]</code>)
+directly — no manual encoding needed.</p>
+<h3 id="i2c-batch-example"><a class="header" href="#i2c-batch-example">I<sup>2</sup>C batch example</a></h3>
+<pre class="playground"><code class="language-rust no_run">use pico_de_gallo_lib::{PicoDeGallo, I2cBatchOp};
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let pg = PicoDeGallo::new();
+
+    // Build a "write register pointer, then read 2 bytes" transaction
+    let ops = [
+        I2cBatchOp::Write { data: &amp;[0x00] },       // pointer register
+        I2cBatchOp::Read { len: 2 },                // read temperature
+    ];
+
+    let result = pg.i2c_batch(0x48, &amp;ops).await?;
+    let temp_raw = u16::from_be_bytes([result[0], result[1]]);
+    let celsius = (temp_raw &gt;&gt; 4) as f32 * 0.0625;
+    println!("Temperature: {celsius:.2} °C");
+
+    Ok(())
+}</code></pre>
+<h3 id="spi-batch-example"><a class="header" href="#spi-batch-example">SPI batch example</a></h3>
+<pre class="playground"><code class="language-rust no_run">use pico_de_gallo_lib::{PicoDeGallo, SpiBatchOp};
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let pg = PicoDeGallo::new();
+
+    // Read JEDEC ID: send command 0x9F, then read 3 bytes
+    let ops = [
+        SpiBatchOp::Write { data: &amp;[0x9F] },
+        SpiBatchOp::Read { len: 3 },
+    ];
+
+    let result = pg.spi_batch(0, &amp;ops).await?;
+    println!(
+        "JEDEC ID: manufacturer=0x{:02x}, type=0x{:02x}, capacity=0x{:02x}",
+        result[0], result[1], result[2]
+    );
+
+    Ok(())
+}</code></pre>
+<h2 id="transparent-batching-via-the-hal-crate"><a class="header" href="#transparent-batching-via-the-hal-crate">Transparent Batching via the HAL Crate</a></h2>
+<p>The most powerful aspect of transaction batching is that <strong>you don’t
+need to use it explicitly</strong>. The HAL crate’s <code>embedded-hal</code> trait
+implementations use batch endpoints automatically.</p>
+<p>When you call <code>I2c::transaction()</code> or <code>SpiDevice::transaction()</code> from
+the HAL crate, the implementation encodes all operations into a single
+batch request, sends it over USB, and unpacks the results — all
+transparently.</p>
+<p>This means any existing device driver that uses the standard
+<code>embedded-hal</code> transaction API gets the performance benefit for free:</p>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use embedded_hal::i2c::I2c;
+use embedded_hal::i2c::Operation;
+use pico_de_gallo_hal::Hal;
+
+fn read_tmp102(hal: &amp;Hal) -&gt; Result&lt;f32, Box&lt;dyn std::error::Error&gt;&gt; {
+    let mut i2c = hal.i2c();
+    let mut buf = [0u8; 2];
+
+    // This entire transaction is ONE USB round-trip
+    i2c.transaction(
+        0x48,
+        &amp;mut [
+            Operation::Write(&amp;[0x00]),   // set pointer to temperature register
+            Operation::Read(&amp;mut buf),   // read 2-byte temperature
+        ],
+    )?;
+
+    let raw = u16::from_be_bytes(buf);
+    Ok((raw &gt;&gt; 4) as f32 * 0.0625)
+}
+<span class="boring">}</span></code></pre>
+<p>Similarly, <code>SpiDevice::transaction()</code> batches all SPI operations and
+manages chip-select automatically:</p>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use embedded_hal::spi::SpiDevice;
+use embedded_hal::spi::Operation;
+use pico_de_gallo_hal::Hal;
+
+fn read_spi_jedec(hal: &amp;Hal) -&gt; Result&lt;[u8; 3], Box&lt;dyn std::error::Error&gt;&gt; {
+    let mut spi = hal.spi_device(0);  // CS on GPIO 0
+    let mut id = [0u8; 3];
+
+    // One USB round-trip: CS asserted, command sent, ID read, CS deasserted
+    spi.transaction(&amp;mut [
+        Operation::Write(&amp;[0x9F]),
+        Operation::Read(&amp;mut id),
+    ])?;
+
+    Ok(id)
+}
+<span class="boring">}</span></code></pre>
+<h3 id="before-vs-after"><a class="header" href="#before-vs-after">Before vs. After</a></h3>
+<p>Consider an EEPROM page write that requires a write-enable command
+followed by the actual page write, then a status poll:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Approach</th><th>USB Round-Trips</th><th>Approx. Latency</th></tr>
+</thead>
+<tbody>
+<tr><td>Without batching (3 × write/read)</td><td>6</td><td>~6 ms</td></tr>
+<tr><td>With batching (1 × batch)</td><td>2</td><td>~2 ms</td></tr>
+</tbody>
+</table>
+</div>
+<p>The improvement grows with the number of operations in each transaction.</p>
+<h2 id="wire-format-details"><a class="header" href="#wire-format-details">Wire Format Details</a></h2>
+<p>For those interested in the protocol internals, batch operations use
+postcard serialization. Each <code>I2cBatchOp</code> or <code>SpiBatchOp</code> is serialized
+individually using <code>postcard::to_slice</code>, and the resulting bytes are
+concatenated into the <code>ops</code> field. The firmware decodes them one at a
+time using <code>postcard::take_from_bytes</code>.</p>
+<h3 id="i2c-operation-encoding-postcard"><a class="header" href="#i2c-operation-encoding-postcard">I<sup>2</sup>C operation encoding (postcard)</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Variant</th><th>Encoding</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Read { len }</code></td><td>varint <code>0</code> (variant index) + varint <code>len</code></td></tr>
+<tr><td><code>Write { data }</code></td><td>varint <code>1</code> + varint data length + raw bytes</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="spi-operation-encoding-postcard"><a class="header" href="#spi-operation-encoding-postcard">SPI operation encoding (postcard)</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Variant</th><th>Encoding</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Read { len }</code></td><td>varint <code>0</code> + varint <code>len</code></td></tr>
+<tr><td><code>Write { data }</code></td><td>varint <code>1</code> + varint data length + raw bytes</td></tr>
+<tr><td><code>Transfer { data }</code></td><td>varint <code>2</code> + varint data length + raw bytes</td></tr>
+<tr><td><code>DelayNs { ns }</code></td><td>varint <code>3</code> + varint <code>ns</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>The <code>count</code> field in each batch request struct tells the firmware how
+many operations to expect, providing an additional safety check during
+decoding.</p>
+<p>The response for both I<sup>2</sup>C and SPI is simply the concatenated
+read (and transfer) data. The host already knows the expected lengths
+from the request, so no framing is needed in the response.</p>
+<h3 id="limits"><a class="header" href="#limits">Limits</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Parameter</th><th>Value</th></tr>
+</thead>
+<tbody>
+<tr><td>Maximum operations per batch</td><td>64 (<code>MAX_BATCH_OPS</code>)</td></tr>
+<tr><td>Maximum total payload</td><td>4096 bytes (<code>MAX_TRANSFER_SIZE</code>)</td></tr>
+<tr><td>Maximum response data</td><td>4096 bytes</td></tr>
+</tbody>
+</table>
+</div>
+<p>If a batch exceeds these limits, the firmware returns an error
+indicating which limit was violated and, for operation-level failures,
+which operation failed (zero-indexed).</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="1-wire-bus"><a class="header" href="#1-wire-bus">1-Wire Bus</a></h1>
+<p>Pico de Gallo provides 1-Wire bus support through the RP2350’s PIO (Programmable
+I/O) state machine hardware. The 1-Wire data pin is on <strong>GPIO 16</strong>, configured
+in open-drain mode.</p>
+<h2 id="operations-4"><a class="header" href="#operations-4">Operations</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operation</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Reset</strong></td><td>Resets the bus and detects device presence</td></tr>
+<tr><td><strong>Read</strong></td><td>Reads N bytes from the bus</td></tr>
+<tr><td><strong>Write</strong></td><td>Writes raw bytes to the bus</td></tr>
+<tr><td><strong>Write Pullup</strong></td><td>Writes bytes then applies strong pullup for parasitic-power devices</td></tr>
+<tr><td><strong>Search</strong></td><td>Starts a new ROM search and returns the first device</td></tr>
+<tr><td><strong>Search Next</strong></td><td>Continues the current ROM search</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="ds18b20-temperature-sensor-example"><a class="header" href="#ds18b20-temperature-sensor-example">DS18B20 Temperature Sensor Example</a></h2>
+<p>The DS18B20 is the most popular 1-Wire device. Here’s how to read its
+temperature using each interface.</p>
+<h3 id="protocol-refresher"><a class="header" href="#protocol-refresher">Protocol Refresher</a></h3>
+<ul>
+<li><strong>Skip ROM</strong> (<code>0xCC</code>): addresses all devices (single-device bus)</li>
+<li><strong>Convert T</strong> (<code>0x44</code>): starts temperature conversion (needs 750ms with
+strong pullup for parasitic power)</li>
+<li><strong>Read Scratchpad</strong> (<code>0xBE</code>): reads 9 bytes of sensor data</li>
+<li>Temperature is in bytes 0–1 (signed 16-bit, little-endian, 1/16°C resolution)</li>
+</ul>
+<h3 id="cli-7"><a class="header" href="#cli-7">CLI</a></h3>
+<pre><code class="language-bash"># 1. Discover devices on the bus
+gallo onewire search
+
+# 2. Reset the bus
+gallo onewire reset
+
+# 3. Start temperature conversion with 750ms strong pullup
+gallo onewire write-pullup --data cc44 --duration 750
+
+# 4. Reset again before reading
+gallo onewire reset
+
+# 5. Send Read Scratchpad command
+gallo onewire write --data ccbe
+
+# 6. Read 9-byte scratchpad
+gallo onewire read --len 9
+
+# Parse temperature from the first 2 bytes:
+# e.g., bytes [50, 01] → 0x0150 = 336 → 336 / 16.0 = 21.0°C
+</code></pre>
+<h3 id="rust-library-8"><a class="header" href="#rust-library-8">Rust Library</a></h3>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use pico_de_gallo_lib::PicoDeGallo;
+
+async fn read_ds18b20_temperature(gallo: &amp;PicoDeGallo) -&gt; f32 {
+    // Reset bus, check presence
+    let present = gallo.onewire_reset().await.unwrap();
+    assert!(present, "No device on bus");
+
+    // Skip ROM + Convert Temperature, strong pullup for 750ms
+    gallo.onewire_write_pullup(&amp;[0xCC, 0x44], 750).await.unwrap();
+
+    // Reset again
+    gallo.onewire_reset().await.unwrap();
+
+    // Skip ROM + Read Scratchpad
+    gallo.onewire_write(&amp;[0xCC, 0xBE]).await.unwrap();
+
+    // Read 9-byte scratchpad
+    let data = gallo.onewire_read(9).await.unwrap();
+
+    // Temperature is in bytes 0–1 (little-endian, 12-bit signed fixed-point)
+    let raw = i16::from_le_bytes([data[0], data[1]]);
+    raw as f32 / 16.0
+}
+<span class="boring">}</span></code></pre>
+<h3 id="c-ffi-8"><a class="header" href="#c-ffi-8">C (FFI)</a></h3>
+<pre><code class="language-c">#include "pico_de_gallo.h"
+#include &lt;stdio.h&gt;
+
+float read_ds18b20(PicoDeGallo *gallo) {
+    bool present;
+    gallo_onewire_reset(gallo, &amp;present);
+    if (!present) {
+        fprintf(stderr, "No device on bus\n");
+        return -999.0f;
+    }
+
+    // Skip ROM + Convert T with 750ms strong pullup
+    uint8_t convert_cmd[] = {0xCC, 0x44};
+    gallo_onewire_write_pullup(gallo, convert_cmd, 2, 750);
+
+    // Reset before reading
+    gallo_onewire_reset(gallo, &amp;present);
+
+    // Skip ROM + Read Scratchpad
+    uint8_t read_cmd[] = {0xCC, 0xBE};
+    gallo_onewire_write(gallo, read_cmd, 2);
+
+    // Read 9-byte scratchpad
+    uint8_t buf[9];
+    uint16_t out_len;
+    gallo_onewire_read(gallo, buf, 9, &amp;out_len);
+
+    // Temperature from bytes 0–1
+    int16_t raw = (int16_t)(buf[0] | (buf[1] &lt;&lt; 8));
+    return raw / 16.0f;
+}
+</code></pre>
+<h3 id="hal-3"><a class="header" href="#hal-3">HAL</a></h3>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use pico_de_gallo_hal::Hal;
+
+fn read_ds18b20_blocking(hal: &amp;Hal) -&gt; f32 {
+    let ow = hal.onewire();
+
+    let present = ow.reset().unwrap();
+    assert!(present, "No device on bus");
+
+    ow.write_pullup(&amp;[0xCC, 0x44], 750).unwrap();
+    ow.reset().unwrap();
+    ow.write(&amp;[0xCC, 0xBE]).unwrap();
+    let data = ow.read(9).unwrap();
+
+    let raw = i16::from_le_bytes([data[0], data[1]]);
+    raw as f32 / 16.0
+}
+<span class="boring">}</span></code></pre>
+<h2 id="bus-scanning"><a class="header" href="#bus-scanning">Bus Scanning</a></h2>
+<p>To enumerate all devices on the 1-Wire bus:</p>
+<pre><code class="language-bash">gallo onewire search
+</code></pre>
+<p>Output:</p>
+<pre><code>Found 2 device(s):
+  1: ROM ID 0x28FF123456780012 (family 0x28)
+  2: ROM ID 0x28FF9ABCDE340056 (family 0x28)
+</code></pre>
+<p>The family code <code>0x28</code> identifies DS18B20 sensors. Each ROM ID is a unique
+64-bit address: family code (1 byte) + serial number (6 bytes) + CRC (1 byte).</p>
+<h2 id="hardware-setup-1"><a class="header" href="#hardware-setup-1">Hardware Setup</a></h2>
+<p>Connect a DS18B20 (or other 1-Wire device) to <strong>GPIO 16</strong> with a 4.7kΩ
+pull-up resistor to 3.3V:</p>
+<pre><code>3.3V ──┬── 4.7kΩ ──┬── GPIO 16 (data)
+       │            │
+       │          DS18B20
+       │            │
+      GND ─────── GND
+</code></pre>
+<p>For parasitic power mode (no separate VDD), use the <code>write-pullup</code> command
+which drives the data line high after sending commands to supply power
+through the bus itself.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="ffi--c-bindings"><a class="header" href="#ffi--c-bindings">FFI / C Bindings</a></h1>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>The <a href="https://docs.rs/pico-de-gallo-ffi"><code>pico-de-gallo-ffi</code></a> crate provides
+C-compatible bindings for all Pico de Gallo functionality. It wraps
+<a href="https://docs.rs/pico-de-gallo-lib"><code>pico-de-gallo-lib</code></a> in a C-compatible API
+using <strong>opaque pointers</strong> and <strong>integer status codes</strong>.</p>
+<p>Key design decisions:</p>
+<ul>
+<li><strong>Opaque handle</strong> — C code never sees the internal layout of <code>PicoDeGallo</code>.
+All interaction goes through <code>gallo_*</code> functions.</li>
+<li><strong>cbindgen</strong> — a C header (<code>pico_de_gallo.h</code>) is generated automatically at
+build time. You never need to write or maintain the header by hand.</li>
+<li><strong>Thread safety</strong> — the context handle is <code>Send + Sync</code>. Each function call
+creates its own async executor via <code>futures::executor::block_on</code>, so
+concurrent calls from different threads are safe.</li>
+<li><strong>Shared library</strong> — the crate compiles as a <code>cdylib</code>, producing
+<code>libpico_de_gallo_ffi.so</code> (Linux), <code>pico_de_gallo_ffi.dll</code> (Windows), or
+<code>libpico_de_gallo_ffi.dylib</code> (macOS).</li>
+</ul>
+<h2 id="lifecycle"><a class="header" href="#lifecycle">Lifecycle</a></h2>
+<p>Every program using the FFI follows the same three-step pattern:</p>
+<ol>
+<li><strong>Create</strong> a device handle.</li>
+<li><strong>Use</strong> <code>gallo_*</code> functions, passing the handle.</li>
+<li><strong>Free</strong> the handle when done.</li>
+</ol>
+<pre><code class="language-c">#include "pico_de_gallo.h"
+
+/* 1. Connect to the first Pico de Gallo device */
+const PicoDeGallo *gallo = gallo_init();
+
+/* 2. Use it */
+uint32_t id = 42;
+Status s = gallo_ping(gallo, &amp;id);
+
+/* 3. Release */
+gallo_free(gallo);
+</code></pre>
+<h3 id="initialisation-functions"><a class="header" href="#initialisation-functions">Initialisation Functions</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Function</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>const PicoDeGallo *gallo_init(void)</code></td><td>Connect to the first available device. Returns an opaque pointer, or <code>NULL</code> on failure.</td></tr>
+<tr><td><code>const PicoDeGallo *gallo_init_with_serial_number(const char *serial)</code></td><td>Connect to a device with a specific serial number. <code>serial</code> must be a null-terminated UTF-8 string. Returns <code>NULL</code> if the serial is invalid or no matching device is found.</td></tr>
+<tr><td><code>void gallo_free(const PicoDeGallo *gallo)</code></td><td>Release the device handle created by <code>gallo_init</code> or <code>gallo_init_with_serial_number</code>. Passing <code>NULL</code> is a safe no-op.</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="status-codes"><a class="header" href="#status-codes">Status Codes</a></h2>
+<p>Every <code>gallo_*</code> function (except the lifecycle functions above) returns a
+<code>Status</code> value. <code>Status</code> is a C <code>enum</code> backed by <code>int32_t</code>.</p>
+<ul>
+<li><strong><code>Ok</code> (0)</strong> — success.</li>
+<li><strong>Negative values</strong> — errors, grouped by peripheral.</li>
+</ul>
+<h3 id="complete-status-table"><a class="header" href="#complete-status-table">Complete Status Table</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th style="text-align: right">Value</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Ok</code></td><td style="text-align: right">0</td><td>Operation successful</td></tr>
+<tr><td><code>I2cReadFailed</code></td><td style="text-align: right">−1</td><td>I2C read failed</td></tr>
+<tr><td><code>I2cWriteFailed</code></td><td style="text-align: right">−2</td><td>I2C write failed</td></tr>
+<tr><td><code>InvalidResponse</code></td><td style="text-align: right">−3</td><td>Firmware produced an invalid response</td></tr>
+<tr><td><code>Uninitialized</code></td><td style="text-align: right">−4</td><td>Library was not initialised (NULL context)</td></tr>
+<tr><td><code>InvalidArgument</code></td><td style="text-align: right">−5</td><td>Caller passed an invalid argument</td></tr>
+<tr><td><code>PingFailed</code></td><td style="text-align: right">−6</td><td>Ping round-trip failed</td></tr>
+<tr><td><code>SpiReadFailed</code></td><td style="text-align: right">−7</td><td>SPI read failed</td></tr>
+<tr><td><code>SpiWriteFailed</code></td><td style="text-align: right">−8</td><td>SPI write failed</td></tr>
+<tr><td><code>SpiFlushFailed</code></td><td style="text-align: right">−9</td><td>SPI flush failed</td></tr>
+<tr><td><code>GpioGetFailed</code></td><td style="text-align: right">−10</td><td>GPIO get failed</td></tr>
+<tr><td><code>GpioPutFailed</code></td><td style="text-align: right">−11</td><td>GPIO put failed</td></tr>
+<tr><td><code>GpioWaitFailed</code></td><td style="text-align: right">−12</td><td>GPIO wait failed</td></tr>
+<tr><td><code>SetConfigFailed</code></td><td style="text-align: right">−13</td><td>Set config failed</td></tr>
+<tr><td><code>VersionFailed</code></td><td style="text-align: right">−14</td><td>Version query failed</td></tr>
+<tr><td><code>I2cWriteReadFailed</code></td><td style="text-align: right">−15</td><td>I2C write-read failed</td></tr>
+<tr><td><code>I2cSetConfigFailed</code></td><td style="text-align: right">−16</td><td>I2C set config failed</td></tr>
+<tr><td><code>SpiSetConfigFailed</code></td><td style="text-align: right">−17</td><td>SPI set config failed</td></tr>
+<tr><td><code>I2cNack</code></td><td style="text-align: right">−18</td><td>I2C target did not acknowledge</td></tr>
+<tr><td><code>I2cBusError</code></td><td style="text-align: right">−19</td><td>I2C bus error</td></tr>
+<tr><td><code>I2cArbitrationLoss</code></td><td style="text-align: right">−20</td><td>I2C arbitration loss</td></tr>
+<tr><td><code>I2cOverrun</code></td><td style="text-align: right">−21</td><td>I2C data overrun</td></tr>
+<tr><td><code>BufferTooLong</code></td><td style="text-align: right">−22</td><td>Buffer exceeds firmware transfer limit</td></tr>
+<tr><td><code>I2cAddressOutOfRange</code></td><td style="text-align: right">−23</td><td>I2C address out of valid range</td></tr>
+<tr><td><code>GpioInvalidPin</code></td><td style="text-align: right">−24</td><td>Invalid GPIO pin number</td></tr>
+<tr><td><code>CommsFailed</code></td><td style="text-align: right">−25</td><td>USB communication failure</td></tr>
+<tr><td><code>I2cScanFailed</code></td><td style="text-align: right">−26</td><td>I2C bus scan failed</td></tr>
+<tr><td><code>GpioSetConfigFailed</code></td><td style="text-align: right">−27</td><td>GPIO set config failed</td></tr>
+<tr><td><code>GpioWrongDirection</code></td><td style="text-align: right">−28</td><td>GPIO pin direction mismatch</td></tr>
+<tr><td><code>I2cGetConfigFailed</code></td><td style="text-align: right">−29</td><td>I2C get config failed</td></tr>
+<tr><td><code>SpiGetConfigFailed</code></td><td style="text-align: right">−30</td><td>SPI get config failed</td></tr>
+<tr><td><code>UartReadFailed</code></td><td style="text-align: right">−31</td><td>UART read failed</td></tr>
+<tr><td><code>UartWriteFailed</code></td><td style="text-align: right">−32</td><td>UART write failed</td></tr>
+<tr><td><code>UartFlushFailed</code></td><td style="text-align: right">−33</td><td>UART flush failed</td></tr>
+<tr><td><code>UartOverrun</code></td><td style="text-align: right">−34</td><td>UART receiver overrun</td></tr>
+<tr><td><code>UartBreak</code></td><td style="text-align: right">−35</td><td>UART break condition</td></tr>
+<tr><td><code>UartParity</code></td><td style="text-align: right">−36</td><td>UART parity error</td></tr>
+<tr><td><code>UartFraming</code></td><td style="text-align: right">−37</td><td>UART framing error</td></tr>
+<tr><td><code>UartInvalidBaudRate</code></td><td style="text-align: right">−38</td><td>Invalid baud rate</td></tr>
+<tr><td><code>UartSetConfigFailed</code></td><td style="text-align: right">−39</td><td>UART set config failed</td></tr>
+<tr><td><code>UartGetConfigFailed</code></td><td style="text-align: right">−40</td><td>UART get config failed</td></tr>
+<tr><td><code>PwmSetDutyCycleFailed</code></td><td style="text-align: right">−41</td><td>PWM set duty cycle failed</td></tr>
+<tr><td><code>PwmGetDutyCycleFailed</code></td><td style="text-align: right">−42</td><td>PWM get duty cycle failed</td></tr>
+<tr><td><code>PwmEnableFailed</code></td><td style="text-align: right">−43</td><td>PWM enable failed</td></tr>
+<tr><td><code>PwmDisableFailed</code></td><td style="text-align: right">−44</td><td>PWM disable failed</td></tr>
+<tr><td><code>PwmSetConfigFailed</code></td><td style="text-align: right">−45</td><td>PWM set config failed</td></tr>
+<tr><td><code>PwmGetConfigFailed</code></td><td style="text-align: right">−46</td><td>PWM get config failed</td></tr>
+<tr><td><code>PwmInvalidChannel</code></td><td style="text-align: right">−47</td><td>Invalid PWM channel</td></tr>
+<tr><td><code>PwmInvalidDutyCycle</code></td><td style="text-align: right">−48</td><td>Invalid PWM duty cycle</td></tr>
+<tr><td><code>PwmInvalidConfiguration</code></td><td style="text-align: right">−49</td><td>Invalid PWM configuration</td></tr>
+<tr><td><code>AdcReadFailed</code></td><td style="text-align: right">−50</td><td>ADC read failed</td></tr>
+<tr><td><code>AdcGetConfigFailed</code></td><td style="text-align: right">−51</td><td>ADC get config failed</td></tr>
+<tr><td><code>AdcConversionFailed</code></td><td style="text-align: right">−52</td><td>ADC conversion error</td></tr>
+<tr><td><code>GpioPinMonitored</code></td><td style="text-align: right">−53</td><td>Pin is currently subscribed</td></tr>
+<tr><td><code>GpioPinNotMonitored</code></td><td style="text-align: right">−54</td><td>Pin is not subscribed</td></tr>
+<tr><td><code>GpioSubscribeFailed</code></td><td style="text-align: right">−55</td><td>GPIO subscribe failed</td></tr>
+<tr><td><code>GpioUnsubscribeFailed</code></td><td style="text-align: right">−56</td><td>GPIO unsubscribe failed</td></tr>
+<tr><td><code>OneWireNoPresence</code></td><td style="text-align: right">−57</td><td>1-Wire: no device responded to reset</td></tr>
+<tr><td><code>OneWireBusError</code></td><td style="text-align: right">−58</td><td>1-Wire: bus communication error</td></tr>
+<tr><td><code>OneWireReadFailed</code></td><td style="text-align: right">−59</td><td>1-Wire: read failed</td></tr>
+<tr><td><code>OneWireWriteFailed</code></td><td style="text-align: right">−60</td><td>1-Wire: write failed</td></tr>
+<tr><td><code>OneWireSearchFailed</code></td><td style="text-align: right">−61</td><td>1-Wire: ROM search failed</td></tr>
+<tr><td><code>CaptureInvalidPin</code></td><td style="text-align: right">−62</td><td>Capture: pin outside valid range</td></tr>
+<tr><td><code>CaptureInvalidRate</code></td><td style="text-align: right">−63</td><td>Capture: invalid sample rate</td></tr>
+<tr><td><code>CaptureTooManyChannels</code></td><td style="text-align: right">−64</td><td>Capture: too many channels</td></tr>
+<tr><td><code>CaptureAlreadyRunning</code></td><td style="text-align: right">−65</td><td>Capture: session already running</td></tr>
+<tr><td><code>CaptureNotRunning</code></td><td style="text-align: right">−66</td><td>Capture: no session running</td></tr>
+<tr><td><code>CaptureNoPins</code></td><td style="text-align: right">−67</td><td>Capture: no pins specified</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="function-reference"><a class="header" href="#function-reference">Function Reference</a></h2>
+<p>All functions below take the opaque <code>PicoDeGallo *gallo</code> as their first
+argument. Output values are written through pointer parameters. The return
+value is always <code>Status</code>.</p>
+<h3 id="ping"><a class="header" href="#ping">Ping</a></h3>
+<pre><code class="language-c">Status gallo_ping(PicoDeGallo *gallo, uint32_t *id);
+</code></pre>
+<p>Round-trips <code>*id</code> through the firmware. On success <code>*id</code> contains the echoed
+value. Useful for verifying connectivity.</p>
+<h3 id="version"><a class="header" href="#version">Version</a></h3>
+<pre><code class="language-c">Status gallo_version(PicoDeGallo *gallo,
+                     uint16_t *major, uint16_t *minor, uint32_t *patch);
+</code></pre>
+<p>Queries the firmware version and writes the semver components to the output
+pointers.</p>
+<h3 id="i2c"><a class="header" href="#i2c">I2C</a></h3>
+<pre><code class="language-c">Status gallo_i2c_read(PicoDeGallo *gallo,
+                      uint8_t address, uint8_t *buf, size_t len);
+
+Status gallo_i2c_write(PicoDeGallo *gallo,
+                       uint8_t address, const uint8_t *buf, size_t len);
+
+Status gallo_i2c_write_read(PicoDeGallo *gallo,
+                            uint8_t address,
+                            const uint8_t *txbuf, size_t txlen,
+                            uint8_t *rxbuf, size_t rxlen);
+
+Status gallo_i2c_scan(PicoDeGallo *gallo,
+                      bool include_reserved,
+                      uint8_t *buf, size_t buf_len, size_t *found);
+
+Status gallo_i2c_set_config(PicoDeGallo *gallo, uint8_t frequency);
+
+Status gallo_i2c_get_config(PicoDeGallo *gallo, uint8_t *out_frequency);
+</code></pre>
+<p><strong>I2C frequency values:</strong> <code>0</code> = Standard 100 kHz, <code>1</code> = Fast 400 kHz,
+<code>2</code> = Fast+ 1 MHz.</p>
+<p><code>gallo_i2c_scan</code> probes the bus and fills <code>buf</code> with the addresses that ACK.
+When <code>include_reserved</code> is <code>false</code>, only addresses 0x08–0x77 are probed.
+<code>*found</code> always reflects the total device count even if <code>buf_len</code> is smaller.</p>
+<h3 id="spi"><a class="header" href="#spi">SPI</a></h3>
+<pre><code class="language-c">Status gallo_spi_read(PicoDeGallo *gallo, uint8_t *buf, size_t len);
+
+Status gallo_spi_write(PicoDeGallo *gallo, const uint8_t *buf, size_t len);
+
+Status gallo_spi_flush(PicoDeGallo *gallo);
+
+Status gallo_spi_set_config(PicoDeGallo *gallo,
+                            uint32_t frequency,
+                            bool spi_phase, bool spi_polarity);
+
+Status gallo_spi_get_config(PicoDeGallo *gallo,
+                            uint32_t *out_frequency,
+                            bool *out_phase, bool *out_polarity);
+</code></pre>
+<p><strong>SPI phase/polarity:</strong> <code>spi_phase</code> — <code>false</code> = CPHA=0 (capture on first
+transition), <code>true</code> = CPHA=1. <code>spi_polarity</code> — <code>false</code> = CPOL=0 (idle low),
+<code>true</code> = CPOL=1 (idle high).</p>
+<h3 id="gpio-1"><a class="header" href="#gpio-1">GPIO</a></h3>
+<pre><code class="language-c">Status gallo_gpio_get(PicoDeGallo *gallo, uint8_t pin, bool *state);
+
+Status gallo_gpio_put(PicoDeGallo *gallo, uint8_t pin, bool state);
+
+Status gallo_gpio_wait_for_high(PicoDeGallo *gallo, uint8_t pin);
+Status gallo_gpio_wait_for_low(PicoDeGallo *gallo, uint8_t pin);
+Status gallo_gpio_wait_for_rising_edge(PicoDeGallo *gallo, uint8_t pin);
+Status gallo_gpio_wait_for_falling_edge(PicoDeGallo *gallo, uint8_t pin);
+Status gallo_gpio_wait_for_any_edge(PicoDeGallo *gallo, uint8_t pin);
+
+Status gallo_gpio_set_config(PicoDeGallo *gallo,
+                             uint8_t pin, uint8_t direction, uint8_t pull);
+
+Status gallo_gpio_subscribe(PicoDeGallo *gallo, uint8_t pin, uint8_t edge);
+
+Status gallo_gpio_unsubscribe(PicoDeGallo *gallo, uint8_t pin);
+</code></pre>
+<p><strong>Direction values:</strong> <code>0</code> = Input, <code>1</code> = Output.</p>
+<p><strong>Pull values:</strong> <code>0</code> = None, <code>1</code> = Pull-up, <code>2</code> = Pull-down.</p>
+<p><strong>Edge values (subscribe):</strong> <code>0</code> = Rising, <code>1</code> = Falling, <code>2</code> = Any.</p>
+<p>After calling <code>gallo_gpio_set_config</code>, the pin enters explicit-direction mode.
+Calling <code>gallo_gpio_put</code> on an input pin (or <code>gallo_gpio_get</code>/wait on an
+output pin) returns <code>GpioWrongDirection</code>.</p>
+<p>While a pin is subscribed, other GPIO operations on that pin return
+<code>GpioPinMonitored</code>. Call <code>gallo_gpio_unsubscribe</code> to release it.</p>
+<h3 id="uart-1"><a class="header" href="#uart-1">UART</a></h3>
+<pre><code class="language-c">Status gallo_uart_read(PicoDeGallo *gallo,
+                       uint8_t *buf, uint16_t count,
+                       uint32_t timeout_ms, uint16_t *out_len);
+
+Status gallo_uart_write(PicoDeGallo *gallo,
+                        const uint8_t *buf, uint16_t len);
+
+Status gallo_uart_flush(PicoDeGallo *gallo);
+
+Status gallo_uart_set_config(PicoDeGallo *gallo, uint32_t baud_rate);
+
+Status gallo_uart_get_config(PicoDeGallo *gallo, uint32_t *out_baud_rate);
+</code></pre>
+<p><code>gallo_uart_read</code> reads up to <code>count</code> bytes. If no data arrives within
+<code>timeout_ms</code> milliseconds, <code>*out_len</code> is set to <code>0</code> and the function returns
+<code>Ok</code>. Use <code>gallo_uart_flush</code> to block until all pending bytes have been
+transmitted on the wire.</p>
+<h3 id="pwm-1"><a class="header" href="#pwm-1">PWM</a></h3>
+<pre><code class="language-c">Status gallo_pwm_set_duty_cycle(PicoDeGallo *gallo,
+                                uint8_t channel, uint16_t duty);
+
+Status gallo_pwm_get_duty_cycle(PicoDeGallo *gallo,
+                                uint8_t channel,
+                                uint16_t *out_duty, uint16_t *out_max_duty);
+
+Status gallo_pwm_enable(PicoDeGallo *gallo, uint8_t channel);
+
+Status gallo_pwm_disable(PicoDeGallo *gallo, uint8_t channel);
+
+Status gallo_pwm_set_config(PicoDeGallo *gallo,
+                            uint8_t channel,
+                            uint32_t frequency_hz, bool phase_correct);
+
+Status gallo_pwm_get_config(PicoDeGallo *gallo,
+                            uint8_t channel,
+                            uint32_t *out_frequency_hz,
+                            bool *out_phase_correct, bool *out_enabled);
+</code></pre>
+<p>Channels 0–3 are available. Channels 0–1 share one hardware PWM slice;
+channels 2–3 share another. <code>duty</code> is the raw compare value (0 to <code>top</code>).
+Use <code>gallo_pwm_get_duty_cycle</code> to discover <code>out_max_duty</code> (= top + 1).</p>
+<h3 id="adc"><a class="header" href="#adc">ADC</a></h3>
+<pre><code class="language-c">Status gallo_adc_read(PicoDeGallo *gallo,
+                      uint8_t channel, uint16_t *out_value);
+
+Status gallo_adc_get_config(PicoDeGallo *gallo,
+                            uint8_t *out_resolution_bits,
+                            uint16_t *out_nominal_reference_mv,
+                            uint8_t *out_num_gpio_channels);
+</code></pre>
+<p><code>channel</code> selects the ADC input: 0–3 map to GPIO 26–29. The raw 12-bit value
+(0–4095) is written to <code>*out_value</code>.</p>
+<h3 id="1-wire"><a class="header" href="#1-wire">1-Wire</a></h3>
+<pre><code class="language-c">Status gallo_onewire_reset(PicoDeGallo *gallo, bool *out_present);
+
+Status gallo_onewire_read(PicoDeGallo *gallo,
+                          uint8_t *buf, uint16_t len, uint16_t *out_len);
+
+Status gallo_onewire_write(PicoDeGallo *gallo,
+                           const uint8_t *buf, uint16_t len);
+
+Status gallo_onewire_write_pullup(PicoDeGallo *gallo,
+                                  const uint8_t *buf, uint16_t len,
+                                  uint16_t pullup_duration_ms);
+
+Status gallo_onewire_search(PicoDeGallo *gallo,
+                            uint64_t *out_rom_ids, uint16_t max_count,
+                            uint16_t *out_count);
+</code></pre>
+<p><code>gallo_onewire_reset</code> issues a bus reset; <code>*out_present</code> indicates whether any
+device responded with a presence pulse.</p>
+<p><code>gallo_onewire_write_pullup</code> writes data and then holds the bus high for
+<code>pullup_duration_ms</code> milliseconds to power parasitic-power devices.</p>
+<p><code>gallo_onewire_search</code> discovers up to <code>max_count</code> ROM IDs and writes them to
+<code>out_rom_ids</code>. The actual count is stored in <code>*out_count</code>.</p>
+<h3 id="logic-capture"><a class="header" href="#logic-capture">Logic Capture</a></h3>
+<pre><code class="language-c">typedef struct {
+    uint32_t actual_sample_rate_hz;
+    uint8_t  num_channels;
+} GalloCaptureStartInfo;
+
+typedef struct {
+    uint64_t total_samples;
+    uint64_t duration_us;
+    uint32_t chunks_sent;
+    uint32_t drops;
+} GalloCaptureStopInfo;
+
+Status gallo_capture_start(PicoDeGallo *gallo,
+                           const uint8_t *pins, uint32_t num_pins,
+                           uint32_t sample_rate_hz,
+                           GalloCaptureStartInfo *out_info);
+
+Status gallo_capture_stop(PicoDeGallo *gallo,
+                          GalloCaptureStopInfo *out_info);
+</code></pre>
+<p><code>pins</code> contains capture channel indices (0–3, corresponding to GPIO 8–11).
+On success, <code>out_info-&gt;actual_sample_rate_hz</code> reflects the rate achieved after
+clock divider quantisation. Call <code>gallo_capture_stop</code> to end the session and
+retrieve statistics.</p>
+<h2 id="building-and-linking"><a class="header" href="#building-and-linking">Building and Linking</a></h2>
+<h3 id="build-the-shared-library"><a class="header" href="#build-the-shared-library">Build the shared library</a></h3>
+<pre><code class="language-sh">cd crates/pico-de-gallo-ffi
+cargo build --release
+</code></pre>
+<p>This produces:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Platform</th><th>Output</th></tr>
+</thead>
+<tbody>
+<tr><td>Linux</td><td><code>target/release/libpico_de_gallo_ffi.so</code></td></tr>
+<tr><td>macOS</td><td><code>target/release/libpico_de_gallo_ffi.dylib</code></td></tr>
+<tr><td>Windows</td><td><code>target/release/pico_de_gallo_ffi.dll</code> + <code>pico_de_gallo_ffi.dll.lib</code></td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="locate-the-generated-header"><a class="header" href="#locate-the-generated-header">Locate the generated header</a></h3>
+<p>The C header is generated during the build into the cargo <code>OUT_DIR</code>:</p>
+<pre><code>target/release/build/pico-de-gallo-ffi-&lt;hash&gt;/out/include/pico_de_gallo.h
+</code></pre>
+<p>Copy this header to your project’s include path.</p>
+<h3 id="compile-and-link-a-c-program"><a class="header" href="#compile-and-link-a-c-program">Compile and link a C program</a></h3>
+<pre><code class="language-sh"># Linux / macOS
+gcc -o my_tool my_tool.c \
+    -I/path/to/include \
+    -L/path/to/target/release \
+    -lpico_de_gallo_ffi
+
+# Windows (MSVC)
+cl my_tool.c /I path\to\include ^
+    /link /LIBPATH:path\to\target\release pico_de_gallo_ffi.dll.lib
+</code></pre>
+<p>At runtime, ensure the shared library is in the library search path
+(<code>LD_LIBRARY_PATH</code> on Linux, <code>DYLD_LIBRARY_PATH</code> on macOS, or the same
+directory as the executable on Windows).</p>
+<h3 id="cbindgen-configuration"><a class="header" href="#cbindgen-configuration">cbindgen configuration</a></h3>
+<p>The header generation is controlled by <code>cbindgen.toml</code> in the FFI crate root.
+Notable settings:</p>
+<ul>
+<li><strong>Language:</strong> C</li>
+<li><strong>Include guard:</strong> <code>PICO_DE_GALLO_H</code></li>
+<li><strong>Style:</strong> <code>"both"</code> — generates both <code>typedef</code> and tagged-struct forms.</li>
+<li><strong>Line endings:</strong> LF</li>
+</ul>
+<h2 id="complete-example"><a class="header" href="#complete-example">Complete Example</a></h2>
+<p>Below is a full C program that initialises the library, reads two bytes from
+an I2C device at address <code>0x50</code>, prints the result, and cleans up.</p>
+<pre><code class="language-c">#include &lt;stdio.h&gt;
+#include &lt;stdint.h&gt;
+#include "pico_de_gallo.h"
+
+int main(void) {
+    /* Connect to the first available Pico de Gallo */
+    const PicoDeGallo *gallo = gallo_init();
+    if (!gallo) {
+        fprintf(stderr, "Failed to connect to device\n");
+        return 1;
+    }
+
+    /* Verify connectivity with a ping */
+    uint32_t id = 0xDEADBEEF;
+    Status s = gallo_ping((PicoDeGallo *)gallo, &amp;id);
+    if (s != Ok) {
+        fprintf(stderr, "Ping failed: %d\n", s);
+        gallo_free(gallo);
+        return 1;
+    }
+    printf("Ping OK, got back: 0x%08X\n", id);
+
+    /* Query firmware version */
+    uint16_t major, minor;
+    uint32_t patch;
+    s = gallo_version((PicoDeGallo *)gallo, &amp;major, &amp;minor, &amp;patch);
+    if (s == Ok) {
+        printf("Firmware v%u.%u.%u\n", major, minor, patch);
+    }
+
+    /* Read 2 bytes from I2C address 0x50 */
+    uint8_t buf[2] = {0};
+    s = gallo_i2c_read((PicoDeGallo *)gallo, 0x50, buf, sizeof(buf));
+    if (s != Ok) {
+        fprintf(stderr, "I2C read failed: %d\n", s);
+        gallo_free(gallo);
+        return 1;
+    }
+
+    printf("Read: 0x%02X 0x%02X\n", buf[0], buf[1]);
+
+    /* Clean up */
+    gallo_free(gallo);
+    return 0;
+}
+</code></pre>
+<p>Compile and run:</p>
+<pre><code class="language-sh">gcc -o i2c_demo i2c_demo.c -I./include -L./lib -lpico_de_gallo_ffi
+LD_LIBRARY_PATH=./lib ./i2c_demo
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="writing-a-device-driver"><a class="header" href="#writing-a-device-driver">Writing A Device Driver</a></h1>
 <p>For this short introduction to writing devices drivers in Rust and
@@ -1030,7 +3095,7 @@ a lot of the work for us. Time to generate some code:</p>
 is that we will build a more ergonomic API on top of what
 <code>device-driver-cli</code> generates for us.</p>
 </blockquote>
-<pre><code class="language-console">$ device-driver-cli -m tm102.toml -d Inner -o src\inner.rs
+<pre><code class="language-console">$ device-driver-cli -m tmp102.toml -d Inner -o src\inner.rs
 </code></pre>
 <p>If everything ran without any errors, we should have a fairly
 extensive <code>inner.rs</code> which needs only some minor work to get it

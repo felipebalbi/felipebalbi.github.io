@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Introduction - Pico de Gallo</title>
+        <title>ADC - Pico de Gallo</title>
 
 
         <!-- Custom HTML head -->
@@ -176,55 +176,203 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
-<p><em>Pico de Gallo</em> is an open hardware design built around the <a href="https://www.raspberrypi.com/products/raspberry-pi-pico-2/">Raspberry
-Pi Pico2</a>
-board that turns a Pico 2 into a versatile USB bridge for embedded
-development. It exposes the following interfaces to a host PC:</p>
+                        <h1 id="adc-analog-to-digital-converter"><a class="header" href="#adc-analog-to-digital-converter">ADC (Analog-to-Digital Converter)</a></h1>
+<p>Pico de Gallo exposes the RP2350’s ADC peripheral for single-shot analog
+reads. Four GPIO-based channels are available, each providing 12-bit
+resolution over a 0–3.3 V nominal input range.</p>
+<h2 id="channel-mapping"><a class="header" href="#channel-mapping">Channel Mapping</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Channel</th><th>GPIO</th><th>Enum Variant</th></tr>
+</thead>
+<tbody>
+<tr><td>0</td><td>26</td><td><code>Adc0</code></td></tr>
+<tr><td>1</td><td>27</td><td><code>Adc1</code></td></tr>
+<tr><td>2</td><td>28</td><td><code>Adc2</code></td></tr>
+<tr><td>3</td><td>29</td><td><code>Adc3</code></td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="constants"><a class="header" href="#constants">Constants</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Constant</th><th>Value</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>NUM_ADC_GPIO_CHANNELS</code></td><td>4</td><td>Number of GPIO-based ADC channels</td></tr>
+<tr><td><code>ADC_RESOLUTION_BITS</code></td><td>12</td><td>Bits of resolution per sample</td></tr>
+<tr><td><code>ADC_NOMINAL_REFERENCE_MV</code></td><td>3300</td><td>Nominal reference voltage in millivolts</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="operations"><a class="header" href="#operations">Operations</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operation</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Read</strong></td><td>Reads a single 12-bit sample from the specified channel</td></tr>
+<tr><td><strong>Info</strong></td><td>Returns ADC configuration (resolution, reference voltage, channel count)</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="voltage-conversion"><a class="header" href="#voltage-conversion">Voltage Conversion</a></h2>
+<p>The ADC returns a raw 12-bit unsigned value (0–4095). Convert to
+millivolts with:</p>
+<pre><code>voltage_mv = (raw * 3300) / 4095
+</code></pre>
+<p>For example, a raw reading of <code>2048</code> corresponds to approximately
+<strong>1649 mV</strong>.</p>
+<h2 id="types"><a class="header" href="#types">Types</a></h2>
+<h3 id="adcchannel"><a class="header" href="#adcchannel">AdcChannel</a></h3>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>enum AdcChannel {
+    Adc0,
+    Adc1,
+    Adc2,
+    Adc3,
+}
+<span class="boring">}</span></code></pre>
+<h3 id="adcconfigurationinfo"><a class="header" href="#adcconfigurationinfo">AdcConfigurationInfo</a></h3>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>struct AdcConfigurationInfo {
+    resolution_bits: u8,
+    nominal_reference_mv: u16,
+    num_gpio_channels: u8,
+}
+<span class="boring">}</span></code></pre>
+<h3 id="adcerror"><a class="header" href="#adcerror">AdcError</a></h3>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>enum AdcError {
+    ConversionFailed,
+    Other,
+}
+<span class="boring">}</span></code></pre>
+<h2 id="cli"><a class="header" href="#cli">CLI</a></h2>
+<pre><code class="language-bash"># Read a single sample from channel 0
+gallo adc read --channel 0
+
+# Read from channel 2
+gallo adc read --channel 2
+
+# Show ADC configuration
+gallo adc info
+</code></pre>
+<p>Example output for <code>gallo adc read --channel 0</code>:</p>
+<pre><code>ADC channel 0: raw 2048 (≈ 1649 mV)
+</code></pre>
+<p>Example output for <code>gallo adc info</code>:</p>
+<pre><code>ADC Configuration:
+  Resolution:       12 bits
+  Reference:        3300 mV
+  GPIO channels:    4
+</code></pre>
+<h2 id="rust-library"><a class="header" href="#rust-library">Rust Library</a></h2>
+<p>All library methods are async. <code>PicoDeGallo::new()</code> is <strong>not</strong> async.</p>
+<pre class="playground"><code class="language-rust no_run">use pico_de_gallo_lib::{PicoDeGallo, AdcChannel};
+
+fn main() {
+    let gallo = PicoDeGallo::new().unwrap();
+
+    smol::block_on(async {
+        // Read a single sample from channel 0
+        let raw = gallo.adc_read(AdcChannel::Adc0).await.unwrap();
+        let voltage_mv = (raw as u32 * 3300) / 4095;
+        println!("ADC0: raw {raw}, ~{voltage_mv} mV");
+
+        // Query ADC configuration
+        let config = gallo.adc_get_config().await.unwrap();
+        println!(
+            "Resolution: {} bits, Reference: {} mV, Channels: {}",
+            config.resolution_bits,
+            config.nominal_reference_mv,
+            config.num_gpio_channels,
+        );
+    });
+}</code></pre>
+<h3 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h3>
+<p><code>adc_read</code> returns <code>Result&lt;u16, PicoDeGalloError&lt;AdcError&gt;&gt;</code>. The
+<code>AdcError</code> variants are:</p>
 <ul>
-<li><strong>I²C</strong> — read, write, write-read, bus scan, runtime frequency
-configuration, transaction batching</li>
-<li><strong>SPI</strong> — read, write, transfer, flush, runtime mode/frequency
-configuration, transaction batching</li>
-<li><strong>UART</strong> — read, write, flush, runtime baud/config changes</li>
-<li><strong>GPIO</strong> — get, put, direction control, edge/level event subscription</li>
-<li><strong>PWM</strong> — duty cycle control, enable/disable, frequency/config changes</li>
-<li><strong>ADC</strong> — single-shot analog reads on 4 GPIO-based channels (12-bit)</li>
-<li><strong>1-Wire</strong> — bus reset, read, write, ROM search (PIO hardware)
-The <code>pico-de-gallo-hal</code> crate implements standard
-<a href="https://docs.rs/embedded-hal">embedded-hal</a> and
-<a href="https://docs.rs/embedded-hal-async">embedded-hal-async</a> traits, so
-existing device drivers work out of the box — no code changes needed.</li>
+<li><strong><code>ConversionFailed</code></strong> — the ADC hardware reported a conversion error.</li>
+<li><strong><code>Other</code></strong> — an unspecified ADC error.</li>
 </ul>
-<p>A companion <strong>CLI application</strong> (<code>gallo</code>) provides interactive access to
-every interface.</p>
-<p>In the following chapters we will look at the <em>Pico de Gallo</em> ecosystem
-in detail: hardware assembly, the crate architecture, each supported
-interface, writing device drivers, and the FFI/C bindings.</p>
-<h2 id="the-hardware"><a class="header" href="#the-hardware">The Hardware</a></h2>
-<p>At its most basic, <em>Pico de Gallo</em> is merely a landing board
-containing Pico 2 castelated pads where a Pico 2 can be soldered
-directly. This means that anything <em>Pico de Gallo</em> can do, can also be
-achieved without <em>Pico de Gallo</em>’s landing board; however, the landing
-board is a lot easier to work with, especially when it comes to
-tracking which pins the Firmware expects you to use.</p>
-<p>The assembled landing board also contains headers which allows for
-connecting peripherals using DuPont wires.</p>
-<p>You can get a feeling for how the board looks from the rendering
-below:</p>
-<p><img src="pico-de-gallo.png" title="Pico de Gallo" alt="Pico de Gallo"></p>
-<h2 id="the-case"><a class="header" href="#the-case">The Case</a></h2>
-<p>We also provide a 3D-printable (see below), snap-fit case where you
-can house your <em>Pico de Gallo</em> if you so desire. It’s entirely
-optional.</p>
-<p><img src="case.png" title="Pico de Gallo Case" alt="3D printable case"></p>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use pico_de_gallo_lib::{PicoDeGallo, AdcChannel, AdcError, PicoDeGalloError};
+
+async fn read_adc(gallo: &amp;PicoDeGallo) {
+    match gallo.adc_read(AdcChannel::Adc1).await {
+        Ok(raw) =&gt; println!("ADC1: {raw}"),
+        Err(PicoDeGalloError::Endpoint(AdcError::ConversionFailed)) =&gt; {
+            eprintln!("ADC conversion failed");
+        }
+        Err(e) =&gt; eprintln!("Unexpected error: {e:?}"),
+    }
+}
+<span class="boring">}</span></code></pre>
+<h2 id="c-ffi"><a class="header" href="#c-ffi">C (FFI)</a></h2>
+<pre><code class="language-c">#include "pico_de_gallo.h"
+#include &lt;stdio.h&gt;
+
+void read_adc(PicoDeGallo *gallo) {
+    uint16_t raw;
+    GalloStatus rc = gallo_adc_read(gallo, ADC_CHANNEL_0, &amp;raw);
+    if (rc != GALLO_STATUS_OK) {
+        fprintf(stderr, "ADC read failed: %d\n", rc);
+        return;
+    }
+
+    uint32_t voltage_mv = ((uint32_t)raw * 3300) / 4095;
+    printf("ADC0: raw %u, ~%u mV\n", raw, voltage_mv);
+}
+
+void adc_info(PicoDeGallo *gallo) {
+    GalloAdcConfigurationInfo info;
+    GalloStatus rc = gallo_adc_get_config(gallo, &amp;info);
+    if (rc != GALLO_STATUS_OK) {
+        fprintf(stderr, "ADC config failed: %d\n", rc);
+        return;
+    }
+
+    printf("Resolution: %u bits\n", info.resolution_bits);
+    printf("Reference:  %u mV\n", info.nominal_reference_mv);
+    printf("Channels:   %u\n", info.num_gpio_channels);
+}
+</code></pre>
+<h2 id="hal"><a class="header" href="#hal">HAL</a></h2>
+<p>At the HAL layer the ADC is accessed directly on the <code>Hal</code> struct
+(no sub-object needed):</p>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use pico_de_gallo_hal::Hal;
+use pico_de_gallo_internal::AdcChannel;
+
+fn read_adc(hal: &amp;Hal) {
+    let raw = hal.adc_read(AdcChannel::Adc0).unwrap();
+    let voltage_mv = (raw as u32 * 3300) / 4095;
+    println!("ADC0: raw {raw}, ~{voltage_mv} mV");
+
+    let config = hal.adc_get_config().unwrap();
+    println!("Resolution: {} bits", config.resolution_bits);
+}
+<span class="boring">}</span></code></pre>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="pwm.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
 
-                            <a rel="next prefetch" href="getting-started.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="transaction-batching.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -234,8 +382,11 @@ optional.</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="pwm.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
 
-                    <a rel="next prefetch" href="getting-started.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="transaction-batching.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
