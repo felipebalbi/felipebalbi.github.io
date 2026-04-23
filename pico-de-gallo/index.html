@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-046f44fb.js";
+            window.path_to_searchindex_js = "searchindex-f5b27c43.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-ce601ddd.js"></script>
@@ -203,13 +203,18 @@ in detail: hardware assembly, the crate architecture, each supported
 interface, writing device drivers, and the FFI/C bindings.</p>
 <h2 id="the-hardware"><a class="header" href="#the-hardware">The Hardware</a></h2>
 <p>At its most basic, <em>Pico de Gallo</em> is merely a landing board
-containing Pico 2 castelated pads where a Pico 2 can be soldered
+containing Pico 2 castellated pads where a Pico 2 can be soldered
 directly. This means that anything <em>Pico de Gallo</em> can do, can also be
 achieved without <em>Pico de Gallo</em>’s landing board; however, the landing
 board is a lot easier to work with, especially when it comes to
 tracking which pins the Firmware expects you to use.</p>
-<p>The assembled landing board also contains headers which allows for
-connecting peripherals using DuPont wires.</p>
+<p>The original <strong>v1.0</strong> board uses seven individual pin headers for I²C,
+SPI, GPIO, and power. The newer <strong>v1.1</strong> board consolidates everything
+into a single keyed 2×12 shrouded header that routes all 20 firmware
+signals — including UART, ADC, and 1-Wire — with on-board I²C pull-ups
+and ADC input protection. See the
+<a href="getting-started.html#hardware-revisions">Getting Started</a> chapter for
+the full pinout and revision comparison.</p>
 <p>You can get a feeling for how the board looks from the rendering
 below:</p>
 <p><img src="pico-de-gallo.png" title="Pico de Gallo" alt="Pico de Gallo"></p>

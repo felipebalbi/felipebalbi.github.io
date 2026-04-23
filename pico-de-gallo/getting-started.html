@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-046f44fb.js";
+            window.path_to_searchindex_js = "searchindex-f5b27c43.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-ce601ddd.js"></script>
@@ -344,17 +344,82 @@ shows the hardware revision and its supported capabilities.</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Revision</th><th>Feature Flag</th><th>Capabilities</th></tr>
+<tr><th>Revision</th><th>Feature Flag</th><th>Connector</th><th>Capabilities</th></tr>
 </thead>
 <tbody>
-<tr><td><strong>v1</strong> (current)</td><td><code>hw-rev1</code> (default)</td><td>I2C, SPI, GPIO, PWM</td></tr>
-<tr><td><strong>v2</strong> (future)</td><td><code>hw-rev2</code></td><td>I2C, SPI, UART, GPIO, PWM, ADC, 1-Wire</td></tr>
+<tr><td><strong>v1.0</strong></td><td><code>hw-rev1</code> (default)</td><td>7 separate pin headers</td><td>I2C, SPI, GPIO, PWM</td></tr>
+<tr><td><strong>v1.1</strong></td><td><code>hw-rev2</code></td><td>Single 2×12 shrouded header</td><td>I2C, SPI, UART, GPIO, PWM, ADC, 1-Wire</td></tr>
+<tr><td><strong>v2</strong> (future)</td><td><code>hw-rev2</code></td><td>Single 2×12 shrouded header + level translators</td><td>I2C, SPI, UART, GPIO, PWM, ADC, 1-Wire</td></tr>
 </tbody>
 </table>
 </div>
-<p>The v1 landing board does not route UART (GPIO 0–1), ADC (GPIO 26–29),
-or 1-Wire (GPIO 16) pins. Calling an unsupported endpoint on v1
-firmware returns an <code>Unsupported</code> error.</p>
+<blockquote>
+<p><strong>v1.0 — Best Effort</strong></p>
+<p>The v1.0 board only routes 13 of 20 firmware signals. UART (GPIO 0–1),
+SPI CS (GPIO 5), 1-Wire (GPIO 16), and ADC (GPIO 26–28) are <strong>not
+connected</strong> to any header. Calling an unsupported endpoint on v1
+firmware returns an <code>Unsupported</code> error. If you need the full
+peripheral set, upgrade to v1.1 or later.</p>
+</blockquote>
+<p>The v1.1 board replaces the seven individual connectors with a single
+keyed 2×12 (0.1″ pitch) shrouded header and routes all 20 firmware
+signals. It uses the <code>hw-rev2</code> firmware and reports all seven
+capabilities. On-board passives include I²C pull-ups (4.7 kΩ), ADC
+series resistors (100 Ω), and a 100 nF decoupling capacitor.</p>
+<h3 id="v11-connector-pinout"><a class="header" href="#v11-connector-pinout">V1.1 Connector Pinout</a></h3>
+<p>Viewed from above with the USB connector facing up, pin 1 is at the
+top-right of the header. The shroud key notch faces right. Even pins
+(bottom row) are on the left, odd pins (top row) are on the right:</p>
+<pre><code> Pin 2  GND          ┃ VREF (+3V3) Pin 1
+ Pin 4  I2C_SCL      ┃ I2C_SDA     Pin 3
+ Pin 6  SPI_MOSI     ┃ SPI_MISO    Pin 5
+ Pin 8  SPI_CS       ┃ SPI_SCK     Pin 7
+ Pin 10 UART_RX      ┃ UART_TX     Pin 9
+ Pin 12 GPIO1        ┃ GPIO0       Pin 11
+ Pin 14 GPIO3        ┃ GPIO2       Pin 13
+ Pin 16 PWM1         ┃ PWM0        Pin 15
+ Pin 18 PWM3         ┃ PWM2        Pin 17
+ Pin 20 ADC0         ┃ ONEWIRE     Pin 19
+ Pin 22 ADC2         ┃ ADC1        Pin 21
+ Pin 24 GND          ┃ +3V3        Pin 23
+</code></pre>
+<p><strong>Pin 1 (VREF)</strong> is hardwired to 3.3 V on v1.1. On the future v2
+board it becomes a variable-voltage rail (1.8 V / 3.3 V / 5 V).
+Adapter boards (“toppings”) that plug into this header will see 3.3 V
+on v1.1.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Header Pin</th><th>Net</th><th>RP2350 GPIO</th><th>Direction</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td>1</td><td>VREF</td><td>—</td><td>Power out</td><td>3.3 V (hardwired)</td></tr>
+<tr><td>2</td><td>GND</td><td>—</td><td>Power</td><td>Ground</td></tr>
+<tr><td>3</td><td>SDA</td><td>GPIO 2</td><td>Bidir</td><td>I²C1 SDA, 4.7 kΩ pull-up</td></tr>
+<tr><td>4</td><td>SCL</td><td>GPIO 3</td><td>Bidir</td><td>I²C1 SCL, 4.7 kΩ pull-up</td></tr>
+<tr><td>5</td><td>SPI_MISO</td><td>GPIO 4</td><td>Input</td><td>SPI0 RX</td></tr>
+<tr><td>6</td><td>SPI_MOSI</td><td>GPIO 7</td><td>Output</td><td>SPI0 TX</td></tr>
+<tr><td>7</td><td>SPI_SCK</td><td>GPIO 6</td><td>Output</td><td>SPI0 SCK</td></tr>
+<tr><td>8</td><td>SPI_CS</td><td>GPIO 5</td><td>Output</td><td>SPI0 CSn</td></tr>
+<tr><td>9</td><td>UART_TX</td><td>GPIO 0</td><td>Output</td><td>UART0 TX</td></tr>
+<tr><td>10</td><td>UART_RX</td><td>GPIO 1</td><td>Input</td><td>UART0 RX</td></tr>
+<tr><td>11</td><td>GPIO0</td><td>GPIO 8</td><td>Bidir</td><td>User GPIO 0</td></tr>
+<tr><td>12</td><td>GPIO1</td><td>GPIO 9</td><td>Bidir</td><td>User GPIO 1</td></tr>
+<tr><td>13</td><td>GPIO2</td><td>GPIO 10</td><td>Bidir</td><td>User GPIO 2</td></tr>
+<tr><td>14</td><td>GPIO3</td><td>GPIO 11</td><td>Bidir</td><td>User GPIO 3</td></tr>
+<tr><td>15</td><td>PWM0</td><td>GPIO 12</td><td>Output</td><td>PWM slice 6A</td></tr>
+<tr><td>16</td><td>PWM1</td><td>GPIO 13</td><td>Output</td><td>PWM slice 6B</td></tr>
+<tr><td>17</td><td>PWM2</td><td>GPIO 14</td><td>Output</td><td>PWM slice 7A</td></tr>
+<tr><td>18</td><td>PWM3</td><td>GPIO 15</td><td>Output</td><td>PWM slice 7B</td></tr>
+<tr><td>19</td><td>ONEWIRE</td><td>GPIO 16</td><td>Bidir</td><td>PIO0/SM0, open-drain</td></tr>
+<tr><td>20</td><td>ADC0</td><td>GPIO 26</td><td>Input</td><td>Via 100 Ω series resistor</td></tr>
+<tr><td>21</td><td>ADC1</td><td>GPIO 27</td><td>Input</td><td>Via 100 Ω series resistor</td></tr>
+<tr><td>22</td><td>ADC2</td><td>GPIO 28</td><td>Input</td><td>Via 100 Ω series resistor</td></tr>
+<tr><td>23</td><td>+3V3</td><td>—</td><td>Power out</td><td>Direct 3.3 V</td></tr>
+<tr><td>24</td><td>GND</td><td>—</td><td>Power</td><td>Ground</td></tr>
+</tbody>
+</table>
+</div>
 <h2 id="pin-map"><a class="header" href="#pin-map">Pin Map</a></h2>
 <p>The table below shows every function exposed by the firmware and the
 RP2350 GPIO it maps to. This is the authoritative pin assignment —
@@ -365,11 +430,12 @@ refer to this when wiring peripherals.</p>
 <tr><th>Function</th><th>GPIO</th><th>HW Rev</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td>UART TX</td><td>GPIO 0</td><td>v2</td><td>Buffered, interrupt-driven</td></tr>
-<tr><td>UART RX</td><td>GPIO 1</td><td>v2</td><td></td></tr>
+<tr><td>UART TX</td><td>GPIO 0</td><td>v1.1+</td><td>Buffered, interrupt-driven</td></tr>
+<tr><td>UART RX</td><td>GPIO 1</td><td>v1.1+</td><td></td></tr>
 <tr><td>I²C SDA</td><td>GPIO 2</td><td>v1+</td><td>7-bit addressing, async DMA</td></tr>
 <tr><td>I²C SCL</td><td>GPIO 3</td><td>v1+</td><td></td></tr>
 <tr><td>SPI RX (MISO)</td><td>GPIO 4</td><td>v1+</td><td>DMA-backed full-duplex</td></tr>
+<tr><td>SPI CS</td><td>GPIO 5</td><td>v1.1+</td><td>Active-low chip select</td></tr>
 <tr><td>SPI SCK</td><td>GPIO 6</td><td>v1+</td><td></td></tr>
 <tr><td>SPI TX (MOSI)</td><td>GPIO 7</td><td>v1+</td><td></td></tr>
 <tr><td>GPIO 0</td><td>GPIO 8</td><td>v1+</td><td>Input/output/edge events</td></tr>
@@ -380,11 +446,10 @@ refer to this when wiring peripherals.</p>
 <tr><td>PWM 1</td><td>GPIO 13</td><td>v1+</td><td>Slice 6 channel B</td></tr>
 <tr><td>PWM 2</td><td>GPIO 14</td><td>v1+</td><td>Slice 7 channel A</td></tr>
 <tr><td>PWM 3</td><td>GPIO 15</td><td>v1+</td><td>Slice 7 channel B</td></tr>
-<tr><td>1-Wire</td><td>GPIO 16</td><td>v2</td><td>PIO0/SM0, open-drain</td></tr>
-<tr><td>ADC 0</td><td>GPIO 26</td><td>v2</td><td>12-bit, 0–3.3 V nominal</td></tr>
-<tr><td>ADC 1</td><td>GPIO 27</td><td>v2</td><td>12-bit</td></tr>
-<tr><td>ADC 2</td><td>GPIO 28</td><td>v2</td><td>12-bit</td></tr>
-<tr><td>ADC 3</td><td>GPIO 29</td><td>v2</td><td>12-bit</td></tr>
+<tr><td>1-Wire</td><td>GPIO 16</td><td>v1.1+</td><td>PIO0/SM0, open-drain</td></tr>
+<tr><td>ADC 0</td><td>GPIO 26</td><td>v1.1+</td><td>12-bit, 0–3.3 V nominal</td></tr>
+<tr><td>ADC 1</td><td>GPIO 27</td><td>v1.1+</td><td>12-bit</td></tr>
+<tr><td>ADC 2</td><td>GPIO 28</td><td>v1.1+</td><td>12-bit</td></tr>
 </tbody>
 </table>
 </div>
