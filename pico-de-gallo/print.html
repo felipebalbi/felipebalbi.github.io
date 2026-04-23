@@ -38,7 +38,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-67e7fb50.js";
+            window.path_to_searchindex_js = "searchindex-046f44fb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-ce601ddd.js"></script>
@@ -374,10 +374,31 @@ and <code>Aarch64</code> for macOS.</p>
 <p>Once you have the correct binary, run the <code>version</code> command:</p>
 <pre><code class="language-console">$ gallo version
 Pico de Gallo FW v0.8.0
+Schema v0.4.0
+HW revision 1
+Capabilities: I2C ✓ | SPI ✓ | UART ✗ | GPIO ✓ | PWM ✓ | ADC ✗ | 1-Wire ✗
 </code></pre>
 <p>Success 🎉. With this completed we can get familiarized with the other
 parts of the <em>Pico de Gallo</em> ecosystem and write a driver for the
 <code>tmp102</code> temperature sensor.</p>
+<h2 id="hardware-revisions"><a class="header" href="#hardware-revisions">Hardware Revisions</a></h2>
+<p>The firmware is compiled with a hardware revision feature flag that
+controls which peripherals are available. The <code>gallo version</code> output
+shows the hardware revision and its supported capabilities.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Revision</th><th>Feature Flag</th><th>Capabilities</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>v1</strong> (current)</td><td><code>hw-rev1</code> (default)</td><td>I2C, SPI, GPIO, PWM</td></tr>
+<tr><td><strong>v2</strong> (future)</td><td><code>hw-rev2</code></td><td>I2C, SPI, UART, GPIO, PWM, ADC, 1-Wire</td></tr>
+</tbody>
+</table>
+</div>
+<p>The v1 landing board does not route UART (GPIO 0–1), ADC (GPIO 26–29),
+or 1-Wire (GPIO 16) pins. Calling an unsupported endpoint on v1
+firmware returns an <code>Unsupported</code> error.</p>
 <h2 id="pin-map"><a class="header" href="#pin-map">Pin Map</a></h2>
 <p>The table below shows every function exposed by the firmware and the
 RP2350 GPIO it maps to. This is the authoritative pin assignment —
@@ -385,29 +406,29 @@ refer to this when wiring peripherals.</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Function</th><th>GPIO</th><th>Notes</th></tr>
+<tr><th>Function</th><th>GPIO</th><th>HW Rev</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td>UART TX</td><td>GPIO 0</td><td>Buffered, interrupt-driven</td></tr>
-<tr><td>UART RX</td><td>GPIO 1</td><td></td></tr>
-<tr><td>I²C SDA</td><td>GPIO 2</td><td>7-bit addressing, async DMA</td></tr>
-<tr><td>I²C SCL</td><td>GPIO 3</td><td></td></tr>
-<tr><td>SPI RX (MISO)</td><td>GPIO 4</td><td>DMA-backed full-duplex</td></tr>
-<tr><td>SPI SCK</td><td>GPIO 6</td><td></td></tr>
-<tr><td>SPI TX (MOSI)</td><td>GPIO 7</td><td></td></tr>
-<tr><td>GPIO 0</td><td>GPIO 8</td><td>Input/output/edge events</td></tr>
-<tr><td>GPIO 1</td><td>GPIO 9</td><td>Input/output/edge events</td></tr>
-<tr><td>GPIO 2</td><td>GPIO 10</td><td>Input/output/edge events</td></tr>
-<tr><td>GPIO 3</td><td>GPIO 11</td><td>Input/output/edge events</td></tr>
-<tr><td>PWM 0</td><td>GPIO 12</td><td>Slice 6 channel A</td></tr>
-<tr><td>PWM 1</td><td>GPIO 13</td><td>Slice 6 channel B</td></tr>
-<tr><td>PWM 2</td><td>GPIO 14</td><td>Slice 7 channel A</td></tr>
-<tr><td>PWM 3</td><td>GPIO 15</td><td>Slice 7 channel B</td></tr>
-<tr><td>1-Wire</td><td>GPIO 16</td><td>PIO0/SM0, open-drain</td></tr>
-<tr><td>ADC 0</td><td>GPIO 26</td><td>12-bit, 0–3.3 V nominal</td></tr>
-<tr><td>ADC 1</td><td>GPIO 27</td><td>12-bit</td></tr>
-<tr><td>ADC 2</td><td>GPIO 28</td><td>12-bit</td></tr>
-<tr><td>ADC 3</td><td>GPIO 29</td><td>12-bit</td></tr>
+<tr><td>UART TX</td><td>GPIO 0</td><td>v2</td><td>Buffered, interrupt-driven</td></tr>
+<tr><td>UART RX</td><td>GPIO 1</td><td>v2</td><td></td></tr>
+<tr><td>I²C SDA</td><td>GPIO 2</td><td>v1+</td><td>7-bit addressing, async DMA</td></tr>
+<tr><td>I²C SCL</td><td>GPIO 3</td><td>v1+</td><td></td></tr>
+<tr><td>SPI RX (MISO)</td><td>GPIO 4</td><td>v1+</td><td>DMA-backed full-duplex</td></tr>
+<tr><td>SPI SCK</td><td>GPIO 6</td><td>v1+</td><td></td></tr>
+<tr><td>SPI TX (MOSI)</td><td>GPIO 7</td><td>v1+</td><td></td></tr>
+<tr><td>GPIO 0</td><td>GPIO 8</td><td>v1+</td><td>Input/output/edge events</td></tr>
+<tr><td>GPIO 1</td><td>GPIO 9</td><td>v1+</td><td>Input/output/edge events</td></tr>
+<tr><td>GPIO 2</td><td>GPIO 10</td><td>v1+</td><td>Input/output/edge events</td></tr>
+<tr><td>GPIO 3</td><td>GPIO 11</td><td>v1+</td><td>Input/output/edge events</td></tr>
+<tr><td>PWM 0</td><td>GPIO 12</td><td>v1+</td><td>Slice 6 channel A</td></tr>
+<tr><td>PWM 1</td><td>GPIO 13</td><td>v1+</td><td>Slice 6 channel B</td></tr>
+<tr><td>PWM 2</td><td>GPIO 14</td><td>v1+</td><td>Slice 7 channel A</td></tr>
+<tr><td>PWM 3</td><td>GPIO 15</td><td>v1+</td><td>Slice 7 channel B</td></tr>
+<tr><td>1-Wire</td><td>GPIO 16</td><td>v2</td><td>PIO0/SM0, open-drain</td></tr>
+<tr><td>ADC 0</td><td>GPIO 26</td><td>v2</td><td>12-bit, 0–3.3 V nominal</td></tr>
+<tr><td>ADC 1</td><td>GPIO 27</td><td>v2</td><td>12-bit</td></tr>
+<tr><td>ADC 2</td><td>GPIO 28</td><td>v2</td><td>12-bit</td></tr>
+<tr><td>ADC 3</td><td>GPIO 29</td><td>v2</td><td>12-bit</td></tr>
 </tbody>
 </table>
 </div>
@@ -659,6 +680,8 @@ endpoints exposed by the firmware. The table below provides a summary.</p>
 <tr><td><code>i2c_get_config</code></td><td></td><td>Returns the active I<sup>2</sup>C bus configuration (frequency)</td></tr>
 <tr><td><code>spi_get_config</code></td><td></td><td>Returns the active SPI bus configuration (frequency, phase, polarity)</td></tr>
 <tr><td><code>version</code></td><td></td><td>Reads the current Firmware version from <em>Pico de Gallo</em></td></tr>
+<tr><td><code>device_info</code></td><td></td><td>Reads firmware version, schema version, HW revision, and capabilities</td></tr>
+<tr><td><code>validate</code></td><td></td><td>Queries device info and checks schema version compatibility</td></tr>
 <tr><td><code>uart_read</code></td><td><code>count</code>, <code>timeout_ms</code></td><td>Reads up to <code>count</code> bytes from UART with timeout (0 = non-blocking)</td></tr>
 <tr><td><code>uart_write</code></td><td><code>contents</code></td><td>Writes <code>contents</code> to the UART transmit buffer</td></tr>
 <tr><td><code>uart_flush</code></td><td></td><td>Flushes the UART transmit buffer</td></tr>
@@ -1219,6 +1242,10 @@ on the RP2350.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="uart"><a class="header" href="#uart">UART</a></h1>
+<blockquote>
+<p><strong>Hardware revision note:</strong> UART requires <strong>hw-rev2</strong> firmware. On v1
+hardware, UART endpoints return <code>UartError::Unsupported</code>.</p>
+</blockquote>
 <p>Pico de Gallo provides UART support through the RP2350’s hardware <strong>UART0</strong>
 peripheral. The TX pin is on <strong>GPIO 0</strong> and RX is on <strong>GPIO 1</strong>. The UART
 is buffered and interrupt-driven, so reads and writes do not block the
@@ -1699,6 +1726,10 @@ configure for the servo’s expected frequency (typically 50 Hz). Adjust
 the duty cycle to control the servo position.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="adc-analog-to-digital-converter"><a class="header" href="#adc-analog-to-digital-converter">ADC (Analog-to-Digital Converter)</a></h1>
+<blockquote>
+<p><strong>Hardware revision note:</strong> ADC requires <strong>hw-rev2</strong> firmware. On v1
+hardware, ADC endpoints return <code>AdcError::Unsupported</code>.</p>
+</blockquote>
 <p>Pico de Gallo exposes the RP2350’s ADC peripheral for single-shot analog
 reads. Four GPIO-based channels are available, each providing 12-bit
 resolution over a 0–3.3 V nominal input range.</p>
@@ -2134,6 +2165,10 @@ indicating which limit was violated and, for operation-level failures,
 which operation failed (zero-indexed).</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="1-wire-bus"><a class="header" href="#1-wire-bus">1-Wire Bus</a></h1>
+<blockquote>
+<p><strong>Hardware revision note:</strong> 1-Wire requires <strong>hw-rev2</strong> firmware. On v1
+hardware, 1-Wire endpoints return <code>OneWireError::Unsupported</code>.</p>
+</blockquote>
 <p>Pico de Gallo provides 1-Wire bus support through the RP2350’s PIO (Programmable
 I/O) state machine hardware. The 1-Wire data pin is on <strong>GPIO 16</strong>, configured
 in open-drain mode.</p>
@@ -2417,12 +2452,10 @@ gallo_free(gallo);
 <tr><td><code>OneWireReadFailed</code></td><td style="text-align: right">−59</td><td>1-Wire: read failed</td></tr>
 <tr><td><code>OneWireWriteFailed</code></td><td style="text-align: right">−60</td><td>1-Wire: write failed</td></tr>
 <tr><td><code>OneWireSearchFailed</code></td><td style="text-align: right">−61</td><td>1-Wire: ROM search failed</td></tr>
-<tr><td><code>CaptureInvalidPin</code></td><td style="text-align: right">−62</td><td>Capture: pin outside valid range</td></tr>
-<tr><td><code>CaptureInvalidRate</code></td><td style="text-align: right">−63</td><td>Capture: invalid sample rate</td></tr>
-<tr><td><code>CaptureTooManyChannels</code></td><td style="text-align: right">−64</td><td>Capture: too many channels</td></tr>
-<tr><td><code>CaptureAlreadyRunning</code></td><td style="text-align: right">−65</td><td>Capture: session already running</td></tr>
-<tr><td><code>CaptureNotRunning</code></td><td style="text-align: right">−66</td><td>Capture: no session running</td></tr>
-<tr><td><code>CaptureNoPins</code></td><td style="text-align: right">−67</td><td>Capture: no pins specified</td></tr>
+<tr><td><code>DeviceInfoFailed</code></td><td style="text-align: right">−62</td><td>Device info query failed</td></tr>
+<tr><td><code>SchemaMismatch</code></td><td style="text-align: right">−63</td><td>Schema version mismatch</td></tr>
+<tr><td><code>LegacyFirmware</code></td><td style="text-align: right">−64</td><td>Firmware too old for device info</td></tr>
+<tr><td><code>Unsupported</code></td><td style="text-align: right">−65</td><td>Peripheral not available on this hardware revision</td></tr>
 </tbody>
 </table>
 </div>
@@ -2441,6 +2474,36 @@ value. Useful for verifying connectivity.</p>
 </code></pre>
 <p>Queries the firmware version and writes the semver components to the output
 pointers.</p>
+<h3 id="device-info"><a class="header" href="#device-info">Device Info</a></h3>
+<pre><code class="language-c">typedef struct {
+    uint16_t fw_major;
+    uint16_t fw_minor;
+    uint32_t fw_patch;
+    uint16_t schema_major;
+    uint16_t schema_minor;
+    uint32_t schema_patch;
+    uint8_t  hw_version;
+    uint64_t capabilities;
+} GalloDeviceInfo;
+
+#define GALLO_CAP_I2C     ((uint64_t)1 &lt;&lt; 0)
+#define GALLO_CAP_SPI     ((uint64_t)1 &lt;&lt; 1)
+#define GALLO_CAP_UART    ((uint64_t)1 &lt;&lt; 2)
+#define GALLO_CAP_GPIO    ((uint64_t)1 &lt;&lt; 3)
+#define GALLO_CAP_PWM     ((uint64_t)1 &lt;&lt; 4)
+#define GALLO_CAP_ADC     ((uint64_t)1 &lt;&lt; 5)
+#define GALLO_CAP_ONEWIRE ((uint64_t)1 &lt;&lt; 6)
+
+Status gallo_get_device_info(PicoDeGallo *gallo, GalloDeviceInfo *info);
+</code></pre>
+<p>Queries the device for firmware version, schema version, hardware revision, and
+peripheral capabilities. The <code>capabilities</code> field is a bitfield — test individual
+peripherals with bitwise AND and the <code>GALLO_CAP_*</code> constants:</p>
+<pre><code class="language-c">if (info.capabilities &amp; GALLO_CAP_I2C) { /* I2C available */ }
+</code></pre>
+<p>Returns <code>SchemaMismatch</code> (−63) if the firmware’s schema
+version is incompatible with the library, or <code>LegacyFirmware</code> (−64) if the
+firmware does not support the <code>device/info</code> endpoint.</p>
 <h3 id="i2c"><a class="header" href="#i2c">I2C</a></h3>
 <pre><code class="language-c">Status gallo_i2c_read(PicoDeGallo *gallo,
                       uint8_t address, uint8_t *buf, size_t len);
@@ -2688,6 +2751,17 @@ int main(void) {
     s = gallo_version((PicoDeGallo *)gallo, &amp;major, &amp;minor, &amp;patch);
     if (s == Ok) {
         printf("Firmware v%u.%u.%u\n", major, minor, patch);
+    }
+
+    /* Query device info (schema version, HW revision, capabilities) */
+    GalloDeviceInfo info;
+    s = gallo_get_device_info((PicoDeGallo *)gallo, &amp;info);
+    if (s == Ok) {
+        printf("Schema v%u.%u.%u, HW rev %u\n",
+               info.schema_major, info.schema_minor,
+               info.schema_patch, info.hw_version);
+    } else if (s == SchemaMismatch) {
+        fprintf(stderr, "Schema version mismatch — update firmware or library\n");
     }
 
     /* Read 2 bytes from I2C address 0x50 */
