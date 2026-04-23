@@ -38,7 +38,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-04682e64.js";
+            window.path_to_searchindex_js = "searchindex-046f44fb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-ce601ddd.js"></script>
@@ -376,11 +376,29 @@ and <code>Aarch64</code> for macOS.</p>
 Pico de Gallo FW v0.8.0
 Schema v0.4.0
 HW revision 1
-Capabilities: I2C ✓ | SPI ✓ | UART ✓ | GPIO ✓ | PWM ✓ | ADC ✓ | 1-Wire ✓
+Capabilities: I2C ✓ | SPI ✓ | UART ✗ | GPIO ✓ | PWM ✓ | ADC ✗ | 1-Wire ✗
 </code></pre>
 <p>Success 🎉. With this completed we can get familiarized with the other
 parts of the <em>Pico de Gallo</em> ecosystem and write a driver for the
 <code>tmp102</code> temperature sensor.</p>
+<h2 id="hardware-revisions"><a class="header" href="#hardware-revisions">Hardware Revisions</a></h2>
+<p>The firmware is compiled with a hardware revision feature flag that
+controls which peripherals are available. The <code>gallo version</code> output
+shows the hardware revision and its supported capabilities.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Revision</th><th>Feature Flag</th><th>Capabilities</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>v1</strong> (current)</td><td><code>hw-rev1</code> (default)</td><td>I2C, SPI, GPIO, PWM</td></tr>
+<tr><td><strong>v2</strong> (future)</td><td><code>hw-rev2</code></td><td>I2C, SPI, UART, GPIO, PWM, ADC, 1-Wire</td></tr>
+</tbody>
+</table>
+</div>
+<p>The v1 landing board does not route UART (GPIO 0–1), ADC (GPIO 26–29),
+or 1-Wire (GPIO 16) pins. Calling an unsupported endpoint on v1
+firmware returns an <code>Unsupported</code> error.</p>
 <h2 id="pin-map"><a class="header" href="#pin-map">Pin Map</a></h2>
 <p>The table below shows every function exposed by the firmware and the
 RP2350 GPIO it maps to. This is the authoritative pin assignment —
@@ -388,29 +406,29 @@ refer to this when wiring peripherals.</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Function</th><th>GPIO</th><th>Notes</th></tr>
+<tr><th>Function</th><th>GPIO</th><th>HW Rev</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td>UART TX</td><td>GPIO 0</td><td>Buffered, interrupt-driven</td></tr>
-<tr><td>UART RX</td><td>GPIO 1</td><td></td></tr>
-<tr><td>I²C SDA</td><td>GPIO 2</td><td>7-bit addressing, async DMA</td></tr>
-<tr><td>I²C SCL</td><td>GPIO 3</td><td></td></tr>
-<tr><td>SPI RX (MISO)</td><td>GPIO 4</td><td>DMA-backed full-duplex</td></tr>
-<tr><td>SPI SCK</td><td>GPIO 6</td><td></td></tr>
-<tr><td>SPI TX (MOSI)</td><td>GPIO 7</td><td></td></tr>
-<tr><td>GPIO 0</td><td>GPIO 8</td><td>Input/output/edge events</td></tr>
-<tr><td>GPIO 1</td><td>GPIO 9</td><td>Input/output/edge events</td></tr>
-<tr><td>GPIO 2</td><td>GPIO 10</td><td>Input/output/edge events</td></tr>
-<tr><td>GPIO 3</td><td>GPIO 11</td><td>Input/output/edge events</td></tr>
-<tr><td>PWM 0</td><td>GPIO 12</td><td>Slice 6 channel A</td></tr>
-<tr><td>PWM 1</td><td>GPIO 13</td><td>Slice 6 channel B</td></tr>
-<tr><td>PWM 2</td><td>GPIO 14</td><td>Slice 7 channel A</td></tr>
-<tr><td>PWM 3</td><td>GPIO 15</td><td>Slice 7 channel B</td></tr>
-<tr><td>1-Wire</td><td>GPIO 16</td><td>PIO0/SM0, open-drain</td></tr>
-<tr><td>ADC 0</td><td>GPIO 26</td><td>12-bit, 0–3.3 V nominal</td></tr>
-<tr><td>ADC 1</td><td>GPIO 27</td><td>12-bit</td></tr>
-<tr><td>ADC 2</td><td>GPIO 28</td><td>12-bit</td></tr>
-<tr><td>ADC 3</td><td>GPIO 29</td><td>12-bit</td></tr>
+<tr><td>UART TX</td><td>GPIO 0</td><td>v2</td><td>Buffered, interrupt-driven</td></tr>
+<tr><td>UART RX</td><td>GPIO 1</td><td>v2</td><td></td></tr>
+<tr><td>I²C SDA</td><td>GPIO 2</td><td>v1+</td><td>7-bit addressing, async DMA</td></tr>
+<tr><td>I²C SCL</td><td>GPIO 3</td><td>v1+</td><td></td></tr>
+<tr><td>SPI RX (MISO)</td><td>GPIO 4</td><td>v1+</td><td>DMA-backed full-duplex</td></tr>
+<tr><td>SPI SCK</td><td>GPIO 6</td><td>v1+</td><td></td></tr>
+<tr><td>SPI TX (MOSI)</td><td>GPIO 7</td><td>v1+</td><td></td></tr>
+<tr><td>GPIO 0</td><td>GPIO 8</td><td>v1+</td><td>Input/output/edge events</td></tr>
+<tr><td>GPIO 1</td><td>GPIO 9</td><td>v1+</td><td>Input/output/edge events</td></tr>
+<tr><td>GPIO 2</td><td>GPIO 10</td><td>v1+</td><td>Input/output/edge events</td></tr>
+<tr><td>GPIO 3</td><td>GPIO 11</td><td>v1+</td><td>Input/output/edge events</td></tr>
+<tr><td>PWM 0</td><td>GPIO 12</td><td>v1+</td><td>Slice 6 channel A</td></tr>
+<tr><td>PWM 1</td><td>GPIO 13</td><td>v1+</td><td>Slice 6 channel B</td></tr>
+<tr><td>PWM 2</td><td>GPIO 14</td><td>v1+</td><td>Slice 7 channel A</td></tr>
+<tr><td>PWM 3</td><td>GPIO 15</td><td>v1+</td><td>Slice 7 channel B</td></tr>
+<tr><td>1-Wire</td><td>GPIO 16</td><td>v2</td><td>PIO0/SM0, open-drain</td></tr>
+<tr><td>ADC 0</td><td>GPIO 26</td><td>v2</td><td>12-bit, 0–3.3 V nominal</td></tr>
+<tr><td>ADC 1</td><td>GPIO 27</td><td>v2</td><td>12-bit</td></tr>
+<tr><td>ADC 2</td><td>GPIO 28</td><td>v2</td><td>12-bit</td></tr>
+<tr><td>ADC 3</td><td>GPIO 29</td><td>v2</td><td>12-bit</td></tr>
 </tbody>
 </table>
 </div>
@@ -1224,6 +1242,10 @@ on the RP2350.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="uart"><a class="header" href="#uart">UART</a></h1>
+<blockquote>
+<p><strong>Hardware revision note:</strong> UART requires <strong>hw-rev2</strong> firmware. On v1
+hardware, UART endpoints return <code>UartError::Unsupported</code>.</p>
+</blockquote>
 <p>Pico de Gallo provides UART support through the RP2350’s hardware <strong>UART0</strong>
 peripheral. The TX pin is on <strong>GPIO 0</strong> and RX is on <strong>GPIO 1</strong>. The UART
 is buffered and interrupt-driven, so reads and writes do not block the
@@ -1704,6 +1726,10 @@ configure for the servo’s expected frequency (typically 50 Hz). Adjust
 the duty cycle to control the servo position.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="adc-analog-to-digital-converter"><a class="header" href="#adc-analog-to-digital-converter">ADC (Analog-to-Digital Converter)</a></h1>
+<blockquote>
+<p><strong>Hardware revision note:</strong> ADC requires <strong>hw-rev2</strong> firmware. On v1
+hardware, ADC endpoints return <code>AdcError::Unsupported</code>.</p>
+</blockquote>
 <p>Pico de Gallo exposes the RP2350’s ADC peripheral for single-shot analog
 reads. Four GPIO-based channels are available, each providing 12-bit
 resolution over a 0–3.3 V nominal input range.</p>
@@ -2139,6 +2165,10 @@ indicating which limit was violated and, for operation-level failures,
 which operation failed (zero-indexed).</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="1-wire-bus"><a class="header" href="#1-wire-bus">1-Wire Bus</a></h1>
+<blockquote>
+<p><strong>Hardware revision note:</strong> 1-Wire requires <strong>hw-rev2</strong> firmware. On v1
+hardware, 1-Wire endpoints return <code>OneWireError::Unsupported</code>.</p>
+</blockquote>
 <p>Pico de Gallo provides 1-Wire bus support through the RP2350’s PIO (Programmable
 I/O) state machine hardware. The 1-Wire data pin is on <strong>GPIO 16</strong>, configured
 in open-drain mode.</p>
@@ -2425,6 +2455,7 @@ gallo_free(gallo);
 <tr><td><code>DeviceInfoFailed</code></td><td style="text-align: right">−62</td><td>Device info query failed</td></tr>
 <tr><td><code>SchemaMismatch</code></td><td style="text-align: right">−63</td><td>Schema version mismatch</td></tr>
 <tr><td><code>LegacyFirmware</code></td><td style="text-align: right">−64</td><td>Firmware too old for device info</td></tr>
+<tr><td><code>Unsupported</code></td><td style="text-align: right">−65</td><td>Peripheral not available on this hardware revision</td></tr>
 </tbody>
 </table>
 </div>
