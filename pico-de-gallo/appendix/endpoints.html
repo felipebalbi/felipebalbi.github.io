@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Introduction - Pico de Gallo</title>
+        <title>Endpoint Catalog - Pico de Gallo</title>
 
 
         <!-- Custom HTML head -->
@@ -12,20 +12,20 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
 
-        <link rel="icon" href="favicon-de23e50b.svg">
-        <link rel="shortcut icon" href="favicon-8114d1fc.png">
-        <link rel="stylesheet" href="css/variables-8adf115d.css">
-        <link rel="stylesheet" href="css/general-2459343d.css">
-        <link rel="stylesheet" href="css/chrome-ae938929.css">
-        <link rel="stylesheet" href="css/print-9e4910d8.css" media="print">
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
 
         <!-- Fonts -->
-        <link rel="stylesheet" href="fonts/fonts-9644e21d.css">
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" id="mdbook-highlight-css" href="highlight-493f70e1.css">
-        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="tomorrow-night-4c0ae647.css">
-        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="ayu-highlight-3fdfc3ac.css">
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
 
         <!-- Custom theme stylesheets -->
 
@@ -34,13 +34,13 @@
 
         <!-- Provide site root and default themes to javascript -->
         <script>
-            const path_to_root = "";
+            const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-7797e364.js";
+            window.path_to_searchindex_js = "../searchindex-7797e364.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-d167d9bc.js"></script>
+        <script src="../toc-d167d9bc.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -107,7 +107,7 @@
             <!-- populated by js -->
             <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
             <noscript>
-                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
             </noscript>
             <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>
@@ -142,7 +142,7 @@
                     <h1 class="menu-title">Pico de Gallo</h1>
 
                     <div class="right-buttons">
-                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
                             <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
                         </a>
 
@@ -176,96 +176,108 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
-<p><em>Pico de Gallo</em> turns a <a href="https://www.raspberrypi.com/products/raspberry-pi-pico-2/">Raspberry Pi
-Pico 2</a>
-into a USB-attached protocol bridge so you can drive <strong>I²C, SPI,
-UART, GPIO, PWM, ADC,</strong> and <strong>1-Wire</strong> peripherals from a host PC —
-and, more importantly, so you can develop and test embedded
-device drivers <strong>on your laptop</strong>, with no flashing, no SWD probe,
-no clock or pin-mux setup, and no linker scripts in your way.</p>
-<p>If you’ve ever wanted to:</p>
-<ul>
-<li>prototype a driver against <code>embedded-hal</code> traits without booting
-an MCU each time you change a line,</li>
-<li>script a sensor or actuator from Python or a shell one-liner,</li>
-<li>write an integration test that talks to real silicon from your
-CI runner,</li>
-</ul>
-<p>then <em>Pico de Gallo</em> is for you.</p>
-<h2 id="whats-in-the-box"><a class="header" href="#whats-in-the-box">What’s in the Box</a></h2>
-<p>A small landing-board PCB with castellated pads for the Pico 2, a
-firmware image that speaks
-<a href="https://docs.rs/postcard-rpc">postcard-rpc</a> over USB, and a small
-constellation of host-side crates:</p>
-<ul>
-<li><strong><code>gallo</code></strong> — a CLI for one-off and scripted access to every
-interface.</li>
-<li><strong><code>pico-de-gallo-lib</code></strong> — an async Rust client built on
-<a href="https://docs.rs/nusb"><code>nusb</code></a> and <code>tokio</code>.</li>
-<li><strong><code>pico-de-gallo-hal</code></strong> — a host-side
-<a href="https://docs.rs/embedded-hal"><code>embedded-hal</code></a> /
-<a href="https://docs.rs/embedded-hal-async"><code>embedded-hal-async</code></a> shim
-so existing drivers work unchanged.</li>
-<li><strong><code>pico-de-gallo-ffi</code></strong> — a C shared library with a stable
-opaque-pointer API.</li>
-<li><strong><code>pyco-de-gallo</code></strong> — Python bindings via PyO3 and maturin.</li>
-</ul>
-<table>
-<tr>
-<td align="center"><img src="pico-de-gallo-rev1.png" width="360" alt="Pico de Gallo rev1"><br><em>Pico de Gallo v1.0</em></td>
-<td align="center"><img src="pico-de-gallo-rev1.1.png" width="360" alt="Pico de Gallo rev1.1"><br><em>Pico de Gallo v1.1</em></td>
-</tr>
-
-</table>
-
-<h2 id="hardware-revisions-at-a-glance"><a class="header" href="#hardware-revisions-at-a-glance">Hardware Revisions at a Glance</a></h2>
+                        <h1 id="endpoint-catalog"><a class="header" href="#endpoint-catalog">Endpoint Catalog</a></h1>
+<p>This is the canonical list of postcard-rpc endpoints and topics
+exposed by the Pico de Gallo firmware. The source of truth is the
+<code>endpoints!</code> and <code>topics!</code> invocations in
+<a href="https://github.com/OpenDevicePartnership/pico-de-gallo/blob/main/crates/pico-de-gallo-internal/src/lib.rs"><code>crates/pico-de-gallo-internal/src/lib.rs</code></a>.</p>
+<blockquote class="blockquote-tag blockquote-tag-important">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Important</p>
+<p><strong>Variant order in shared enums is part of the wire ABI.</strong>
+postcard encodes enum variants by their index (0, 1, 2…), not by
+the discriminant value. Reordering or removing a variant is a
+breaking schema change. New variants must be appended at the end.
+See <code>AGENTS.md</code> §6 for the full rule.</p>
+</blockquote>
+<p>Each schema break bumps <code>SCHEMA_VERSION_MINOR</code> (pre-1.0). The host
+library refuses to talk to a firmware whose major/minor version
+doesn’‘t match — that’’s where <code>Status::SchemaMismatch</code> (−63) comes
+from.</p>
+<h2 id="endpoints"><a class="header" href="#endpoints">Endpoints</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Revision</th><th>Firmware feature</th><th>Connector</th><th>Capabilities</th></tr>
+<tr><th>Path</th><th>Description</th></tr>
 </thead>
 <tbody>
-<tr><td><strong>v1.0</strong></td><td><code>hw-rev1</code></td><td>seven pin headers</td><td>I²C, SPI, GPIO, PWM</td></tr>
-<tr><td><strong>v1.1</strong></td><td><code>hw-rev2</code></td><td>one keyed 2×12 box</td><td>I²C, SPI, UART, GPIO, PWM, ADC, 1-Wire</td></tr>
-<tr><td>v2 (WIP)</td><td><code>hw-rev2</code></td><td>2×12 box + level Tx</td><td>same as v1.1, plus variable VREF</td></tr>
+<tr><td><code>ping</code></td><td>Echo a <code>u32</code>. Useful for liveness checks.</td></tr>
+<tr><td><code>version</code></td><td>Firmware version triple (major / minor / patch).</td></tr>
+<tr><td><code>device/info</code></td><td>Firmware version + schema version + capability bitfield.</td></tr>
+<tr><td><code>i2c/read</code></td><td>Read N bytes from a target address.</td></tr>
+<tr><td><code>i2c/write</code></td><td>Write bytes to a target address.</td></tr>
+<tr><td><code>i2c/write-read</code></td><td>Write then read on the same target (repeated start).</td></tr>
+<tr><td><code>i2c/scan</code></td><td>Probe every address on the bus.</td></tr>
+<tr><td><code>i2c/batch</code></td><td>Sequence of I²C ops in one USB round-trip.</td></tr>
+<tr><td><code>i2c/set-config</code></td><td>Set I²C frequency (<code>I2cFrequency</code> enum).</td></tr>
+<tr><td><code>i2c/get-config</code></td><td>Query current I²C frequency.</td></tr>
+<tr><td><code>spi/read</code></td><td>Clock in N bytes (MISO).</td></tr>
+<tr><td><code>spi/write</code></td><td>Clock out bytes (MOSI).</td></tr>
+<tr><td><code>spi/transfer</code></td><td>Full-duplex transfer of equal-length TX and RX.</td></tr>
+<tr><td><code>spi/flush</code></td><td>Wait for any in-flight DMA SPI ops to complete.</td></tr>
+<tr><td><code>spi/batch</code></td><td>Sequence of SPI ops under chip-select in one round-trip.</td></tr>
+<tr><td><code>spi/set-config</code></td><td>Set frequency, CPHA, and CPOL.</td></tr>
+<tr><td><code>spi/get-config</code></td><td>Query current SPI configuration.</td></tr>
+<tr><td><code>uart/read</code></td><td>Read with timeout.</td></tr>
+<tr><td><code>uart/write</code></td><td>Write bytes.</td></tr>
+<tr><td><code>uart/flush</code></td><td>Drain the TX FIFO.</td></tr>
+<tr><td><code>uart/set-config</code></td><td>Set baud rate.</td></tr>
+<tr><td><code>uart/get-config</code></td><td>Query current UART configuration.</td></tr>
+<tr><td><code>gpio/get</code></td><td>Read a pin.</td></tr>
+<tr><td><code>gpio/put</code></td><td>Write a pin.</td></tr>
+<tr><td><code>gpio/wait-high</code></td><td>Block until pin is high.</td></tr>
+<tr><td><code>gpio/wait-low</code></td><td>Block until pin is low.</td></tr>
+<tr><td><code>gpio/wait-rising</code></td><td>Block until rising edge.</td></tr>
+<tr><td><code>gpio/wait-falling</code></td><td>Block until falling edge.</td></tr>
+<tr><td><code>gpio/wait-any</code></td><td>Block until any edge.</td></tr>
+<tr><td><code>gpio/set-config</code></td><td>Set direction and pull resistor.</td></tr>
+<tr><td><code>gpio/subscribe</code></td><td>Begin push-based edge events on a pin.</td></tr>
+<tr><td><code>gpio/unsubscribe</code></td><td>Stop push-based events on a pin.</td></tr>
+<tr><td><code>pwm/set-duty-cycle</code></td><td>Set raw compare value.</td></tr>
+<tr><td><code>pwm/get-duty-cycle</code></td><td>Query current compare value and max.</td></tr>
+<tr><td><code>pwm/enable</code></td><td>Enable the PWM slice owning a channel.</td></tr>
+<tr><td><code>pwm/disable</code></td><td>Disable the PWM slice owning a channel.</td></tr>
+<tr><td><code>pwm/set-config</code></td><td>Set frequency and phase-correct mode.</td></tr>
+<tr><td><code>pwm/get-config</code></td><td>Query PWM configuration.</td></tr>
+<tr><td><code>adc/read</code></td><td>Single-shot ADC read.</td></tr>
+<tr><td><code>adc/get-config</code></td><td>Query ADC capabilities (channel count, resolution).</td></tr>
+<tr><td><code>onewire/reset</code></td><td>1-Wire reset + presence detection.</td></tr>
+<tr><td><code>onewire/read</code></td><td>Read N bytes from the 1-Wire bus.</td></tr>
+<tr><td><code>onewire/write</code></td><td>Write bytes on the 1-Wire bus.</td></tr>
+<tr><td><code>onewire/write-pullup</code></td><td>Write bytes then assert strong pullup (parasitic power).</td></tr>
+<tr><td><code>onewire/search</code></td><td>Start a ROM search (returns first ROM).</td></tr>
+<tr><td><code>onewire/search-next</code></td><td>Continue a ROM search.</td></tr>
 </tbody>
 </table>
 </div>
-<p>You’ll want <strong>v1.1 or later</strong> if you need UART, ADC, or 1-Wire. See
-<a href="./hardware/revisions.html">Revisions: v1.0 vs v1.1</a>.</p>
-<h2 id="how-to-read-this-book"><a class="header" href="#how-to-read-this-book">How to Read This Book</a></h2>
-<p>The book is laid out as six parts plus appendices:</p>
-<ol>
-<li><strong>The Hardware</strong> — what’s on the PCB, which revision to pick,
-how to flash firmware.</li>
-<li><strong>Getting Started</strong> — install the toolchain and verify your
-device.</li>
-<li><strong>The Interfaces</strong> — one chapter per peripheral. Each follows
-the same template: overview, pin mapping, CLI usage, Rust,
-C, Python, error handling.</li>
-<li><strong>The Crates</strong> — reference for each crate in the workspace.</li>
-<li><strong>Writing a Device Driver</strong> — the longest part. A TMP102
-walkthrough showing the dev loop, the blocking/async parity, and
-how to write hardware-in-the-loop tests that run on your laptop.</li>
-<li><strong>Under the Hood</strong> — the wire protocol, schema versioning,
-firmware architecture, and the release-please cadence.</li>
-</ol>
-<p>Read top-to-bottom for a tour, or jump straight to the chapter you
-need — each chapter stands on its own.</p>
-<h2 id="the-optional-case"><a class="header" href="#the-optional-case">The Optional Case</a></h2>
-<p>A 3D-printable, snap-fit enclosure lives in the
-<a href="https://github.com/OpenDevicePartnership/pico-de-gallo/tree/main/case"><code>case/</code></a>
-folder of the repository if you want to keep the board safe on your
-bench.</p>
-<p><img src="case.png" title="Pico de Gallo Case" alt="3D printable case"></p>
+<h2 id="topics-server--client-push"><a class="header" href="#topics-server--client-push">Topics (server → client push)</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Path</th><th>Message</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>gpio/event</code></td><td><code>GpioEvent</code></td><td>Push stream of edge events for subscribed GPIO pins.</td></tr>
+</tbody>
+</table>
+</div>
+<p>A <code>gpio/event</code> stream is opened implicitly when you call
+<code>gpio/subscribe</code> for a given pin, and closes when you
+<code>gpio/unsubscribe</code>.</p>
+<h2 id="adding-endpoints"><a class="header" href="#adding-endpoints">Adding Endpoints</a></h2>
+<p>If you’‘re contributing a new endpoint, the recipe touches six
+crates plus tests and documentation. Don’’t forget the
+schema-version bump and the lockstep release of internal +
+firmware + every host crate.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../appendix/status-codes.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
 
-                            <a rel="next prefetch" href="hardware/overview.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../appendix/troubleshooting.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -275,8 +287,11 @@ bench.</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../appendix/status-codes.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
 
-                    <a rel="next prefetch" href="hardware/overview.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../appendix/troubleshooting.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
@@ -296,13 +311,13 @@ bench.</p>
         </script>
 
 
-        <script src="elasticlunr-ef4e11c1.min.js"></script>
-        <script src="mark-09e88c2c.min.js"></script>
-        <script src="searcher-c2a407aa.js"></script>
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
 
-        <script src="clipboard-1626706a.min.js"></script>
-        <script src="highlight-abc7f01d.js"></script>
-        <script src="book-a0b12cfe.js"></script>
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
 

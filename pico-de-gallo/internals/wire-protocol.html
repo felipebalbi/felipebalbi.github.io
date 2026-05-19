@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Introduction - Pico de Gallo</title>
+        <title>Wire Protocol &amp; Schema Versioning - Pico de Gallo</title>
 
 
         <!-- Custom HTML head -->
@@ -12,20 +12,20 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
 
-        <link rel="icon" href="favicon-de23e50b.svg">
-        <link rel="shortcut icon" href="favicon-8114d1fc.png">
-        <link rel="stylesheet" href="css/variables-8adf115d.css">
-        <link rel="stylesheet" href="css/general-2459343d.css">
-        <link rel="stylesheet" href="css/chrome-ae938929.css">
-        <link rel="stylesheet" href="css/print-9e4910d8.css" media="print">
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
 
         <!-- Fonts -->
-        <link rel="stylesheet" href="fonts/fonts-9644e21d.css">
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" id="mdbook-highlight-css" href="highlight-493f70e1.css">
-        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="tomorrow-night-4c0ae647.css">
-        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="ayu-highlight-3fdfc3ac.css">
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
 
         <!-- Custom theme stylesheets -->
 
@@ -34,13 +34,13 @@
 
         <!-- Provide site root and default themes to javascript -->
         <script>
-            const path_to_root = "";
+            const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-7797e364.js";
+            window.path_to_searchindex_js = "../searchindex-7797e364.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-d167d9bc.js"></script>
+        <script src="../toc-d167d9bc.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -107,7 +107,7 @@
             <!-- populated by js -->
             <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
             <noscript>
-                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
             </noscript>
             <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>
@@ -142,7 +142,7 @@
                     <h1 class="menu-title">Pico de Gallo</h1>
 
                     <div class="right-buttons">
-                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
                             <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
                         </a>
 
@@ -176,96 +176,142 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
-<p><em>Pico de Gallo</em> turns a <a href="https://www.raspberrypi.com/products/raspberry-pi-pico-2/">Raspberry Pi
-Pico 2</a>
-into a USB-attached protocol bridge so you can drive <strong>I²C, SPI,
-UART, GPIO, PWM, ADC,</strong> and <strong>1-Wire</strong> peripherals from a host PC —
-and, more importantly, so you can develop and test embedded
-device drivers <strong>on your laptop</strong>, with no flashing, no SWD probe,
-no clock or pin-mux setup, and no linker scripts in your way.</p>
-<p>If you’ve ever wanted to:</p>
+                        <h1 id="wire-protocol--schema-versioning"><a class="header" href="#wire-protocol--schema-versioning">Wire Protocol &amp; Schema Versioning</a></h1>
+<p>The wire protocol is the most important compatibility contract in Pico de
+Gallo. All protocol types live in <code>pico-de-gallo-internal</code>, and both the host
+and the firmware compile against that crate.</p>
+<h2 id="postcard-encoding-rules"><a class="header" href="#postcard-encoding-rules">postcard encoding rules</a></h2>
+<p>Pico de Gallo uses <a href="https://docs.rs/postcard">postcard</a> for compact binary
+encoding. That brings one rule that every contributor must understand.</p>
+<blockquote class="blockquote-tag blockquote-tag-important">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Important</p>
+<p>postcard encodes enum variants by <strong>variant index</strong>, not by the numeric value
+in <code>#[repr(...)]</code>. Reordering variants in a wire-visible enum is a silent ABI
+break.</p>
+</blockquote>
+<p>So this is safe:</p>
 <ul>
-<li>prototype a driver against <code>embedded-hal</code> traits without booting
-an MCU each time you change a line,</li>
-<li>script a sensor or actuator from Python or a shell one-liner,</li>
-<li>write an integration test that talks to real silicon from your
-CI runner,</li>
+<li>append a new enum variant at the end.</li>
 </ul>
-<p>then <em>Pico de Gallo</em> is for you.</p>
-<h2 id="whats-in-the-box"><a class="header" href="#whats-in-the-box">What’s in the Box</a></h2>
-<p>A small landing-board PCB with castellated pads for the Pico 2, a
-firmware image that speaks
-<a href="https://docs.rs/postcard-rpc">postcard-rpc</a> over USB, and a small
-constellation of host-side crates:</p>
+<p>And this is breaking:</p>
 <ul>
-<li><strong><code>gallo</code></strong> — a CLI for one-off and scripted access to every
-interface.</li>
-<li><strong><code>pico-de-gallo-lib</code></strong> — an async Rust client built on
-<a href="https://docs.rs/nusb"><code>nusb</code></a> and <code>tokio</code>.</li>
-<li><strong><code>pico-de-gallo-hal</code></strong> — a host-side
-<a href="https://docs.rs/embedded-hal"><code>embedded-hal</code></a> /
-<a href="https://docs.rs/embedded-hal-async"><code>embedded-hal-async</code></a> shim
-so existing drivers work unchanged.</li>
-<li><strong><code>pico-de-gallo-ffi</code></strong> — a C shared library with a stable
-opaque-pointer API.</li>
-<li><strong><code>pyco-de-gallo</code></strong> — Python bindings via PyO3 and maturin.</li>
+<li>reorder variants,</li>
+<li>remove a variant,</li>
+<li>rename a variant that old peers still expect.</li>
 </ul>
-<table>
-<tr>
-<td align="center"><img src="pico-de-gallo-rev1.png" width="360" alt="Pico de Gallo rev1"><br><em>Pico de Gallo v1.0</em></td>
-<td align="center"><img src="pico-de-gallo-rev1.1.png" width="360" alt="Pico de Gallo rev1.1"><br><em>Pico de Gallo v1.1</em></td>
-</tr>
-
-</table>
-
-<h2 id="hardware-revisions-at-a-glance"><a class="header" href="#hardware-revisions-at-a-glance">Hardware Revisions at a Glance</a></h2>
+<p>The warning comments in <code>pico-de-gallo-internal</code> are there for a reason; keep
+them.</p>
+<h2 id="the-shared-protocol-crate"><a class="header" href="#the-shared-protocol-crate">The shared protocol crate</a></h2>
+<p><code>pico-de-gallo-internal</code> defines:</p>
+<ul>
+<li>endpoint marker types,</li>
+<li>request and response structs,</li>
+<li>topic message types,</li>
+<li>protocol constants like <code>MAX_TRANSFER_SIZE</code>,</li>
+<li>schema-version constants generated at build time.</li>
+</ul>
+<p>The crate also uses the <code>use-std</code> feature to switch certain response types
+between owned host buffers and borrowed firmware buffers:</p>
+<ul>
+<li>host build: <code>Vec&lt;u8&gt;</code></li>
+<li>firmware build: <code>&amp;[u8]</code></li>
+</ul>
+<p>That lets the host own received data while the firmware can answer from a shared
+scratch buffer without heap allocation.</p>
+<h2 id="endpoints-and-topics"><a class="header" href="#endpoints-and-topics">Endpoints and topics</a></h2>
+<p>Endpoints are normal request/response RPCs declared with <code>endpoints!</code>. Topics
+are push-style messages declared with <code>topics!</code>.</p>
+<p>In practice:</p>
+<ul>
+<li>endpoints cover commands like <code>i2c/read</code>, <code>spi/transfer</code>, and <code>device/info</code>,</li>
+<li>topics cover asynchronous server-to-client events.</li>
+</ul>
+<p>Today the main topic is GPIO event streaming:</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Revision</th><th>Firmware feature</th><th>Connector</th><th>Capabilities</th></tr>
+<tr><th>Kind</th><th>Example</th><th>Direction</th><th>Purpose</th></tr>
 </thead>
 <tbody>
-<tr><td><strong>v1.0</strong></td><td><code>hw-rev1</code></td><td>seven pin headers</td><td>I²C, SPI, GPIO, PWM</td></tr>
-<tr><td><strong>v1.1</strong></td><td><code>hw-rev2</code></td><td>one keyed 2×12 box</td><td>I²C, SPI, UART, GPIO, PWM, ADC, 1-Wire</td></tr>
-<tr><td>v2 (WIP)</td><td><code>hw-rev2</code></td><td>2×12 box + level Tx</td><td>same as v1.1, plus variable VREF</td></tr>
+<tr><td>Endpoint</td><td><code>i2c/read</code></td><td>host → device → host</td><td>Request/response RPC</td></tr>
+<tr><td>Endpoint</td><td><code>device/info</code></td><td>host → device → host</td><td>Compatibility probe</td></tr>
+<tr><td>Topic</td><td><code>gpio/event</code></td><td>device → host</td><td>Push edge notifications</td></tr>
 </tbody>
 </table>
 </div>
-<p>You’ll want <strong>v1.1 or later</strong> if you need UART, ADC, or 1-Wire. See
-<a href="./hardware/revisions.html">Revisions: v1.0 vs v1.1</a>.</p>
-<h2 id="how-to-read-this-book"><a class="header" href="#how-to-read-this-book">How to Read This Book</a></h2>
-<p>The book is laid out as six parts plus appendices:</p>
+<p>A short slice of the endpoint catalog looks like this:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Path</th><th>What it does</th></tr>
+</thead>
+<tbody>
+<tr><td><code>ping</code></td><td>Echo test payload</td></tr>
+<tr><td><code>version</code></td><td>Report firmware version</td></tr>
+<tr><td><code>device/info</code></td><td>Report firmware, schema, and capabilities</td></tr>
+<tr><td><code>i2c/read</code></td><td>Read from an I<sup>2</sup>C target</td></tr>
+<tr><td><code>spi/transfer</code></td><td>Full-duplex SPI transfer</td></tr>
+<tr><td><code>gpio/subscribe</code></td><td>Start GPIO event monitoring</td></tr>
+</tbody>
+</table>
+</div>
+<p>For the full list, see the <a href="../appendix/endpoints.html">Endpoint Catalog</a>.</p>
+<h2 id="schema-versioning"><a class="header" href="#schema-versioning">Schema versioning</a></h2>
+<p>The schema version constants are not handwritten. <code>pico-de-gallo-internal</code>
+generates <code>SCHEMA_VERSION_MAJOR</code>, <code>SCHEMA_VERSION_MINOR</code>, and
+<code>SCHEMA_VERSION_PATCH</code> in <code>build.rs</code> from the crate’s <code>[package].version</code>.</p>
+<blockquote class="blockquote-tag blockquote-tag-caution">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M4.47.22A.749.749 0 0 1 5 0h6c.199 0 .389.079.53.22l4.25 4.25c.141.14.22.331.22.53v6a.749.749 0 0 1-.22.53l-4.25 4.25A.749.749 0 0 1 11 16H5a.749.749 0 0 1-.53-.22L.22 11.53A.749.749 0 0 1 0 11V5c0-.199.079-.389.22-.53Zm.84 1.28L1.5 5.31v5.38l3.81 3.81h5.38l3.81-3.81V5.31L10.69 1.5ZM8 4a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 4Zm0 8a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Caution</p>
+<p>Do not edit <code>SCHEMA_VERSION_*</code> constants directly. Bump the
+<code>pico-de-gallo-internal</code> crate version and let <code>build.rs</code> regenerate them.</p>
+</blockquote>
+<p>Before 1.0, the <strong>minor</strong> version is the breaking axis. After 1.0, that role
+moves to the major version.</p>
+<p>That means a pre-1.0 bump is required when you:</p>
+<ul>
+<li>add or remove an endpoint or topic,</li>
+<li>change a request or response type,</li>
+<li>append a new wire enum variant.</li>
+</ul>
+<h2 id="hostfirmware-compatibility-checks"><a class="header" href="#hostfirmware-compatibility-checks">Host/firmware compatibility checks</a></h2>
+<p>The host library exposes <code>PicoDeGallo::validate()</code>. It calls <code>device/info</code>,
+reads the firmware’s schema version, and rejects mismatches early.</p>
+<p>If validation fails, the host returns:</p>
+<ul>
+<li><code>LegacyFirmware</code> when the firmware is too old to support <code>device/info</code>, or</li>
+<li><code>SchemaMismatch</code> when the host and firmware disagree on the schema version.</li>
+</ul>
+<p>This turns an otherwise confusing runtime failure into an explicit compatibility
+error.</p>
+<h2 id="lockstep-releases-for-protocol-changes"><a class="header" href="#lockstep-releases-for-protocol-changes">Lockstep releases for protocol changes</a></h2>
+<p>A wire change is never just one crate. Per the project rules, the same release
+cycle must update:</p>
 <ol>
-<li><strong>The Hardware</strong> — what’s on the PCB, which revision to pick,
-how to flash firmware.</li>
-<li><strong>Getting Started</strong> — install the toolchain and verify your
-device.</li>
-<li><strong>The Interfaces</strong> — one chapter per peripheral. Each follows
-the same template: overview, pin mapping, CLI usage, Rust,
-C, Python, error handling.</li>
-<li><strong>The Crates</strong> — reference for each crate in the workspace.</li>
-<li><strong>Writing a Device Driver</strong> — the longest part. A TMP102
-walkthrough showing the dev loop, the blocking/async parity, and
-how to write hardware-in-the-loop tests that run on your laptop.</li>
-<li><strong>Under the Hood</strong> — the wire protocol, schema versioning,
-firmware architecture, and the release-please cadence.</li>
+<li><code>pico-de-gallo-internal</code>,</li>
+<li><code>pico-de-gallo-firmware</code>,</li>
+<li><code>pico-de-gallo-lib</code>,</li>
+<li><code>pico-de-gallo-hal</code>,</li>
+<li><code>pico-de-gallo-ffi</code>,</li>
+<li><code>pico-de-gallo-app</code>,</li>
+<li><code>pyco-de-gallo</code>.</li>
 </ol>
-<p>Read top-to-bottom for a tour, or jump straight to the chapter you
-need — each chapter stands on its own.</p>
-<h2 id="the-optional-case"><a class="header" href="#the-optional-case">The Optional Case</a></h2>
-<p>A 3D-printable, snap-fit enclosure lives in the
-<a href="https://github.com/OpenDevicePartnership/pico-de-gallo/tree/main/case"><code>case/</code></a>
-folder of the repository if you want to keep the board safe on your
-bench.</p>
-<p><img src="case.png" title="Pico de Gallo Case" alt="3D printable case"></p>
+<blockquote class="blockquote-tag blockquote-tag-important">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Important</p>
+<p><code>release-please</code> does <strong>not</strong> know that the protocol crate and firmware are
+wire-coupled. Lockstep is enforced by contributors, not by automation.</p>
+</blockquote>
+<p>For contributor policy and the full compatibility rules, see
+<a href="https://github.com/OpenDevicePartnership/pico-de-gallo/blob/main/AGENTS.md"><code>AGENTS.md</code></a>.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../internals/architecture.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
 
-                            <a rel="next prefetch" href="hardware/overview.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../internals/firmware.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -275,8 +321,11 @@ bench.</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../internals/architecture.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
 
-                    <a rel="next prefetch" href="hardware/overview.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../internals/firmware.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
@@ -296,13 +345,13 @@ bench.</p>
         </script>
 
 
-        <script src="elasticlunr-ef4e11c1.min.js"></script>
-        <script src="mark-09e88c2c.min.js"></script>
-        <script src="searcher-c2a407aa.js"></script>
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
 
-        <script src="clipboard-1626706a.min.js"></script>
-        <script src="highlight-abc7f01d.js"></script>
-        <script src="book-a0b12cfe.js"></script>
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
 

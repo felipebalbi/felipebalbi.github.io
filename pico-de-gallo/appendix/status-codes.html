@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>1-Wire Bus - Pico de Gallo</title>
+        <title>Status Code Reference - Pico de Gallo</title>
 
 
         <!-- Custom HTML head -->
@@ -12,20 +12,20 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
 
-        <link rel="icon" href="favicon-de23e50b.svg">
-        <link rel="shortcut icon" href="favicon-8114d1fc.png">
-        <link rel="stylesheet" href="css/variables-8adf115d.css">
-        <link rel="stylesheet" href="css/general-2459343d.css">
-        <link rel="stylesheet" href="css/chrome-ae938929.css">
-        <link rel="stylesheet" href="css/print-9e4910d8.css" media="print">
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
 
         <!-- Fonts -->
-        <link rel="stylesheet" href="fonts/fonts-9644e21d.css">
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" id="mdbook-highlight-css" href="highlight-493f70e1.css">
-        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="tomorrow-night-4c0ae647.css">
-        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="ayu-highlight-3fdfc3ac.css">
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
 
         <!-- Custom theme stylesheets -->
 
@@ -34,13 +34,13 @@
 
         <!-- Provide site root and default themes to javascript -->
         <script>
-            const path_to_root = "";
+            const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f5b27c43.js";
+            window.path_to_searchindex_js = "../searchindex-7797e364.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-ce601ddd.js"></script>
+        <script src="../toc-d167d9bc.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -107,7 +107,7 @@
             <!-- populated by js -->
             <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
             <noscript>
-                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
             </noscript>
             <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>
@@ -142,7 +142,7 @@
                     <h1 class="menu-title">Pico de Gallo</h1>
 
                     <div class="right-buttons">
-                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
                             <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
                         </a>
 
@@ -176,176 +176,118 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="1-wire-bus"><a class="header" href="#1-wire-bus">1-Wire Bus</a></h1>
-<blockquote>
-<p><strong>Hardware revision note:</strong> 1-Wire requires <strong>hw-rev2</strong> firmware. On v1
-hardware, 1-Wire endpoints return <code>OneWireError::Unsupported</code>.</p>
+                        <h1 id="status-code-reference"><a class="header" href="#status-code-reference">Status Code Reference</a></h1>
+<p>Every <code>gallo_*</code> FFI function (except the lifecycle calls
+<code>gallo_init</code>, <code>gallo_init_with_serial_number</code>, and <code>gallo_free</code>)
+returns a <code>Status</code> value. <code>Status</code> is a C enum backed by
+<code>int32_t</code>.</p>
+<ul>
+<li><strong><code>Ok</code> (0)</strong> — success.</li>
+<li><strong>Negative values</strong> — errors, grouped roughly by peripheral.</li>
+</ul>
+<h2 id="stability"><a class="header" href="#stability">Stability</a></h2>
+<blockquote class="blockquote-tag blockquote-tag-important">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Important</p>
+<p><strong>Status code numeric values are part of the C ABI</strong> and never
+change once shipped. Existing codes are never renumbered or
+reused; new codes are only appended at the bottom of the enum.</p>
 </blockquote>
-<p>Pico de Gallo provides 1-Wire bus support through the RP2350’s PIO (Programmable
-I/O) state machine hardware. The 1-Wire data pin is on <strong>GPIO 16</strong>, configured
-in open-drain mode.</p>
-<h2 id="operations"><a class="header" href="#operations">Operations</a></h2>
+<p>If you compile against a header from an older release, codes you
+don’t recognize will be values your code has never seen. Treat
+unknown negative values as “some error” — never assume a number
+that doesn’t appear in your header means success.</p>
+<h2 id="complete-status-table"><a class="header" href="#complete-status-table">Complete Status Table</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Operation</th><th>Description</th></tr>
+<tr><th>Name</th><th style="text-align: right">Value</th><th>Description</th></tr>
 </thead>
 <tbody>
-<tr><td><strong>Reset</strong></td><td>Resets the bus and detects device presence</td></tr>
-<tr><td><strong>Read</strong></td><td>Reads N bytes from the bus</td></tr>
-<tr><td><strong>Write</strong></td><td>Writes raw bytes to the bus</td></tr>
-<tr><td><strong>Write Pullup</strong></td><td>Writes bytes then applies strong pullup for parasitic-power devices</td></tr>
-<tr><td><strong>Search</strong></td><td>Starts a new ROM search and returns the first device</td></tr>
-<tr><td><strong>Search Next</strong></td><td>Continues the current ROM search</td></tr>
+<tr><td><code>Ok</code></td><td style="text-align: right">0</td><td>Operation successful</td></tr>
+<tr><td><code>I2cReadFailed</code></td><td style="text-align: right">−1</td><td>I²C read failed</td></tr>
+<tr><td><code>I2cWriteFailed</code></td><td style="text-align: right">−2</td><td>I²C write failed</td></tr>
+<tr><td><code>InvalidResponse</code></td><td style="text-align: right">−3</td><td>Firmware produced an invalid response</td></tr>
+<tr><td><code>Uninitialized</code></td><td style="text-align: right">−4</td><td>Library was not initialised (NULL context)</td></tr>
+<tr><td><code>InvalidArgument</code></td><td style="text-align: right">−5</td><td>Caller passed an invalid argument</td></tr>
+<tr><td><code>PingFailed</code></td><td style="text-align: right">−6</td><td>Ping round-trip failed</td></tr>
+<tr><td><code>SpiReadFailed</code></td><td style="text-align: right">−7</td><td>SPI read failed</td></tr>
+<tr><td><code>SpiWriteFailed</code></td><td style="text-align: right">−8</td><td>SPI write failed</td></tr>
+<tr><td><code>SpiFlushFailed</code></td><td style="text-align: right">−9</td><td>SPI flush failed</td></tr>
+<tr><td><code>GpioGetFailed</code></td><td style="text-align: right">−10</td><td>GPIO get failed</td></tr>
+<tr><td><code>GpioPutFailed</code></td><td style="text-align: right">−11</td><td>GPIO put failed</td></tr>
+<tr><td><code>GpioWaitFailed</code></td><td style="text-align: right">−12</td><td>GPIO wait failed</td></tr>
+<tr><td><code>SetConfigFailed</code></td><td style="text-align: right">−13</td><td>Set config failed (legacy)</td></tr>
+<tr><td><code>VersionFailed</code></td><td style="text-align: right">−14</td><td>Version query failed</td></tr>
+<tr><td><code>I2cWriteReadFailed</code></td><td style="text-align: right">−15</td><td>I²C write-read failed</td></tr>
+<tr><td><code>I2cSetConfigFailed</code></td><td style="text-align: right">−16</td><td>I²C set config failed</td></tr>
+<tr><td><code>SpiSetConfigFailed</code></td><td style="text-align: right">−17</td><td>SPI set config failed</td></tr>
+<tr><td><code>I2cNack</code></td><td style="text-align: right">−18</td><td>I²C target did not acknowledge</td></tr>
+<tr><td><code>I2cBusError</code></td><td style="text-align: right">−19</td><td>I²C bus error</td></tr>
+<tr><td><code>I2cArbitrationLoss</code></td><td style="text-align: right">−20</td><td>I²C arbitration loss</td></tr>
+<tr><td><code>I2cOverrun</code></td><td style="text-align: right">−21</td><td>I²C data overrun</td></tr>
+<tr><td><code>BufferTooLong</code></td><td style="text-align: right">−22</td><td>Buffer exceeds firmware transfer limit</td></tr>
+<tr><td><code>I2cAddressOutOfRange</code></td><td style="text-align: right">−23</td><td>I²C address out of valid range</td></tr>
+<tr><td><code>GpioInvalidPin</code></td><td style="text-align: right">−24</td><td>Invalid GPIO pin number</td></tr>
+<tr><td><code>CommsFailed</code></td><td style="text-align: right">−25</td><td>USB communication failure</td></tr>
+<tr><td><code>I2cScanFailed</code></td><td style="text-align: right">−26</td><td>I²C bus scan failed</td></tr>
+<tr><td><code>GpioSetConfigFailed</code></td><td style="text-align: right">−27</td><td>GPIO set config failed</td></tr>
+<tr><td><code>GpioWrongDirection</code></td><td style="text-align: right">−28</td><td>GPIO pin direction mismatch</td></tr>
+<tr><td><code>I2cGetConfigFailed</code></td><td style="text-align: right">−29</td><td>I²C get config failed</td></tr>
+<tr><td><code>SpiGetConfigFailed</code></td><td style="text-align: right">−30</td><td>SPI get config failed</td></tr>
+<tr><td><code>UartReadFailed</code></td><td style="text-align: right">−31</td><td>UART read failed</td></tr>
+<tr><td><code>UartWriteFailed</code></td><td style="text-align: right">−32</td><td>UART write failed</td></tr>
+<tr><td><code>UartFlushFailed</code></td><td style="text-align: right">−33</td><td>UART flush failed</td></tr>
+<tr><td><code>UartOverrun</code></td><td style="text-align: right">−34</td><td>UART receiver overrun</td></tr>
+<tr><td><code>UartBreak</code></td><td style="text-align: right">−35</td><td>UART break condition</td></tr>
+<tr><td><code>UartParity</code></td><td style="text-align: right">−36</td><td>UART parity error</td></tr>
+<tr><td><code>UartFraming</code></td><td style="text-align: right">−37</td><td>UART framing error</td></tr>
+<tr><td><code>UartInvalidBaudRate</code></td><td style="text-align: right">−38</td><td>Invalid baud rate</td></tr>
+<tr><td><code>UartSetConfigFailed</code></td><td style="text-align: right">−39</td><td>UART set config failed</td></tr>
+<tr><td><code>UartGetConfigFailed</code></td><td style="text-align: right">−40</td><td>UART get config failed</td></tr>
+<tr><td><code>PwmSetDutyCycleFailed</code></td><td style="text-align: right">−41</td><td>PWM set duty cycle failed</td></tr>
+<tr><td><code>PwmGetDutyCycleFailed</code></td><td style="text-align: right">−42</td><td>PWM get duty cycle failed</td></tr>
+<tr><td><code>PwmEnableFailed</code></td><td style="text-align: right">−43</td><td>PWM enable failed</td></tr>
+<tr><td><code>PwmDisableFailed</code></td><td style="text-align: right">−44</td><td>PWM disable failed</td></tr>
+<tr><td><code>PwmSetConfigFailed</code></td><td style="text-align: right">−45</td><td>PWM set config failed</td></tr>
+<tr><td><code>PwmGetConfigFailed</code></td><td style="text-align: right">−46</td><td>PWM get config failed</td></tr>
+<tr><td><code>PwmInvalidChannel</code></td><td style="text-align: right">−47</td><td>Invalid PWM channel</td></tr>
+<tr><td><code>PwmInvalidDutyCycle</code></td><td style="text-align: right">−48</td><td>Invalid PWM duty cycle</td></tr>
+<tr><td><code>PwmInvalidConfiguration</code></td><td style="text-align: right">−49</td><td>Invalid PWM configuration</td></tr>
+<tr><td><code>AdcReadFailed</code></td><td style="text-align: right">−50</td><td>ADC read failed</td></tr>
+<tr><td><code>AdcGetConfigFailed</code></td><td style="text-align: right">−51</td><td>ADC get config failed</td></tr>
+<tr><td><code>AdcConversionFailed</code></td><td style="text-align: right">−52</td><td>ADC conversion error</td></tr>
+<tr><td><code>GpioPinMonitored</code></td><td style="text-align: right">−53</td><td>Pin is currently subscribed</td></tr>
+<tr><td><code>GpioPinNotMonitored</code></td><td style="text-align: right">−54</td><td>Pin is not subscribed</td></tr>
+<tr><td><code>GpioSubscribeFailed</code></td><td style="text-align: right">−55</td><td>GPIO subscribe failed</td></tr>
+<tr><td><code>GpioUnsubscribeFailed</code></td><td style="text-align: right">−56</td><td>GPIO unsubscribe failed</td></tr>
+<tr><td><code>OneWireNoPresence</code></td><td style="text-align: right">−57</td><td>1-Wire: no device responded to reset</td></tr>
+<tr><td><code>OneWireBusError</code></td><td style="text-align: right">−58</td><td>1-Wire: bus communication error</td></tr>
+<tr><td><code>OneWireReadFailed</code></td><td style="text-align: right">−59</td><td>1-Wire: read failed</td></tr>
+<tr><td><code>OneWireWriteFailed</code></td><td style="text-align: right">−60</td><td>1-Wire: write failed</td></tr>
+<tr><td><code>OneWireSearchFailed</code></td><td style="text-align: right">−61</td><td>1-Wire: ROM search failed</td></tr>
+<tr><td><code>DeviceInfoFailed</code></td><td style="text-align: right">−62</td><td>Device info query failed</td></tr>
+<tr><td><code>SchemaMismatch</code></td><td style="text-align: right">−63</td><td>Schema version mismatch between host and firmware</td></tr>
+<tr><td><code>LegacyFirmware</code></td><td style="text-align: right">−64</td><td>Firmware too old to support <code>device/info</code></td></tr>
+<tr><td><code>Unsupported</code></td><td style="text-align: right">−65</td><td>Peripheral not available on this hardware revision</td></tr>
 </tbody>
 </table>
 </div>
-<h2 id="ds18b20-temperature-sensor-example"><a class="header" href="#ds18b20-temperature-sensor-example">DS18B20 Temperature Sensor Example</a></h2>
-<p>The DS18B20 is the most popular 1-Wire device. Here’s how to read its
-temperature using each interface.</p>
-<h3 id="protocol-refresher"><a class="header" href="#protocol-refresher">Protocol Refresher</a></h3>
-<ul>
-<li><strong>Skip ROM</strong> (<code>0xCC</code>): addresses all devices (single-device bus)</li>
-<li><strong>Convert T</strong> (<code>0x44</code>): starts temperature conversion (needs 750ms with
-strong pullup for parasitic power)</li>
-<li><strong>Read Scratchpad</strong> (<code>0xBE</code>): reads 9 bytes of sensor data</li>
-<li>Temperature is in bytes 0–1 (signed 16-bit, little-endian, 1/16°C resolution)</li>
-</ul>
-<h3 id="cli"><a class="header" href="#cli">CLI</a></h3>
-<pre><code class="language-bash"># 1. Discover devices on the bus
-gallo onewire search
-
-# 2. Reset the bus
-gallo onewire reset
-
-# 3. Start temperature conversion with 750ms strong pullup
-gallo onewire write-pullup --data cc44 --duration 750
-
-# 4. Reset again before reading
-gallo onewire reset
-
-# 5. Send Read Scratchpad command
-gallo onewire write --data ccbe
-
-# 6. Read 9-byte scratchpad
-gallo onewire read --len 9
-
-# Parse temperature from the first 2 bytes:
-# e.g., bytes [50, 01] → 0x0150 = 336 → 336 / 16.0 = 21.0°C
-</code></pre>
-<h3 id="rust-library"><a class="header" href="#rust-library">Rust Library</a></h3>
-<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use pico_de_gallo_lib::PicoDeGallo;
-
-async fn read_ds18b20_temperature(gallo: &amp;PicoDeGallo) -&gt; f32 {
-    // Reset bus, check presence
-    let present = gallo.onewire_reset().await.unwrap();
-    assert!(present, "No device on bus");
-
-    // Skip ROM + Convert Temperature, strong pullup for 750ms
-    gallo.onewire_write_pullup(&amp;[0xCC, 0x44], 750).await.unwrap();
-
-    // Reset again
-    gallo.onewire_reset().await.unwrap();
-
-    // Skip ROM + Read Scratchpad
-    gallo.onewire_write(&amp;[0xCC, 0xBE]).await.unwrap();
-
-    // Read 9-byte scratchpad
-    let data = gallo.onewire_read(9).await.unwrap();
-
-    // Temperature is in bytes 0–1 (little-endian, 12-bit signed fixed-point)
-    let raw = i16::from_le_bytes([data[0], data[1]]);
-    raw as f32 / 16.0
-}
-<span class="boring">}</span></code></pre>
-<h3 id="c-ffi"><a class="header" href="#c-ffi">C (FFI)</a></h3>
-<pre><code class="language-c">#include "pico_de_gallo.h"
-#include &lt;stdio.h&gt;
-
-float read_ds18b20(PicoDeGallo *gallo) {
-    bool present;
-    gallo_onewire_reset(gallo, &amp;present);
-    if (!present) {
-        fprintf(stderr, "No device on bus\n");
-        return -999.0f;
-    }
-
-    // Skip ROM + Convert T with 750ms strong pullup
-    uint8_t convert_cmd[] = {0xCC, 0x44};
-    gallo_onewire_write_pullup(gallo, convert_cmd, 2, 750);
-
-    // Reset before reading
-    gallo_onewire_reset(gallo, &amp;present);
-
-    // Skip ROM + Read Scratchpad
-    uint8_t read_cmd[] = {0xCC, 0xBE};
-    gallo_onewire_write(gallo, read_cmd, 2);
-
-    // Read 9-byte scratchpad
-    uint8_t buf[9];
-    uint16_t out_len;
-    gallo_onewire_read(gallo, buf, 9, &amp;out_len);
-
-    // Temperature from bytes 0–1
-    int16_t raw = (int16_t)(buf[0] | (buf[1] &lt;&lt; 8));
-    return raw / 16.0f;
-}
-</code></pre>
-<h3 id="hal"><a class="header" href="#hal">HAL</a></h3>
-<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use pico_de_gallo_hal::Hal;
-
-fn read_ds18b20_blocking(hal: &amp;Hal) -&gt; f32 {
-    let ow = hal.onewire();
-
-    let present = ow.reset().unwrap();
-    assert!(present, "No device on bus");
-
-    ow.write_pullup(&amp;[0xCC, 0x44], 750).unwrap();
-    ow.reset().unwrap();
-    ow.write(&amp;[0xCC, 0xBE]).unwrap();
-    let data = ow.read(9).unwrap();
-
-    let raw = i16::from_le_bytes([data[0], data[1]]);
-    raw as f32 / 16.0
-}
-<span class="boring">}</span></code></pre>
-<h2 id="bus-scanning"><a class="header" href="#bus-scanning">Bus Scanning</a></h2>
-<p>To enumerate all devices on the 1-Wire bus:</p>
-<pre><code class="language-bash">gallo onewire search
-</code></pre>
-<p>Output:</p>
-<pre><code>Found 2 device(s):
-  1: ROM ID 0x28FF123456780012 (family 0x28)
-  2: ROM ID 0x28FF9ABCDE340056 (family 0x28)
-</code></pre>
-<p>The family code <code>0x28</code> identifies DS18B20 sensors. Each ROM ID is a unique
-64-bit address: family code (1 byte) + serial number (6 bytes) + CRC (1 byte).</p>
-<h2 id="hardware-setup"><a class="header" href="#hardware-setup">Hardware Setup</a></h2>
-<p>Connect a DS18B20 (or other 1-Wire device) to <strong>GPIO 16</strong> with a 4.7kΩ
-pull-up resistor to 3.3V:</p>
-<pre><code>3.3V ──┬── 4.7kΩ ──┬── GPIO 16 (data)
-       │            │
-       │          DS18B20
-       │            │
-      GND ─────── GND
-</code></pre>
-<p>For parasitic power mode (no separate VDD), use the <code>write-pullup</code> command
-which drives the data line high after sending commands to supply power
-through the bus itself.</p>
+<h2 id="source-of-truth"><a class="header" href="#source-of-truth">Source of Truth</a></h2>
+<p>The enum lives in
+<a href="https://github.com/OpenDevicePartnership/pico-de-gallo/blob/main/crates/pico-de-gallo-ffi/src/lib.rs"><code>crates/pico-de-gallo-ffi/src/lib.rs</code></a>
+and is mirrored into the generated <code>pico_de_gallo.h</code> by cbindgen.
+If a code is missing from this table after a release, file an
+issue — that’s a documentation bug.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="transaction-batching.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../internals/releases.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="ffi.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../appendix/endpoints.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -355,11 +297,11 @@ through the bus itself.</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="transaction-batching.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../internals/releases.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="ffi.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../appendix/endpoints.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
@@ -379,13 +321,13 @@ through the bus itself.</p>
         </script>
 
 
-        <script src="elasticlunr-ef4e11c1.min.js"></script>
-        <script src="mark-09e88c2c.min.js"></script>
-        <script src="searcher-c2a407aa.js"></script>
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
 
-        <script src="clipboard-1626706a.min.js"></script>
-        <script src="highlight-abc7f01d.js"></script>
-        <script src="book-a0b12cfe.js"></script>
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
 

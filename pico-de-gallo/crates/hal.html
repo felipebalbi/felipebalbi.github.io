@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>PWM - Pico de Gallo</title>
+        <title>pico-de-gallo-hal - Pico de Gallo</title>
 
 
         <!-- Custom HTML head -->
@@ -12,20 +12,20 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
 
-        <link rel="icon" href="favicon-de23e50b.svg">
-        <link rel="shortcut icon" href="favicon-8114d1fc.png">
-        <link rel="stylesheet" href="css/variables-8adf115d.css">
-        <link rel="stylesheet" href="css/general-2459343d.css">
-        <link rel="stylesheet" href="css/chrome-ae938929.css">
-        <link rel="stylesheet" href="css/print-9e4910d8.css" media="print">
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
 
         <!-- Fonts -->
-        <link rel="stylesheet" href="fonts/fonts-9644e21d.css">
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" id="mdbook-highlight-css" href="highlight-493f70e1.css">
-        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="tomorrow-night-4c0ae647.css">
-        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="ayu-highlight-3fdfc3ac.css">
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
 
         <!-- Custom theme stylesheets -->
 
@@ -34,13 +34,13 @@
 
         <!-- Provide site root and default themes to javascript -->
         <script>
-            const path_to_root = "";
+            const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f5b27c43.js";
+            window.path_to_searchindex_js = "../searchindex-7797e364.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-ce601ddd.js"></script>
+        <script src="../toc-d167d9bc.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -107,7 +107,7 @@
             <!-- populated by js -->
             <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
             <noscript>
-                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
             </noscript>
             <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>
@@ -142,7 +142,7 @@
                     <h1 class="menu-title">Pico de Gallo</h1>
 
                     <div class="right-buttons">
-                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
                             <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
                         </a>
 
@@ -176,239 +176,169 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="pwm"><a class="header" href="#pwm">PWM</a></h1>
-<p>Pico de Gallo provides 4 PWM output channels through the RP2350’s hardware
-PWM slices. Each channel maps to a specific GPIO pin and slice/channel
-combination.</p>
-<h2 id="pin-mapping"><a class="header" href="#pin-mapping">Pin Mapping</a></h2>
+                        <h1 id="pico-de-gallo-hal"><a class="header" href="#pico-de-gallo-hal"><code>pico-de-gallo-hal</code></a></h1>
+<p><a href="https://docs.rs/pico-de-gallo-hal"><code>pico-de-gallo-hal</code></a> lets you run real
+<code>embedded-hal</code> driver code against a Pico de Gallo board on your laptop.</p>
+<p>That is the whole value proposition:</p>
+<ul>
+<li>write your driver against standard traits,</li>
+<li>swap in <code>pico-de-gallo-hal</code> during host-side testing,</li>
+<li>iterate without cross-compiling, flashing, linker scripts, or probe tools.</li>
+</ul>
+<p>If your driver already speaks <code>embedded-hal</code>, this crate turns Pico de Gallo
+into a host-side transport layer instead of a custom test harness.</p>
+<h2 id="runtime-model"><a class="header" href="#runtime-model">Runtime Model</a></h2>
+<p><code>Hal::new()</code> works in both sync and async host code.</p>
+<ul>
+<li><strong>Inside a Tokio runtime</strong>, the crate uses <code>tokio::task::block_in_place()</code> for
+blocking trait calls.</li>
+<li><strong>Outside Tokio</strong>, it creates and owns its own runtime.</li>
+</ul>
+<p>That means one <code>Hal</code> value can back ordinary tests, examples, and async host
+applications.</p>
+<h2 id="construction"><a class="header" href="#construction">Construction</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>PWM Channel</th><th>GPIO</th><th>Slice</th><th>Slice Channel</th></tr>
+<tr><th>Method</th><th>Purpose</th></tr>
 </thead>
 <tbody>
-<tr><td>0</td><td>12</td><td>6</td><td>A</td></tr>
-<tr><td>1</td><td>13</td><td>6</td><td>B</td></tr>
-<tr><td>2</td><td>14</td><td>7</td><td>A</td></tr>
-<tr><td>3</td><td>15</td><td>7</td><td>B</td></tr>
+<tr><td><code>Hal::new()</code></td><td>Connect to the first matching board</td></tr>
+<tr><td><code>Hal::new_with_serial_number(serial)</code></td><td>Connect to one specific board</td></tr>
 </tbody>
 </table>
 </div>
-<p>The total number of available channels is defined by the constant
-<code>NUM_PWM_CHANNELS = 4</code>. Channel indices are 0–3 in all APIs.</p>
-<h2 id="operations"><a class="header" href="#operations">Operations</a></h2>
+<h2 id="accessors-and-helpers"><a class="header" href="#accessors-and-helpers">Accessors and Helpers</a></h2>
+<p>The current public API is:</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Operation</th><th>Description</th></tr>
+<tr><th>Method</th><th>Returns</th><th>Purpose</th></tr>
 </thead>
 <tbody>
-<tr><td><strong>Set Duty</strong></td><td>Sets the duty cycle for a channel (0–65535)</td></tr>
-<tr><td><strong>Get Duty</strong></td><td>Returns current and maximum duty cycle</td></tr>
-<tr><td><strong>Enable</strong></td><td>Enables PWM output on a channel</td></tr>
-<tr><td><strong>Disable</strong></td><td>Disables PWM output on a channel</td></tr>
-<tr><td><strong>Set Config</strong></td><td>Configures frequency and phase-correct mode</td></tr>
-<tr><td><strong>Get Config</strong></td><td>Returns current configuration</td></tr>
+<tr><td><code>i2c()</code></td><td><code>I2c</code></td><td>I<sup>2</sup>C bus handle implementing blocking and async traits</td></tr>
+<tr><td><code>spi()</code></td><td><code>Spi</code></td><td>Raw SPI bus handle</td></tr>
+<tr><td><code>spi_device(cs_pin)</code></td><td><code>Result&lt;SpiDev, SpiHalError&gt;</code></td><td>SPI device handle that manages chip-select for you</td></tr>
+<tr><td><code>uart()</code></td><td><code>Uart</code></td><td>UART handle implementing <code>embedded_io</code> and <code>embedded_io_async</code></td></tr>
+<tr><td><code>gpio(pin)</code></td><td><code>Gpio</code></td><td>GPIO pin handle implementing digital traits</td></tr>
+<tr><td><code>pwm_channel(channel)</code></td><td><code>PwmChannel</code></td><td>PWM channel handle implementing <code>SetDutyCycle</code></td></tr>
+<tr><td><code>delay()</code></td><td><code>Delay</code></td><td>Delay provider</td></tr>
+<tr><td><code>onewire()</code></td><td><code>OneWire</code></td><td>Project-specific 1-Wire handle</td></tr>
+<tr><td><code>adc_read(channel)</code></td><td><code>Result&lt;u16, AdcHalError&gt;</code></td><td>Single-shot ADC read</td></tr>
+<tr><td><code>adc_get_config()</code></td><td><code>Result&lt;AdcConfigurationInfo, AdcHalError&gt;</code></td><td>ADC capabilities/configuration</td></tr>
+<tr><td><code>i2c_set_config(frequency)</code></td><td><code>Result&lt;(), I2cHalError&gt;</code></td><td>Set I<sup>2</sup>C frequency</td></tr>
+<tr><td><code>i2c_get_config()</code></td><td><code>Result&lt;I2cFrequency, I2cHalError&gt;</code></td><td>Read I<sup>2</sup>C frequency</td></tr>
+<tr><td><code>spi_set_config(freq, phase, polarity)</code></td><td><code>Result&lt;(), SpiHalError&gt;</code></td><td>Set SPI mode and clock</td></tr>
+<tr><td><code>spi_get_config()</code></td><td><code>Result&lt;SpiConfigurationInfo, SpiHalError&gt;</code></td><td>Read SPI configuration</td></tr>
+<tr><td><code>pwm_set_config(channel, freq, phase_correct)</code></td><td><code>Result&lt;(), PwmHalError&gt;</code></td><td>Set PWM slice configuration</td></tr>
+<tr><td><code>pwm_get_config(channel)</code></td><td><code>Result&lt;PwmConfigurationInfo, PwmHalError&gt;</code></td><td>Read PWM slice configuration</td></tr>
+<tr><td><code>gpio_subscribe(pin, edge)</code></td><td><code>Result&lt;(), GpioHalError&gt;</code></td><td>Start firmware-side GPIO monitoring</td></tr>
+<tr><td><code>gpio_unsubscribe(pin)</code></td><td><code>Result&lt;(), GpioHalError&gt;</code></td><td>Stop GPIO monitoring</td></tr>
 </tbody>
 </table>
 </div>
-<h2 id="led-brightness-example"><a class="header" href="#led-brightness-example">LED Brightness Example</a></h2>
-<p>A common use case is driving an LED at variable brightness. Connect an LED
-(with appropriate current-limiting resistor) to one of the PWM pins and
-control its brightness through the duty cycle.</p>
-<h3 id="cli"><a class="header" href="#cli">CLI</a></h3>
-<pre><code class="language-bash"># 1. Configure channel 0 for 1 kHz, normal (not phase-correct) mode
-gallo pwm set-config --channel 0 --frequency 1000
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>The source-of-truth API currently exposes <code>gpio(pin)</code> and <code>uart()</code>. There are
+<strong>not</strong> separate <code>output_pin()</code>, <code>input_pin()</code>, or <code>uart_async()</code> constructors;
+the returned handles implement the relevant blocking and async traits directly.</p>
+</blockquote>
+<h2 id="implemented-traits"><a class="header" href="#implemented-traits">Implemented Traits</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Peripheral</th><th>Blocking trait</th><th>Async trait</th></tr>
+</thead>
+<tbody>
+<tr><td>GPIO</td><td><code>OutputPin</code>, <code>InputPin</code>, <code>StatefulOutputPin</code></td><td><code>Wait</code></td></tr>
+<tr><td>I<sup>2</sup>C</td><td><code>embedded_hal::i2c::I2c</code></td><td><code>embedded_hal_async::i2c::I2c</code></td></tr>
+<tr><td>SPI</td><td><code>SpiBus</code>, <code>SpiDevice</code></td><td><code>SpiBus</code>, <code>SpiDevice</code></td></tr>
+<tr><td>UART</td><td><code>embedded_io::Read</code>, <code>embedded_io::Write</code></td><td><code>embedded_io_async::Read</code>, <code>embedded_io_async::Write</code></td></tr>
+<tr><td>PWM</td><td><code>SetDutyCycle</code></td><td>—</td></tr>
+<tr><td>Delay</td><td><code>DelayNs</code></td><td><code>DelayNs</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>And two project-specific surfaces sit alongside the trait-based ones:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Type / method</th><th>Why it exists</th></tr>
+</thead>
+<tbody>
+<tr><td><code>OneWire</code> via <code>hal.onewire()</code></td><td>there is no standard <code>embedded-hal</code> 1-Wire trait</td></tr>
+<tr><td><code>adc_read()</code> / <code>adc_get_config()</code></td><td>there is no stable <code>embedded-hal</code> ADC trait in 1.0</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="minimal-example"><a class="header" href="#minimal-example">Minimal Example</a></h2>
+<pre class="playground"><code class="language-rust no_run">use embedded_hal::i2c::I2c;
+use pico_de_gallo_hal::Hal;
 
-# 2. Enable PWM output on channel 0
-gallo pwm enable --channel 0
+fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let hal = Hal::new();
+    let mut i2c = hal.i2c();
 
-# 3. Set duty cycle to 50% (32768 out of 65535)
-gallo pwm set-duty --channel 0 --duty 32768
+    let mut buf = [0u8; 2];
+    i2c.write_read(0x48, &amp;[0x00], &amp;mut buf)?;
 
-# 4. Read back the current duty cycle
-gallo pwm get-duty --channel 0
-
-# 5. Dim the LED to ~25%
-gallo pwm set-duty --channel 0 --duty 16384
-
-# 6. Read back the current configuration
-gallo pwm get-config --channel 0
-
-# 7. Switch to phase-correct mode at 500 Hz
-gallo pwm set-config --channel 0 --frequency 500 --phase-correct
-
-# 8. Disable the channel when done
-gallo pwm disable --channel 0
-</code></pre>
-<h3 id="rust-library"><a class="header" href="#rust-library">Rust Library</a></h3>
+    println!("raw bytes: {:02x?}", buf);
+    Ok(())
+}</code></pre>
+<p>That same pattern is why this crate is so useful in driver development: the
+code above looks like ordinary embedded Rust because it is ordinary embedded
+Rust.</p>
+<h2 id="transparent-transaction-batching"><a class="header" href="#transparent-transaction-batching">Transparent Transaction Batching</a></h2>
+<p>Two methods matter a lot for performance:</p>
+<ul>
+<li><code>I2c::transaction()</code></li>
+<li><code>SpiDevice::transaction()</code></li>
+</ul>
+<p>The HAL does not turn those into several USB round-trips. Instead, it encodes
+the operations into Pico de Gallo batch requests and sends them in one shot.</p>
+<p>So if your driver already uses the transaction APIs from <code>embedded-hal</code>, you get
+Pico de Gallo’s batching support automatically.</p>
 <pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use pico_de_gallo_lib::PicoDeGallo;
+</span>use embedded_hal::i2c::{I2c, Operation};
+use pico_de_gallo_hal::Hal;
 
-async fn led_brightness(gallo: &amp;PicoDeGallo) {
-    // Configure channel 0: 1 kHz, no phase-correct
-    gallo.pwm_set_config(0, 1_000, false).await.unwrap();
+fn read_register(hal: &amp;Hal) -&gt; Result&lt;[u8; 2], Box&lt;dyn std::error::Error&gt;&gt; {
+    let mut i2c = hal.i2c();
+    let mut buf = [0u8; 2];
 
-    // Enable PWM output
-    gallo.pwm_enable(0).await.unwrap();
+    i2c.transaction(
+        0x48,
+        &amp;mut [
+            Operation::Write(&amp;[0x00]),
+            Operation::Read(&amp;mut buf),
+        ],
+    )?;
 
-    // Set 50% duty cycle
-    gallo.pwm_set_duty_cycle(0, 32_768).await.unwrap();
-
-    // Read back duty info
-    let duty_info = gallo.pwm_get_duty_cycle(0).await.unwrap();
-    println!(
-        "Duty: {}/{} ({:.1}%)",
-        duty_info.current_duty,
-        duty_info.max_duty,
-        duty_info.current_duty as f32 / duty_info.max_duty as f32 * 100.0
-    );
-
-    // Read back configuration
-    let config = gallo.pwm_get_config(0).await.unwrap();
-    println!(
-        "Frequency: {} Hz, Phase-correct: {}, Enabled: {}",
-        config.frequency_hz, config.phase_correct, config.enabled
-    );
-
-    // Disable when done
-    gallo.pwm_disable(0).await.unwrap();
+    Ok(buf)
 }
 <span class="boring">}</span></code></pre>
-<h3 id="c-ffi"><a class="header" href="#c-ffi">C (FFI)</a></h3>
-<pre><code class="language-c">#include "pico_de_gallo.h"
-#include &lt;stdio.h&gt;
-
-void led_brightness(PicoDeGallo *gallo) {
-    /* Configure channel 0: 1 kHz, no phase-correct */
-    gallo_pwm_set_config(gallo, 0, 1000, false);
-
-    /* Enable PWM output */
-    gallo_pwm_enable(gallo, 0);
-
-    /* Set 50% duty cycle */
-    gallo_pwm_set_duty_cycle(gallo, 0, 32768);
-
-    /* Read back duty info */
-    GalloPwmDutyCycleInfo duty_info;
-    gallo_pwm_get_duty_cycle(gallo, 0, &amp;duty_info);
-    printf("Duty: %u/%u\n", duty_info.current_duty, duty_info.max_duty);
-
-    /* Read back configuration */
-    GalloPwmConfigurationInfo config_info;
-    gallo_pwm_get_config(gallo, 0, &amp;config_info);
-    printf("Frequency: %u Hz, Phase-correct: %d, Enabled: %d\n",
-           config_info.frequency_hz, config_info.phase_correct,
-           config_info.enabled);
-
-    /* Disable when done */
-    gallo_pwm_disable(gallo, 0);
-}
-</code></pre>
-<h3 id="hal"><a class="header" href="#hal">HAL</a></h3>
-<p>The HAL crate exposes individual PWM channels as <code>embedded_hal::pwm::SetDutyCycle</code>
-implementors, allowing use with any driver that accepts the standard trait.</p>
-<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use pico_de_gallo_hal::Hal;
-use embedded_hal::pwm::SetDutyCycle;
-
-fn servo_control(hal: &amp;Hal) {
-    let mut pwm = hal.pwm_channel(0);
-
-    // SetDutyCycle trait methods
-    pwm.set_duty_cycle(32_768).unwrap();
-
-    let max = pwm.max_duty_cycle();
-    println!("Max duty: {max}");
-
-    // 75% duty cycle
-    pwm.set_duty_cycle(max * 3 / 4).unwrap();
-
-    // Fully on / fully off
-    pwm.set_duty_cycle_fully_on().unwrap();
-    pwm.set_duty_cycle_fully_off().unwrap();
-
-    // Percentage-based (if available via trait extension)
-    pwm.set_duty_cycle_percent(50).unwrap();
-}
-<span class="boring">}</span></code></pre>
-<h2 id="lib-api-reference"><a class="header" href="#lib-api-reference">Lib API Reference</a></h2>
-<p>All library methods are <code>async</code> and return <code>Result</code> types. The
-<code>PicoDeGallo</code> instance is created with <code>PicoDeGallo::new()</code> (which is
-<strong>not</strong> async).</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Method</th><th>Return Type</th></tr>
-</thead>
-<tbody>
-<tr><td><code>pwm_set_duty_cycle(channel: u8, duty: u16)</code></td><td><code>Result&lt;(), PicoDeGalloError&lt;PwmError&gt;&gt;</code></td></tr>
-<tr><td><code>pwm_get_duty_cycle(channel: u8)</code></td><td><code>Result&lt;PwmDutyCycleInfo, PicoDeGalloError&lt;PwmError&gt;&gt;</code></td></tr>
-<tr><td><code>pwm_enable(channel: u8)</code></td><td><code>Result&lt;(), PicoDeGalloError&lt;PwmError&gt;&gt;</code></td></tr>
-<tr><td><code>pwm_disable(channel: u8)</code></td><td><code>Result&lt;(), PicoDeGalloError&lt;PwmError&gt;&gt;</code></td></tr>
-<tr><td><code>pwm_set_config(channel: u8, frequency_hz: u32, phase_correct: bool)</code></td><td><code>Result&lt;(), PicoDeGalloError&lt;PwmError&gt;&gt;</code></td></tr>
-<tr><td><code>pwm_get_config(channel: u8)</code></td><td><code>Result&lt;PwmConfigurationInfo, PicoDeGalloError&lt;PwmError&gt;&gt;</code></td></tr>
-</tbody>
-</table>
-</div>
-<h3 id="response-types"><a class="header" href="#response-types">Response Types</a></h3>
-<p><strong><code>PwmDutyCycleInfo</code></strong></p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Field</th><th>Type</th><th>Description</th></tr>
-</thead>
-<tbody>
-<tr><td><code>max_duty</code></td><td><code>u16</code></td><td>Maximum duty cycle value (65535)</td></tr>
-<tr><td><code>current_duty</code></td><td><code>u16</code></td><td>Currently configured duty cycle</td></tr>
-</tbody>
-</table>
-</div>
-<p><strong><code>PwmConfigurationInfo</code></strong></p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Field</th><th>Type</th><th>Description</th></tr>
-</thead>
-<tbody>
-<tr><td><code>frequency_hz</code></td><td><code>u32</code></td><td>Configured PWM frequency in Hz</td></tr>
-<tr><td><code>phase_correct</code></td><td><code>bool</code></td><td>Whether phase-correct mode is enabled</td></tr>
-<tr><td><code>enabled</code></td><td><code>bool</code></td><td>Whether the channel is currently enabled</td></tr>
-</tbody>
-</table>
-</div>
-<h2 id="ffi-reference"><a class="header" href="#ffi-reference">FFI Reference</a></h2>
-<p>All FFI functions follow the <code>gallo_pwm_*</code> naming convention and return
-a <code>Status</code> code.</p>
-<pre><code class="language-c">Status gallo_pwm_set_duty_cycle(PicoDeGallo *gallo, uint8_t channel, uint16_t duty);
-Status gallo_pwm_get_duty_cycle(PicoDeGallo *gallo, uint8_t channel, GalloPwmDutyCycleInfo *out_info);
-Status gallo_pwm_enable(PicoDeGallo *gallo, uint8_t channel);
-Status gallo_pwm_disable(PicoDeGallo *gallo, uint8_t channel);
-Status gallo_pwm_set_config(PicoDeGallo *gallo, uint8_t channel, uint32_t frequency, bool phase_correct);
-Status gallo_pwm_get_config(PicoDeGallo *gallo, uint8_t channel, GalloPwmConfigurationInfo *out_info);
-</code></pre>
-<h2 id="hardware-setup"><a class="header" href="#hardware-setup">Hardware Setup</a></h2>
-<p>Connect an LED (or other PWM-compatible load) to one of the PWM pins with
-a current-limiting resistor:</p>
-<pre><code>GPIO 12 (PWM 0) ── 330Ω ──┬── LED ── GND
-                           │
-GPIO 13 (PWM 1) ── 330Ω ──┘  (or separate LEDs)
-</code></pre>
-<p>For servo motors, connect the signal wire directly to a PWM pin and
-configure for the servo’s expected frequency (typically 50 Hz). Adjust
-the duty cycle to control the servo position.</p>
+<p>For SPI devices, <code>spi_device(cs_pin)</code> wraps the same idea with automatic CS
+assert/deassert around the whole transaction.</p>
+<h2 id="when-to-reach-for-this-crate"><a class="header" href="#when-to-reach-for-this-crate">When to Reach for This Crate</a></h2>
+<p>Use <code>pico-de-gallo-hal</code> when you want to:</p>
+<ul>
+<li>validate a driver crate against real hardware behavior,</li>
+<li>keep one code path for host-side tests and MCU targets,</li>
+<li>avoid writing custom mocks before you know the driver is correct.</li>
+</ul>
+<p>For a full walk-through, jump ahead to
+<a href="../driver/testing.html">Testing with <code>pico-de-gallo-hal</code></a> in Part V.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="uart.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../crates/lib.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="adc.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../crates/ffi.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -418,11 +348,11 @@ the duty cycle to control the servo position.</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="uart.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../crates/lib.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="adc.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../crates/ffi.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
@@ -442,13 +372,13 @@ the duty cycle to control the servo position.</p>
         </script>
 
 
-        <script src="elasticlunr-ef4e11c1.min.js"></script>
-        <script src="mark-09e88c2c.min.js"></script>
-        <script src="searcher-c2a407aa.js"></script>
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
 
-        <script src="clipboard-1626706a.min.js"></script>
-        <script src="highlight-abc7f01d.js"></script>
-        <script src="book-a0b12cfe.js"></script>
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
 
