@@ -38,7 +38,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-9af9797c.js";
+            window.path_to_searchindex_js = "searchindex-f2ce0cf4.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-d167d9bc.js"></script>
@@ -5298,6 +5298,22 @@ context, while background tasks handle work such as GPIO event publication.</p>
 <p>This is why the firmware can do DMA-backed transfers and interrupt-driven I/O
 without turning into a hand-written state machine maze.</p>
 </blockquote>
+<h3 id="watchdog"><a class="header" href="#watchdog">Watchdog</a></h3>
+<p>A dedicated <code>watchdog_feeder_task</code> arms the RP2350 hardware watchdog at
+<strong>2 seconds</strong> and feeds it every <strong>800 ms</strong>. The 800 ms cadence leaves
+margin for embassy scheduling jitter while keeping the worst-case
+recovery time under 2 seconds when a handler genuinely wedges.</p>
+<p>The feeder is a <strong>separate embassy task</strong>, not part of any RPC handler.
+This is deliberate: postcard-rpc dispatches handlers serially on a
+shared context, and a wedged handler would also wedge any handler-based
+feed scheme. The dispatcher-wedge regression closed in
+<code>pico-de-gallo-firmware</code> 0.11.0 (see CHANGELOG) is exactly the scenario
+this defense covers — even with the GPIO <code>wait_for_*</code> timeout fix, any
+future unbounded await in a handler will trip the watchdog within 2 s
+and reset the device.</p>
+<p><code>pause_on_debug(true)</code> is set so an attached debugger session does not
+reset the chip while you single-step. The watchdog is the same on both
+<code>hw-rev1</code> and <code>hw-rev2</code> (no rev-specific code).</p>
 <h2 id="no_std-and-logging"><a class="header" href="#no_std-and-logging"><code>no_std</code> and logging</a></h2>
 <p>This crate is <code>no_std</code>. Logging uses <code>defmt</code> over RTT.</p>
 <blockquote class="blockquote-tag blockquote-tag-important">
