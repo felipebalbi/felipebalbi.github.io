@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f2ce0cf4.js";
+            window.path_to_searchindex_js = "../searchindex-70145703.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-d167d9bc.js"></script>
@@ -215,8 +215,10 @@ gallo_free(gallo);
 <tr><th>Function</th><th>Purpose</th></tr>
 </thead>
 <tbody>
-<tr><td><code>const PicoDeGallo *gallo_init(void)</code></td><td>Connect to the first matching board</td></tr>
-<tr><td><code>const PicoDeGallo *gallo_init_with_serial_number(const char *serial)</code></td><td>Connect to a board with a specific USB serial number</td></tr>
+<tr><td><code>const PicoDeGallo *gallo_init(void)</code></td><td>Connect to the first matching board (lazy — failures surface on first RPC)</td></tr>
+<tr><td><code>const PicoDeGallo *gallo_init_with_serial_number(const char *serial)</code></td><td>Connect to a board with a specific USB serial number (lazy)</td></tr>
+<tr><td><code>const PicoDeGallo *gallo_init_strict(void)</code></td><td>Like <code>gallo_init</code> but calls <code>validate()</code> before returning; returns <code>NULL</code> on schema mismatch or device-not-present</td></tr>
+<tr><td><code>const PicoDeGallo *gallo_init_strict_with_serial_number(const char *serial)</code></td><td>Like the above with serial-number selection; recommended in production</td></tr>
 <tr><td><code>void gallo_free(const PicoDeGallo *gallo)</code></td><td>Release the opaque handle; <code>NULL</code> is a safe no-op</td></tr>
 </tbody>
 </table>

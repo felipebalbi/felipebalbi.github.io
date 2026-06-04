@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f2ce0cf4.js";
+            window.path_to_searchindex_js = "../searchindex-70145703.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-d167d9bc.js"></script>
@@ -261,16 +261,23 @@ from.</p>
 </tbody>
 </table>
 </div>
-<p>A <code>gpio/event</code> stream is opened implicitly when you call
-<code>gpio/subscribe</code> for a given pin, and closes when you
-<code>gpio/unsubscribe</code>. Subscriptions are server-side state that
-outlives the USB transport, so a host whose process crashed or
-was killed without unsubscribing will leave the pin owned by a
-firmware monitor task. Hosts should call
-<code>system/reset-subscriptions</code> once on connect (after
-<code>device/info</code>) to reclaim any such pins. The endpoint is
-idempotent and returns the number of subscriptions that were
-torn down.</p>
+<p>The <code>gpio/event</code> topic is a <strong>single multiplexed stream</strong> carrying
+events for every subscribed pin (each <code>GpioEvent</code> carries a
+<code>pin: u8</code> field so the host can demultiplex). <code>gpio/subscribe(pin, edge)</code> enables firmware-side monitoring of one pin; <code>gpio/unsubscribe(pin)</code>
+tears it down. Events for any subscribed pin arrive on the shared
+stream — there is no per-pin sub-channel and no implicit per-pin
+stream-open/close.</p>
+<p>Subscriptions are server-side state that outlives the USB transport,
+so a host whose process crashed or was killed without unsubscribing
+will leave the pin owned by a firmware monitor task. Hosts should
+call <code>system/reset-subscriptions</code> once on connect (after
+<code>device/info</code>) to reclaim any such pins. The endpoint is idempotent
+and returns the number of subscriptions that were torn down.</p>
+<p>Stale events: after <code>gpio/unsubscribe(pin)</code> returns <code>Ok</code>, a
+<code>GpioEvent</code> for that pin may still arrive (the firmware best-effort
+publishes events that were in-flight at unsubscribe time). Consumers
+should filter against their current subscription set and drop
+unknown-pin events without erroring.</p>
 <h2 id="adding-endpoints"><a class="header" href="#adding-endpoints">Adding Endpoints</a></h2>
 <p>If you’‘re contributing a new endpoint, the recipe touches six
 crates plus tests and documentation. Don’’t forget the
