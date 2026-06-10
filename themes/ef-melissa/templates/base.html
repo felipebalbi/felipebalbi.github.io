@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+{# data-theme is set by the inline script below before paint. #}
+<html lang="{{ config.default_language }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  {# ----------------------------------------------------------
+       Theme bootstrap.
+
+       Every visit starts in "auto" mode: we read the OS
+       prefers-color-scheme and resolve to "light" or "dark"
+       BEFORE the body paints, to avoid a flash of wrong colors.
+       Nothing is persisted; clicking the toggle only affects
+       the current page (until reload or next OS change).
+     ---------------------------------------------------------- #}
+  <script>
+    (function () {
+      var dark = window.matchMedia &&
+                 window.matchMedia('(prefers-color-scheme: dark)').matches;
+      document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    })();
+  </script>
+
+  <title>{% block title %}{{ config.title }}{% endblock %}</title>
+  <meta name="description" content="{% block description %}{{ config.description }}{% endblock %}">
+  <meta name="author" content="{{ config.extra.author | default(value=config.title) }}">
+
+  {# Preload the two most-used font files for a faster first paint. #}
+  <link rel="preload" href="/fonts/aporetic-serif-regular.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/aporetic-sans-regular.woff2"  as="font" type="font/woff2" crossorigin>
+
+  <link rel="stylesheet" href="{{ get_url(path='style.css', cachebust=true) }}">
+
+  {# Class-based syntax highlight stylesheets. Both are loaded
+     so the swap is instant. Zola emits both into the static
+     root when [markdown.highlighting].style = "class". The
+     end-of-body script disables the inactive one based on
+     data-theme. cachebust is intentionally omitted here:
+     these files are generated during the build, so
+     get_url(cachebust=true) cannot stat them yet. #}
+  <link id="hl-light" rel="stylesheet" href="{{ get_url(path='giallo-light.css') }}">
+  <link id="hl-dark"  rel="stylesheet" href="{{ get_url(path='giallo-dark.css')  }}" disabled>
+
+  {% if config.generate_feeds %}
+  <link rel="alternate" type="application/atom+xml" title="{{ config.title }}" href="{{ get_url(path='atom.xml', trailing_slash=false) }}">
+  {% endif %}
+  <link rel="canonical" href="{{ current_url | default(value=config.base_url) | safe }}">
+
+  {# Open Graph / Twitter #}
+  <meta property="og:title"       content="{% block og_title %}{{ config.title }}{% endblock %}">
+  <meta property="og:description" content="{% block og_description %}{{ config.description }}{% endblock %}">
+  <meta property="og:type"        content="{% block og_type %}website{% endblock %}">
+  <meta property="og:url"         content="{{ current_url | default(value=config.base_url) | safe }}">
+  <meta name="twitter:card"       content="summary">
+
+  {% block head_extra %}{% endblock %}
+</head>
+<body>
+  <div class="wrap">
+    <header class="site-header">
+      <a class="site-name" href="{{ config.base_url }}">{{ config.title }}</a>
+      <nav class="site-nav" aria-label="Primary">
+        {% for item in config.extra.nav %}
+          <a href="{{ item.url }}"{% if current_path and current_path is starting_with(item.url) %} class="active"{% endif %}>{{ item.name }}</a>
+        {% endfor %}
+        {# ---- Light/dark theme toggle ----
+             Two icons live inside the button; CSS shows the one
+             that represents the action the click will perform:
+               data-theme="light"  -> show moon (click -> dark)
+               data-theme="dark"   -> show sun  (click -> light)
+        #}
+        <button id="theme-toggle"
+                class="theme-toggle"
+                type="button"
+                aria-label="Toggle color theme"
+                title="Toggle color theme">
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round"
+               aria-hidden="true">
+            <circle cx="12" cy="12" r="4"/>
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+          </svg>
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round"
+               aria-hidden="true">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+        </button>
+      </nav>
+    </header>
+
+    <main>
+      {% block content %}{% endblock %}
+    </main>
+
+    <footer class="site-footer">
+      <div>&copy; {{ now() | date(format='%Y') }} {{ config.extra.author | default(value=config.title) }}</div>
+      <div>
+        {% if config.extra.github %}<a href="{{ config.extra.github }}" rel="me">GitHub</a>{% endif %}
+        {% if config.generate_feeds %} &middot; <a href="/atom.xml">RSS</a>{% endif %}
+      </div>
+    </footer>
+  </div>
+
+  {# ----------------------------------------------------------
+       Theme behavior (button click + syntax stylesheet swap).
+
+       The bootstrap script above already set data-theme from
+       prefers-color-scheme. This script:
+
+         1. Syncs the syntax-highlight stylesheets to the
+            current data-theme.
+         2. Flips data-theme on button click (no persistence
+            \u2014 a reload returns to OS preference).
+         3. Tracks OS changes UNTIL the user clicks, after
+            which we stop overriding so manual choice sticks
+            for the rest of the page lifetime.
+     ---------------------------------------------------------- #}
+  <script>
+    (function () {
+      var root      = document.documentElement;
+      var btn       = document.getElementById('theme-toggle');
+      var hlL       = document.getElementById('hl-light');
+      var hlD       = document.getElementById('hl-dark');
+      var mql       = window.matchMedia('(prefers-color-scheme: dark)');
+      var userChose = false;
+
+      function applyHighlight() {
+        var t = root.getAttribute('data-theme');
+        if (hlL) hlL.disabled = (t !== 'light');
+        if (hlD) hlD.disabled = (t !== 'dark');
+      }
+
+      function setTheme(t) {
+        root.setAttribute('data-theme', t);
+        applyHighlight();
+      }
+
+      // Initial sync.
+      applyHighlight();
+
+      if (btn) {
+        btn.addEventListener('click', function () {
+          userChose = true;
+          setTheme(root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+        });
+      }
+
+      // Follow OS until the user makes a manual choice.
+      if (mql.addEventListener) {
+        mql.addEventListener('change', function (e) {
+          if (!userChose) setTheme(e.matches ? 'dark' : 'light');
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

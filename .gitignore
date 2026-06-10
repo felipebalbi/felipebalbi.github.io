@@ -1,6 +1,12 @@
 # Zola build output
 public/
 
+# Zola writes class-mode syntax highlight stylesheets into
+# the source static/ dir at build time (then copies them
+# into public/). They're generated; don't commit them.
+static/giallo-light.css
+static/giallo-dark.css
+
 # OS junk
 .DS_Store
 Thumbs.db

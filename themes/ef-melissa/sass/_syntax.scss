@@ -1,0 +1,33 @@
+// ============================================================
+// ef-melissa  --  syntax highlighting integration.
+//
+// We use Zola's class-based syntax highlighting
+// (markdown.highlighting.style = "class" with light_theme +
+// dark_theme). Zola emits two stylesheets in the static root:
+//   * giallo-light.css
+//   * giallo-dark.css
+// Each contains rules like:
+//   .z-comment { color: #93a1a1; }
+//
+// Both stylesheets are linked from base.html; the inactive
+// one is `disabled` based on data-theme by the toggle script,
+// so only one rule-set applies at a time. The required
+// per-line layout classes documented at
+// https://www.getzola.org/documentation/content/syntax-highlighting/
+// live here so they don't depend on the swap.
+// ============================================================
+
+.giallo-l {
+  display: inline-block;
+  min-height: 1lh;
+  width: 100%;
+}
+.giallo-ln {
+  display: inline-block;
+  user-select: none;
+  margin-right: 0.4em;
+  padding: 0.4em;
+  min-width: 3ch;
+  text-align: right;
+  opacity: 0.8;
+}

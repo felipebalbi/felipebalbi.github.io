@@ -1,0 +1,39 @@
+# Theme metadata, per
+# https://www.getzola.org/documentation/themes/creating-a-theme/
+
+name = "ef-melissa"
+description = "Warm, generous-whitespace blog theme inspired by Protesilaos Stavrou's ef-melissa-light / ef-melissa-dark Emacs themes. Self-hosted Aporetic Serif/Sans/Mono fonts. Light/dark switcher that follows the OS by default."
+license = "MIT"
+homepage = "https://github.com/felipebalbi/felipebalbi.github.io"
+min_version = "0.22.0"
+
+[author]
+name = "Felipe Balbi"
+homepage = "https://balbi.sh"
+
+# The theme expects:
+#
+#   config.toml:
+#     theme = "ef-melissa"
+#     [extra]
+#     author  = "..."   (optional; falls back to config.title)
+#     github  = "..."   (optional)
+#     nav     = [ { name = "...", url = "/..." }, ... ]
+#
+# Each page load resolves the OS prefers-color-scheme to
+# either light or dark before paint. The header toggle flips
+# between the two; nothing is persisted, so a reload returns
+# to the OS preference.
+#
+# The theme also expects the site to use class-based syntax
+# highlighting so the light/dark code stylesheets can be swapped
+# at runtime:
+#
+#     [markdown.highlighting]
+#     enabled     = true
+#     highlight_code = true        # Zola < 0.20 compatibility
+#     style       = "class"
+#     light_theme = "solarized-light"
+#     dark_theme  = "solarized-dark"
+#
+[extra]

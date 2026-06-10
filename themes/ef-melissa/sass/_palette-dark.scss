@@ -1,0 +1,46 @@
+// ============================================================
+// ef-melissa-dark palette
+//
+// Direct port from ~/.emacs.d/elpa/ef-themes-2.1.0/
+// ef-melissa-dark-theme.el by Protesilaos Stavrou.
+// ============================================================
+
+@mixin ef-melissa-dark {
+  // -- Backgrounds & borders
+  --bg-main:        #352718;
+  --bg-dim:         #483426;
+  --bg-alt:         #59463f;
+  --bg-inactive:    #3d2e1f;
+  --bg-hl-line:     #4f311f;
+  --bg-completion:  #66421f;
+  --border:         #6f5f58;
+
+  // -- Foregrounds
+  --fg-main:        #e8e4b1;
+  --fg-dim:         #90918a;
+  --fg-alt:         #ccaa70;
+
+  // -- Accent / links
+  --accent:         #ffa21f;  // yellow-warmer
+  --accent-hover:   #ff7f4f;  // red-warmer
+  --accent-visited: #c6a2fe;  // magenta-cooler
+
+  // -- Inline code & prose code
+  --code-fg:        #ffa21f;
+
+  // -- Selection
+  --selection-bg:   #66421f;
+  --selection-fg:   #e8e4b1;
+
+  color-scheme: dark;
+}
+
+// Explicit dark (the head script always sets data-theme,
+// so this is the normal runtime path for dark mode).
+[data-theme="dark"] { @include ef-melissa-dark; }
+
+// JS-disabled fallback: if no data-theme has been set and
+// the OS prefers dark, still render in dark.
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) { @include ef-melissa-dark; }
+}

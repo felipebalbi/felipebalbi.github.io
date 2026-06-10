@@ -1,82 +1,17 @@
 // ============================================================
-//  Site styles inspired by ef-melissa-light (Protesilaos Stavrou)
-//  https://github.com/protesilaos/ef-themes
-//  Warm, legible, generous in white space.
+// ef-melissa  --  base, layout, typography, prose.
+// All colors come from CSS custom properties defined in
+// _palette-light.scss and _palette-dark.scss.
 // ============================================================
 
-// ---- Palette (from ef-melissa-light) ----
-:root {
-  --bg-main: #fff6d8;
-  --bg-dim:  #f5e9cb;
-  --bg-alt:  #e7d7c6;
-  --bg-inactive: #f9efd4;
-  --bg-hl-line: #fae7b0;
-  --bg-completion: #ffe2a8;
-  --border:  #c5baa6;
-
-  --fg-main: #484431;
-  --fg-dim:  #68708a;
-  --fg-alt:  #80431a;
-
-  --accent:        #ba5205;  // yellow-warmer  (links, primary)
-  --accent-hover:  #c74400;  // red-warmer
-  --accent-visited:#6448ca;  // magenta-cooler
-
-  --code-fg:       #ba5205;  // fg-prose-code (yellow-warmer)
-  --string:        #c74400;  // red-warmer
-  --type:          #008250;  // green-cooler
-  --keyword:       #a26310;  // yellow
-  --comment:       #7f6f1a;  // yellow-faint
-  --constant:      #3f60af;  // cyan
-
-  --serif: "Aporetic Serif", Iowan Old Style, "Palatino Linotype", Palatino, "Hoefler Text", Georgia, serif;
-  --sans:  "Aporetic Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --mono:  "Aporetic Sans Mono", ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
-
-  --measure: 36rem;            // ~640px reading column
-  --gutter:  1.5rem;
-}
-
-// ---- Fonts ----
-@font-face {
-  font-family: "Aporetic Serif";
-  src: url("/fonts/aporetic-serif-regular.woff2") format("woff2");
-  font-weight: 400; font-style: normal; font-display: swap;
-}
-@font-face {
-  font-family: "Aporetic Serif";
-  src: url("/fonts/aporetic-serif-italic.woff2") format("woff2");
-  font-weight: 400; font-style: italic; font-display: swap;
-}
-@font-face {
-  font-family: "Aporetic Serif";
-  src: url("/fonts/aporetic-serif-bold.woff2") format("woff2");
-  font-weight: 700; font-style: normal; font-display: swap;
-}
-@font-face {
-  font-family: "Aporetic Sans";
-  src: url("/fonts/aporetic-sans-regular.woff2") format("woff2");
-  font-weight: 400; font-style: normal; font-display: swap;
-}
-@font-face {
-  font-family: "Aporetic Sans";
-  src: url("/fonts/aporetic-sans-bold.woff2") format("woff2");
-  font-weight: 700; font-style: normal; font-display: swap;
-}
-@font-face {
-  font-family: "Aporetic Sans Mono";
-  src: url("/fonts/aporetic-mono-regular.woff2") format("woff2");
-  font-weight: 400; font-style: normal; font-display: swap;
-}
-
-// ---- Reset / box-sizing ----
+// ---- Reset / box-sizing ----------------------------------
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
 body, h1, h2, h3, h4, h5, h6, p, ul, ol, figure, blockquote, pre {
   margin: 0;
 }
 
-// ---- Base ----
+// ---- Base -------------------------------------------------
 html {
   font-size: 18px;
   scroll-behavior: smooth;
@@ -90,21 +25,22 @@ body {
   font-feature-settings: "kern", "liga", "calt";
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+  transition: background-color 120ms ease, color 120ms ease;
 }
 
-// ---- Layout ----
+// ---- Layout -----------------------------------------------
 .wrap {
   max-width: var(--measure);
   margin: 0 auto;
   padding: 3.5rem var(--gutter) 6rem;
 }
 
-// ---- Header ----
+// ---- Header -----------------------------------------------
 .site-header {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 1rem 2rem;
+  gap: 1rem 1.5rem;
   padding-bottom: 3rem;
   margin-bottom: 3rem;
   border-bottom: 1px solid var(--border);
@@ -121,6 +57,7 @@ body {
 .site-nav {
   display: flex;
   flex-wrap: wrap;
+  align-items: baseline;
   gap: 1.25rem;
   margin-left: auto;
   font-family: var(--sans);
@@ -134,7 +71,41 @@ body {
   }
 }
 
-// ---- Footer ----
+// ---- Theme toggle -----------------------------------------
+// Two-state button: Light <-> Dark.
+// The button shows the icon for the *next* state:
+//   data-theme="light"  -> moon (click goes to dark)
+//   data-theme="dark"   -> sun  (click goes to light)
+// JS in base.html flips data-theme on <html>, swapping
+// both the palette and (via this CSS) the visible icon.
+.theme-toggle {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  width: 2.1rem;
+  height: 2.1rem;
+  padding: 0;
+  margin-left: 0.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fg-dim);
+  cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease;
+  &:hover, &:focus-visible {
+    color: var(--accent);
+    border-color: var(--accent);
+    outline: none;
+  }
+  svg { width: 1.05rem; height: 1.05rem; display: block; }
+  // Hide both by default; the matching rule below shows one.
+  .icon-sun, .icon-moon { display: none; }
+}
+[data-theme="light"] .theme-toggle .icon-moon { display: block; }
+[data-theme="dark"]  .theme-toggle .icon-sun  { display: block; }
+
+// ---- Footer -----------------------------------------------
 .site-footer {
   margin-top: 6rem;
   padding-top: 2rem;
@@ -149,7 +120,7 @@ body {
   a { color: var(--fg-dim); &:hover { color: var(--accent); } }
 }
 
-// ---- Headings ----
+// ---- Headings ---------------------------------------------
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--sans);
   font-weight: 700;
@@ -157,12 +128,12 @@ h1, h2, h3, h4, h5, h6 {
   letter-spacing: -0.015em;
   color: var(--fg-main);
 }
-h1 { font-size: 2.1rem; margin: 0 0 1.5rem; }
-h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
-h3 { font-size: 1.2rem; margin: 2.25rem 0 0.75rem; }
+h1 { font-size: 2.1rem;  margin: 0 0 1.5rem; }
+h2 { font-size: 1.5rem;  margin: 3rem 0 1rem; }
+h3 { font-size: 1.2rem;  margin: 2.25rem 0 0.75rem; }
 h4 { font-size: 1.05rem; margin: 2rem 0 0.5rem; }
 
-// ---- Prose ----
+// ---- Prose ------------------------------------------------
 p, ul, ol, blockquote, pre, figure, table {
   margin: 0 0 1.25rem;
 }
@@ -172,18 +143,18 @@ a {
   color: var(--accent);
   text-decoration-thickness: 1px;
   text-underline-offset: 0.18em;
-  &:hover { color: var(--accent-hover); }
-  &:visited { color: var(--accent-visited); }
+  &:hover    { color: var(--accent-hover); }
+  &:visited  { color: var(--accent-visited); }
 }
 .site-nav a, .site-name, .post-list a {
   &, &:visited { color: inherit; }
 }
 
 strong { color: var(--fg-alt); }
-em { font-style: italic; }
+em     { font-style: italic; }
 
 ul, ol { padding-left: 1.5rem; }
-li { margin-bottom: 0.35rem; }
+li     { margin-bottom: 0.35rem; }
 
 blockquote {
   margin-left: 0;
@@ -207,7 +178,7 @@ img, video {
   border-radius: 4px;
 }
 
-// ---- Code ----
+// ---- Code -------------------------------------------------
 code, pre, kbd, samp {
   font-family: var(--mono);
   font-size: 0.92em;
@@ -235,7 +206,7 @@ pre code {
   color: inherit;
 }
 
-// ---- Tables ----
+// ---- Tables -----------------------------------------------
 table {
   border-collapse: collapse;
   width: 100%;
@@ -252,7 +223,7 @@ th {
   color: var(--fg-alt);
 }
 
-// ---- Home / index ----
+// ---- Home / index -----------------------------------------
 .intro {
   margin-bottom: 4rem;
   p {
@@ -310,7 +281,7 @@ th {
   }
 }
 
-// ---- Post page ----
+// ---- Post page --------------------------------------------
 .post-meta {
   font-family: var(--sans);
   font-size: 0.9rem;
@@ -336,15 +307,15 @@ th {
   font-size: 0.9rem;
 }
 
-// ---- Selection ----
+// ---- Selection --------------------------------------------
 ::selection {
-  background: var(--bg-completion);
-  color: var(--fg-main);
+  background: var(--selection-bg);
+  color: var(--selection-fg);
 }
 
-// ---- Print ----
+// ---- Print ------------------------------------------------
 @media print {
   body { background: white; color: black; }
-  .site-nav, .site-footer { display: none; }
+  .site-nav, .site-footer, .theme-toggle { display: none; }
   a { color: black; text-decoration: underline; }
 }

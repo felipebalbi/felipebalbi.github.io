@@ -8,6 +8,7 @@ generate_feeds = true
 feed_filenames = ["atom.xml"]
 build_search_index = false
 author = "Felipe Balbi"
+theme = "ef-melissa"
 
 taxonomies = [
   { name = "tags", feed = true },
@@ -17,9 +18,14 @@ taxonomies = [
 smart_punctuation = true
 bottom_footnotes = true
 
+# Class-based highlighting so the light + dark stylesheets can
+# be swapped at runtime by the ef-melissa theme switcher.
+# Zola emits static/giallo-light.css + static/giallo-dark.css.
 [markdown.highlighting]
 enabled = true
-theme = "solarized-light"
+style = "class"
+light_theme = "solarized-light"
+dark_theme  = "solarized-dark"
 
 [extra]
 tagline = "Embedded systems · Rust · the craft of writing software"
