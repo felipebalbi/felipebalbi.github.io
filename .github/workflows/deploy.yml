@@ -1,0 +1,93 @@
+name: Build and deploy site
+
+on:
+  push:
+    branches: [main]
+  # Allow manual runs from the Actions tab
+  workflow_dispatch:
+
+# Only one deploy at a time; cancel any in-progress run when a new push lands.
+concurrency:
+  group: pages-deploy
+  cancel-in-progress: true
+
+permissions:
+  contents: write   # needed to push to gh-pages
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources (main)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install Zola
+        run: |
+          ZOLA_VERSION="0.22.1"
+          curl -fsSL "https://github.com/getzola/zola/releases/download/v${ZOLA_VERSION}/zola-v${ZOLA_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin
+          zola --version
+
+      - name: Build site
+        run: zola build
+
+      # ---------------------------------------------------------------
+      # Preserve everything currently on gh-pages OUTSIDE of what we
+      # generate. Specifically: CNAME, .nojekyll, and the pico-de-gallo/
+      # book (which is published separately by another repo).
+      # ---------------------------------------------------------------
+      - name: Fetch existing gh-pages (for preserved paths)
+        id: ghpages
+        continue-on-error: true
+        run: |
+          git fetch origin gh-pages --depth=1
+          mkdir -p .preserve
+          # If gh-pages exists, extract paths we want to keep
+          if git rev-parse --verify origin/gh-pages >/dev/null 2>&1; then
+            git --work-tree=.preserve checkout origin/gh-pages -- pico-de-gallo CNAME .nojekyll 2>/dev/null || true
+            # checkout updates the index; reset it so the workflow's index is clean
+            git reset HEAD -- pico-de-gallo CNAME .nojekyll 2>/dev/null || true
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # On the very first deploy gh-pages does not exist yet. Seed the
+      # preserved files from main so pico-de-gallo/ + CNAME survive.
+      - name: Seed preserved files from main (first run)
+        if: steps.ghpages.outputs.found == 'false'
+        run: |
+          mkdir -p .preserve
+          [ -d pico-de-gallo ] && cp -r pico-de-gallo .preserve/ || true
+          [ -f CNAME ]         && cp    CNAME         .preserve/ || true
+          [ -f .nojekyll ]     && cp    .nojekyll     .preserve/ || true
+
+      - name: Merge preserved files into build output
+        run: |
+          # public/ now contains the Zola build. Layer preserved files on top.
+          # cp -r will create directories and overwrite identically named files
+          # (none of the preserved files collide with Zola's output by design).
+          if [ -d .preserve/pico-de-gallo ]; then
+            cp -r .preserve/pico-de-gallo public/
+          fi
+          if [ -f .preserve/CNAME ];     then cp .preserve/CNAME     public/; fi
+          if [ -f .preserve/.nojekyll ]; then cp .preserve/.nojekyll public/; fi
+          # Always ensure .nojekyll exists so GitHub Pages serves files
+          # starting with an underscore correctly.
+          touch public/.nojekyll
+          ls -la public/
+
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public
+          publish_branch: gh-pages
+          # Keep .git history on gh-pages reasonable; force-overwrite the
+          # tip with the new build but keep prior history for rollback.
+          force_orphan: false
+          user_name: 'github-actions[bot]'
+          user_email: '41898282+github-actions[bot]@users.noreply.github.com'
+          commit_message: 'deploy: build site from ${{ github.sha }}'

@@ -1,0 +1,32 @@
+base_url = "https://balbi.sh"
+title = "Felipe Balbi"
+description = "Notes on embedded systems, Rust, and the craft of writing software."
+default_language = "en"
+compile_sass = true
+minify_html = true
+generate_feeds = true
+feed_filenames = ["atom.xml"]
+build_search_index = false
+author = "Felipe Balbi"
+
+taxonomies = [
+  { name = "tags", feed = true },
+]
+
+[markdown]
+smart_punctuation = true
+bottom_footnotes = true
+
+[markdown.highlighting]
+enabled = true
+theme = "solarized-light"
+
+[extra]
+tagline = "Embedded systems · Rust · the craft of writing software"
+github = "https://github.com/felipebalbi"
+mastodon = ""
+email = ""
+nav = [
+  { name = "Posts", url = "/posts/" },
+  { name = "Pico de Gallo Book", url = "/pico-de-gallo/" },
+]

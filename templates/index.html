@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="intro">
+  <h1>Hello, I'm Felipe.</h1>
+  <p>{{ section.content | safe }}</p>
+  {% if config.extra.tagline %}<p class="tagline">{{ config.extra.tagline }}</p>{% endif %}
+</section>
+
+{% set posts_section = get_section(path="posts/_index.md") %}
+{% if posts_section.pages | length > 0 %}
+<section>
+  <h2 class="section-title">Recent posts</h2>
+  <ul class="post-list">
+    {% for page in posts_section.pages | slice(end=10) %}
+      <li>
+        <time datetime="{{ page.date }}">{{ page.date | date(format='%Y-%m-%d') }}</time>
+        <a href="{{ page.permalink }}">{{ page.title }}</a>
+      </li>
+    {% endfor %}
+  </ul>
+  {% if posts_section.pages | length > 10 %}
+    <p style="margin-top:1.5rem"><a href="/posts/">All posts &rarr;</a></p>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}
