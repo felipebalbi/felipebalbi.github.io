@@ -199,11 +199,18 @@ pre {
   line-height: 1.5;
   font-size: 0.88rem;
   border: 1px solid var(--bg-alt);
+  // Override --mono inside code blocks: prefer system monos
+  // with reliable box-drawing coverage so Unicode tables
+  // (e.g. CLI output) align column-perfectly.
+  font-family: var(--mono-code);
 }
 pre code {
   background: transparent !important;
   padding: 0;
   color: inherit;
+  // Inherit pre's --mono-code stack instead of code's --mono,
+  // so box-drawing chars use a full-cell-width system mono.
+  font-family: inherit;
 }
 
 // ---- Tables -----------------------------------------------

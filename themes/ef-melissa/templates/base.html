@@ -61,6 +61,10 @@
   {% endif %}
   <link rel="canonical" href="{{ current_url | default(value=config.base_url) | safe }}">
 
+  {# Favicon. SVG works in every modern browser; no PNG fallback
+     needed because IE/old Safari are out of scope here. #}
+  <link rel="icon" type="image/svg+xml" href="{{ get_url(path='favicon.svg') }}">
+
   {# Open Graph / Twitter #}
   <meta property="og:title"       content="{% block og_title %}{{ config.title }}{% endblock %}">
   <meta property="og:description" content="{% block og_description %}{{ config.description }}{% endblock %}">

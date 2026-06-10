@@ -15,6 +15,16 @@
   --mono:  "Aporetic Sans Mono", ui-monospace, "SF Mono",
            "Cascadia Mono", Menlo, Consolas, monospace;
 
+  // Used inside <pre> code blocks. Aporetic Sans Mono's
+  // box-drawing glyphs aren't full-cell width, so Unicode
+  // tables (e.g. `gallo i2c scan` output) don't align with
+  // it. System monos with strong box-drawing coverage win:
+  // Cascadia/Consolas on Windows, SF Mono on macOS,
+  // DejaVu Sans Mono on Linux. Aporetic stays as a fallback.
+  --mono-code: ui-monospace, "Cascadia Mono", "SF Mono",
+               Consolas, "DejaVu Sans Mono", "Aporetic Sans Mono",
+               Menlo, monospace;
+
   // ---- Reading layout --------------------------------------
   --measure: 36rem;            // ~640px reading column
   --gutter:  1.5rem;
