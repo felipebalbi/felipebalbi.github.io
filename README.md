@@ -35,13 +35,18 @@ also by Protesilaos).
 
 ### Light / dark switching
 
-The theme ships both palettes. Every page load starts in
-"auto" mode: a small inline `<script>` in `<head>` resolves
-the OS `prefers-color-scheme` to either `light` or `dark`
-and sets `data-theme` on `<html>` *before* paint, so there's
-no flash of wrong colors. A two-state button in the header
-flips between light and dark for the current page. Nothing
-is persisted — a reload returns to the OS preference.
+The theme ships both palettes. A two-state button in the
+header flips between light and dark.
+
+On first visit to a tab, the inline `<head>` script reads
+`prefers-color-scheme` and resolves `data-theme` to either
+`light` or `dark` *before* paint, so there's no flash of
+wrong colors. Once the user clicks the toggle, the choice
+is stored in `sessionStorage` and re-applied (pre-paint, by
+the same inline script) on every subsequent page in that
+tab. Closing the tab discards the choice; the next session
+starts in OS-follow mode again. OS theme changes are
+tracked live until the user clicks.
 
 Syntax highlighting uses Zola's class-based mode, so both
 `giallo-light.css` and `giallo-dark.css` are linked at all

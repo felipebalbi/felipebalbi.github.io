@@ -20,10 +20,11 @@ homepage = "https://balbi.sh"
 #     github  = "..."   (optional)
 #     nav     = [ { name = "...", url = "/..." }, ... ]
 #
-# Each page load resolves the OS prefers-color-scheme to
-# either light or dark before paint. The header toggle flips
-# between the two; nothing is persisted, so a reload returns
-# to the OS preference.
+# Each visit starts in OS-follow mode (prefers-color-scheme
+# is resolved before paint by an inline head script). The
+# header toggle flips between light and dark; the choice is
+# stored in sessionStorage so it survives navigation and F5
+# within the tab, and resets when the tab is closed.
 #
 # The theme also expects the site to use class-based syntax
 # highlighting so the light/dark code stylesheets can be swapped

@@ -8,17 +8,31 @@
   {# ----------------------------------------------------------
        Theme bootstrap.
 
-       Every visit starts in "auto" mode: we read the OS
-       prefers-color-scheme and resolve to "light" or "dark"
-       BEFORE the body paints, to avoid a flash of wrong colors.
-       Nothing is persisted; clicking the toggle only affects
-       the current page (until reload or next OS change).
+       Resolve the theme BEFORE paint to avoid a flash of
+       wrong colors. Resolution order:
+
+         1. sessionStorage 'theme' (a previous click on this
+            tab) \u2014 survives navigation and F5, gone when
+            the tab closes.
+         2. prefers-color-scheme.
+
+       So: opening the site in a new tab follows the OS;
+       once the user clicks the toggle, the choice sticks
+       for the rest of that tab's lifetime.
      ---------------------------------------------------------- #}
   <script>
     (function () {
-      var dark = window.matchMedia &&
-                 window.matchMedia('(prefers-color-scheme: dark)').matches;
-      document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+      var stored;
+      try { stored = sessionStorage.getItem('theme'); } catch (_) {}
+      var theme;
+      if (stored === 'light' || stored === 'dark') {
+        theme = stored;
+      } else {
+        theme = (window.matchMedia &&
+                 window.matchMedia('(prefers-color-scheme: dark)').matches)
+                 ? 'dark' : 'light';
+      }
+      document.documentElement.setAttribute('data-theme', theme);
     })();
   </script>
 
@@ -108,25 +122,33 @@
   {# ----------------------------------------------------------
        Theme behavior (button click + syntax stylesheet swap).
 
-       The bootstrap script above already set data-theme from
-       prefers-color-scheme. This script:
+       The bootstrap script in <head> has already set
+       data-theme from sessionStorage or prefers-color-scheme.
+       This script:
 
          1. Syncs the syntax-highlight stylesheets to the
             current data-theme.
-         2. Flips data-theme on button click (no persistence
-            \u2014 a reload returns to OS preference).
-         3. Tracks OS changes UNTIL the user clicks, after
-            which we stop overriding so manual choice sticks
-            for the rest of the page lifetime.
+         2. On button click, flips data-theme and writes
+            the new value to sessionStorage so it survives
+            navigation within this tab.
+         3. Tracks OS theme changes ONLY while no value is
+            stored in sessionStorage (i.e. the user hasn't
+            made a manual choice on this tab yet).
      ---------------------------------------------------------- #}
   <script>
     (function () {
-      var root      = document.documentElement;
-      var btn       = document.getElementById('theme-toggle');
-      var hlL       = document.getElementById('hl-light');
-      var hlD       = document.getElementById('hl-dark');
-      var mql       = window.matchMedia('(prefers-color-scheme: dark)');
-      var userChose = false;
+      var root = document.documentElement;
+      var btn  = document.getElementById('theme-toggle');
+      var hlL  = document.getElementById('hl-light');
+      var hlD  = document.getElementById('hl-dark');
+      var mql  = window.matchMedia('(prefers-color-scheme: dark)');
+
+      function userChose() {
+        try {
+          var v = sessionStorage.getItem('theme');
+          return v === 'light' || v === 'dark';
+        } catch (_) { return false; }
+      }
 
       function applyHighlight() {
         var t = root.getAttribute('data-theme');
@@ -134,8 +156,11 @@
         if (hlD) hlD.disabled = (t !== 'dark');
       }
 
-      function setTheme(t) {
+      function setTheme(t, persist) {
         root.setAttribute('data-theme', t);
+        if (persist) {
+          try { sessionStorage.setItem('theme', t); } catch (_) {}
+        }
         applyHighlight();
       }
 
@@ -144,15 +169,15 @@
 
       if (btn) {
         btn.addEventListener('click', function () {
-          userChose = true;
-          setTheme(root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+          var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+          setTheme(next, true);
         });
       }
 
       // Follow OS until the user makes a manual choice.
       if (mql.addEventListener) {
         mql.addEventListener('change', function (e) {
-          if (!userChose) setTheme(e.matches ? 'dark' : 'light');
+          if (!userChose()) setTheme(e.matches ? 'dark' : 'light', false);
         });
       }
     })();
