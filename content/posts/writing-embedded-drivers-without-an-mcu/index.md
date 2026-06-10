@@ -186,16 +186,20 @@ bus is real. The chip is real. The driver is real. The only thing
 that's different is what's underneath the `I2c` trait — and that's
 the whole point of the trait existing in the first place.
 
-One honest caveat on that portability claim: of the buses Pico de
-Gallo exposes, only **I²C and SPI** have stable, widely-adopted
-`embedded-hal` traits today. The TMP108 example above sails through
-because it's I²C. A driver for, say, a 1-Wire temperature sensor or
-a UART-attached GPS module won't be quite as plug-and-play —
-`embedded-hal` doesn't have stable abstractions for those yet, so
-each crate tends to invent its own. The "unmodified upstream driver"
-story is strongest for I²C and SPI parts. For everything else, the
-host-side loop still works; you just may have to do a bit of
-shimming.
+One honest caveat on that portability claim: of the interfaces
+Pico de Gallo exposes, only **I²C, SPI, GPIO, and `Delay`** have
+stable, widely-adopted `embedded-hal` traits today. The TMP108
+example above sails through because it's I²C, and the alert
+examples in [tmp108's `examples/`
+folder](https://github.com/OpenDevicePartnership/tmp108/tree/main/examples)
+sail through because they only also need GPIO. A driver for, say,
+a 1-Wire temperature sensor or a UART-attached GPS module won't be
+quite as plug-and-play — `embedded-hal` doesn't have stable
+abstractions for those yet, so each crate tends to invent its own.
+The "unmodified upstream driver" story is strongest for parts
+whose driver only needs I²C, SPI, GPIO, and timing. For everything
+else, the host-side loop still works; you just may have to do a
+bit of shimming.
 
 ## The dev loop, side by side
 
@@ -356,6 +360,28 @@ silicon. No simulation. No "we'll catch it in hardware testing
 later." (More on CI in the [testing
 chapter](/pico-de-gallo/driver/testing.html) of the book.)
 
+**Runnable examples in your crate.** This one flips the framing.
+So far we've talked about Pico de Gallo as something *consumers* of
+a driver crate use. But it works just as well for the *author* of
+the crate. Cargo lets you put a `examples/` folder in your library
+and have each file be a binary; if those binaries can target a
+real, running version of your chip without anyone reaching for a
+soldering iron, they stop being "snippets you'd have to port to
+your board" and start being "things a reader can `cargo run` after
+plugging in two cables."
+
+The [`tmp108` crate's
+examples](https://github.com/OpenDevicePartnership/tmp108/tree/main/examples)
+are exactly this. There are five of them — one-shot read,
+continuous read, comparator-mode ALERT, interrupt-mode ALERT, and
+a `embedded-sensors-hal` trait demo — and every single one starts
+with `let hal = Hal::new(); let i2c = hal.i2c();` (the ALERT ones
+also grab a GPIO for the interrupt line). A reader who wants to
+understand any of the modes runs `cargo run --example oneshot` and
+gets a real temperature back from a real chip. No board-bringup
+chapter. No "you'll need to adapt this for your target." The
+documentation *is* the running program.
+
 Each of these was technically possible before. Each one required
 setting up its own bespoke pipeline, often with a custom MCU build,
 a custom log format, and a custom analysis layer on top. With a real
@@ -413,8 +439,11 @@ you want to read more, the [book](/pico-de-gallo/) covers the
 hardware, the firmware, the wire protocol, and a full chapter on
 writing a driver from scratch against a different temperature chip
 (TMP102). The [`tmp108` crate](https://crates.io/crates/tmp108) used
-in this post is on crates.io. The full ratatui dashboard code lives
-in a tiny standalone project that you can copy and adapt.
+in this post is on crates.io, and its
+[`examples/`](https://github.com/OpenDevicePartnership/tmp108/tree/main/examples)
+directory is full of `cargo run --example`-able programs that all
+target a real chip through Pico de Gallo. The full ratatui dashboard
+code lives in a tiny standalone project that you can copy and adapt.
 
 If you build something with it — a driver, a logger, a CI rig, a
 dashboard for a chip you've been wanting to characterize — I'd love
