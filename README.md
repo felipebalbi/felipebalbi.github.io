@@ -15,17 +15,20 @@ static/               Files copied verbatim to site root (fonts, etc.)
 
 ## How it deploys
 
-- **`main`** holds the source. Never served to visitors.
+- **`main`** holds the source plus two legacy paths managed externally:
+  - `pico-de-gallo/` — published into `main` by a workflow in the
+    [pico-de-gallo](https://github.com/OpenDevicePartnership/pico-de-gallo)
+    repo. We treat `main` as source-of-truth for it.
+  - `CNAME` — kept at the repo root *and* in `static/` so Zola publishes it
+    too. The workflow copies it explicitly as well.
 - **`gh-pages`** holds the built output. GitHub Pages serves this branch.
 - A push to `main` triggers `.github/workflows/deploy.yml`, which:
-  1. Installs Zola.
-  2. Runs `zola build` (output goes to `public/`).
-  3. Pulls `pico-de-gallo/`, `CNAME`, and `.nojekyll` from the previous `gh-pages` tip.
-  4. Force-pushes the merged result to `gh-pages`.
-
-The `pico-de-gallo/` directory is published into this site by a workflow in
-the [pico-de-gallo](https://github.com/OpenDevicePartnership/pico-de-gallo)
-repository. The deploy preserves it untouched.
+  1. Checks out `main`.
+  2. Installs Zola and runs `zola build` (output goes to `public/`).
+  3. Layers `pico-de-gallo/`, `CNAME`, and `.nojekyll` from `main` on top
+     of the Zola output.
+  4. Force-pushes `public/` to `gh-pages` (orphan history, one commit
+     per deploy).
 
 ## One-time setup
 
