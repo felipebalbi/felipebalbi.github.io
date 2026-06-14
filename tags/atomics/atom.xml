@@ -1,0 +1,226 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+  <title>Felipe Balbi</title>
+  <subtitle>Notes on embedded systems, Rust, and the craft of writing software.</subtitle>
+  <link href="https://balbi.sh/tags/atomics/atom.xml" rel="self" type="application/atom+xml"/>
+  <link href="https://balbi.sh"/>
+  <generator uri="https://www.getzola.org/">Zola</generator>
+  <updated>2026-06-13T21:38:00+00:00</updated>
+  <id>https://balbi.sh/tags/atomics/atom.xml</id>
+  
+  <entry xml:lang="en">
+    <title>Waking up without a critical section</title>
+    <published>2026-06-13T21:38:00+00:00</published>
+    <updated>2026-06-13T21:38:00+00:00</updated>
+    <author><name>Felipe Balbi</name></author>
+    <link rel="alternate" href="https://balbi.sh/posts/lockless-atomic-waker-embassy/" type="text/html"/>
+    <id>https://balbi.sh/posts/lockless-atomic-waker-embassy/</id>
+    <summary type="html">embassy-rs&#x2F;embassy#6111 replaces embassy-sync&#x27;s critical-section-based AtomicWaker with a lockless three-state one ported from futures::task::AtomicWaker. Why fetch_or is the right primitive on the register&#x2F;wake race, what the wake path no longer has to do, and why the old behavior is still available as CriticalSectionWaker.</summary>
+    <content type="html">&lt;p&gt;A GPIO interrupt fires. The handler’s job is small: flip a status
+bit, call &lt;code&gt;waker.wake()&lt;&#x2F;code&gt;, return. The task that was parked on that
+pin is now ready to run, and the executor will get to it on the next
+poll.&lt;&#x2F;p&gt;
+&lt;p&gt;Until you look at what &lt;code&gt;waker.wake()&lt;&#x2F;code&gt; actually did. On every embassy
+target, until very recently, that one call took out a critical
+section — a global interrupt disable, held for the duration of the
+register-or-wake operation — because the &lt;code&gt;AtomicWaker&lt;&#x2F;code&gt; in
+&lt;code&gt;embassy-sync&lt;&#x2F;code&gt; was a typedef-style alias for
+&lt;code&gt;GenericAtomicWaker&amp;lt;CriticalSectionRawMutex&amp;gt;&lt;&#x2F;code&gt;. On Cortex-M that is
+exactly what it sounds like: the wake path raised BASEPRI (or
+disabled IRQs outright on older parts), did its bookkeeping, and
+lowered it again. A higher-priority interrupt that arrived in the
+middle had to wait. One async task’s wake imposed a jitter floor on
+every other interrupt in the system.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;embassy-rs&#x2F;embassy&#x2F;pull&#x2F;6111&quot;&gt;embassy-rs&#x2F;embassy#6111&lt;&#x2F;a&gt;
+replaces that. The new &lt;code&gt;AtomicWaker&lt;&#x2F;code&gt; is a port of
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;docs.rs&#x2F;futures&#x2F;latest&#x2F;futures&#x2F;task&#x2F;struct.AtomicWaker.html&quot;&gt;&lt;code&gt;futures::task::AtomicWaker&lt;&#x2F;code&gt;&lt;&#x2F;a&gt;
+— the one that has been doing this on &lt;code&gt;std&lt;&#x2F;code&gt; targets for years —
+adapted for &lt;code&gt;no_std&lt;&#x2F;code&gt;. The trade I made is concrete: a small atomic
+state machine in place of the critical section, plus one documented
+semantics change that &lt;code&gt;Future::poll&lt;&#x2F;code&gt; already required callers to
+honor. The old behavior is kept verbatim under a new name,
+&lt;code&gt;CriticalSectionWaker&lt;&#x2F;code&gt;, for the chips and the call sites that still
+want it.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-the-type-used-to-be&quot;&gt;What the type used to be&lt;&#x2F;h2&gt;
+&lt;p&gt;The pre-#6111 definition is essentially one line:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;pub&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; type&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; AtomicWaker&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; GenericAtomicWaker&lt;&#x2F;span&gt;&lt;span&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;CriticalSectionRawMutex&lt;&#x2F;span&gt;&lt;span&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;code&gt;GenericAtomicWaker&amp;lt;M&amp;gt;&lt;&#x2F;code&gt; wraps an &lt;code&gt;Option&amp;lt;Waker&amp;gt;&lt;&#x2F;code&gt; in a
+&lt;code&gt;Mutex&amp;lt;M, Cell&amp;lt;...&amp;gt;&amp;gt;&lt;&#x2F;code&gt;. With &lt;code&gt;M = CriticalSectionRawMutex&lt;&#x2F;code&gt;, every
+&lt;code&gt;register()&lt;&#x2F;code&gt; and every &lt;code&gt;wake()&lt;&#x2F;code&gt; calls &lt;code&gt;critical_section::with(...)&lt;&#x2F;code&gt;,
+which on Cortex-M expands to “disable interrupts, run the closure,
+restore the previous mask.” The closure itself is tiny — replace a
+cell, maybe clone, maybe call &lt;code&gt;wake_by_ref&lt;&#x2F;code&gt; — but the whole CPU is
+now refusing to acknowledge anything else for the duration.&lt;&#x2F;p&gt;
+&lt;p&gt;That is fine when &lt;code&gt;wake()&lt;&#x2F;code&gt; is a background bookkeeping call. It is
+much less fine when &lt;code&gt;wake()&lt;&#x2F;code&gt; is itself a high-priority IRQ handler
+whose latency you care about, or when a &lt;em&gt;different&lt;&#x2F;em&gt; high-priority
+IRQ arrives during the wake and has to wait for an unrelated
+cell-swap to finish before it gets to run.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;the-three-state-machine&quot;&gt;The three-state machine&lt;&#x2F;h2&gt;
+&lt;p&gt;The new type, in &lt;code&gt;embassy-sync&#x2F;src&#x2F;waitqueue&#x2F;atomic_waker.rs&lt;&#x2F;code&gt;,
+replaces the mutex with a packed &lt;code&gt;AtomicUsize&lt;&#x2F;code&gt; and three constants:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;const&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; WAITING&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; usize&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;     =&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 0&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;const&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; REGISTERING&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; usize&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 0b01&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;const&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; WAKING&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; usize&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;      =&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 0b10&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;The important thing about those constants — and this came out of
+review, so it’s now spelled out in the source comments — is that
+they are &lt;strong&gt;flags, not exclusive states&lt;&#x2F;strong&gt;. &lt;code&gt;REGISTERING | WAKING&lt;&#x2F;code&gt;
+(0b11) is a legal, intentional state of the machine. It means a
+&lt;code&gt;register()&lt;&#x2F;code&gt; is mid-flight &lt;em&gt;and&lt;&#x2F;em&gt; a &lt;code&gt;wake()&lt;&#x2F;code&gt; arrived while it was
+running, and the wake has been flagged as pending. The encoding is
+load-bearing: only the holder of &lt;code&gt;REGISTERING&lt;&#x2F;code&gt; or &lt;code&gt;WAKING&lt;&#x2F;code&gt; (and
+never both at once, by virtue of the protocol) is allowed to touch
+the underlying waker cell, and the 0b11 state is what tells the
+in-flight &lt;code&gt;register()&lt;&#x2F;code&gt; that there is wake duty waiting for it on
+the way out.&lt;&#x2F;p&gt;
+&lt;p&gt;The wake side is short and worth showing in full:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;match&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-language&quot;&gt; self&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;state&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;fetch_or&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;WAKING&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; AcqRel&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;    WAITING&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;        &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; We own the cell. Fire the wake, release.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;        unsafe&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;            if&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; let&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Some&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;w&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; &amp;amp;&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;*&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-language&quot;&gt;self&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;waker&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;get&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;                w&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;wake_by_ref&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;            }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-language&quot;&gt;        self&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;state&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;swap&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;WAITING&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Release&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;    _&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;        &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; Somebody else owns the cell. They&amp;#39;ll deliver the wake.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Two arms, and that is the whole thing. If the prior state was
+&lt;code&gt;WAITING&lt;&#x2F;code&gt;, we are now the sole owner of the cell via the &lt;code&gt;WAKING&lt;&#x2F;code&gt;
+bit; we invoke the stored waker by reference, then drop the bit. If
+the prior state was &lt;code&gt;REGISTERING&lt;&#x2F;code&gt;, the OR has produced
+&lt;code&gt;REGISTERING | WAKING&lt;&#x2F;code&gt;, and we deliberately do nothing else,
+because the in-flight &lt;code&gt;register()&lt;&#x2F;code&gt; will see our bit on its way out
+and deliver the wake itself.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;why-fetch-or-and-not-compare-exchange&quot;&gt;Why fetch_or and not compare_exchange&lt;&#x2F;h2&gt;
+&lt;p&gt;This is the load-bearing decision in the whole PR, and review asked
+the obvious question: shouldn’t this be a &lt;code&gt;compare_exchange&lt;&#x2F;code&gt;? It’s
+the safer default, the one you reach for first.&lt;&#x2F;p&gt;
+&lt;p&gt;It would be silently wrong here. Consider the race:&lt;&#x2F;p&gt;
+&lt;ol&gt;
+&lt;li&gt;A task calls &lt;code&gt;register(cx.waker())&lt;&#x2F;code&gt;. The CAS from &lt;code&gt;WAITING&lt;&#x2F;code&gt; to
+&lt;code&gt;REGISTERING&lt;&#x2F;code&gt; succeeds; we now own the cell and start installing
+the new waker.&lt;&#x2F;li&gt;
+&lt;li&gt;Mid-installation, an interrupt fires and calls &lt;code&gt;wake()&lt;&#x2F;code&gt;.&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;p&gt;If &lt;code&gt;wake()&lt;&#x2F;code&gt; did &lt;code&gt;compare_exchange(WAITING, WAKING, ...)&lt;&#x2F;code&gt;, that CAS
+would observe &lt;code&gt;REGISTERING&lt;&#x2F;code&gt;, fail, and &lt;em&gt;silently return&lt;&#x2F;em&gt; — there is no
+prior value it could have CAS-ed against that would have encoded “a
+wake is pending.” The in-flight &lt;code&gt;register()&lt;&#x2F;code&gt; would then finish, CAS
+its own state cleanly back from &lt;code&gt;REGISTERING&lt;&#x2F;code&gt; to &lt;code&gt;WAITING&lt;&#x2F;code&gt;, and never
+learn that anything happened. The waker is installed, nobody is going
+to invoke it, the task is hung. The kind of bug you find at 2am after
+staring at the screen for an hour wondering why an interrupt that you
+can &lt;em&gt;see&lt;&#x2F;em&gt; on the registers isn’t producing a task wakeup.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;code&gt;fetch_or(WAKING, AcqRel)&lt;&#x2F;code&gt; doesn’t have that failure mode. The
+wake’s contribution to the state word is unconditional and visible
+to whoever observes the state next. The in-flight &lt;code&gt;register()&lt;&#x2F;code&gt;
+tries to release with &lt;code&gt;compare_exchange(REGISTERING, WAITING, ...)&lt;&#x2F;code&gt;
+on its way out; that CAS will &lt;em&gt;fail&lt;&#x2F;em&gt; exactly when a wake raced it,
+because the observed state is now &lt;code&gt;REGISTERING | WAKING&lt;&#x2F;code&gt;, not
+&lt;code&gt;REGISTERING&lt;&#x2F;code&gt;. The failure branch is the handoff signal: it takes
+the freshly-installed waker out of the cell, clears both bits with
+a &lt;code&gt;swap&lt;&#x2F;code&gt;, and invokes the waker &lt;em&gt;after&lt;&#x2F;em&gt; releasing the cell — so
+that a user waker that re-enters &lt;code&gt;register()&lt;&#x2F;code&gt; or &lt;code&gt;wake()&lt;&#x2F;code&gt; on the
+same &lt;code&gt;AtomicWaker&lt;&#x2F;code&gt; from inside &lt;code&gt;wake()&lt;&#x2F;code&gt; cannot deadlock against
+our own state.&lt;&#x2F;p&gt;
+&lt;p&gt;The wake is delivered exactly once, by whichever side observes the
+contention. The handoff is structural, not best-effort. &lt;code&gt;fetch_or&lt;&#x2F;code&gt;
+is doing more than “atomic OR” here; it is the data structure that
+makes the race path correct.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-changed-in-the-contract&quot;&gt;What changed in the contract&lt;&#x2F;h2&gt;
+&lt;p&gt;There is one user-visible semantic difference, and the PR owns it
+in the CHANGELOG: &lt;code&gt;AtomicWaker::register()&lt;&#x2F;code&gt; now wakes the
+&lt;em&gt;previously registered&lt;&#x2F;em&gt; waker if you replace it with a different
+one. This matches what
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;docs.rs&#x2F;embassy-sync&#x2F;latest&#x2F;embassy_sync&#x2F;waitqueue&#x2F;struct.WakerRegistration.html&quot;&gt;&lt;code&gt;WakerRegistration&lt;&#x2F;code&gt;&lt;&#x2F;a&gt;
+has always done. The pre-#6111 &lt;code&gt;AtomicWaker&lt;&#x2F;code&gt; would silently drop
+the old waker on the floor.&lt;&#x2F;p&gt;
+&lt;p&gt;The reason this is safe is that &lt;code&gt;Future::poll&lt;&#x2F;code&gt; is already
+documented to require it. The relevant line in the
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;doc.rust-lang.org&#x2F;std&#x2F;future&#x2F;trait.Future.html#tymethod.poll&quot;&gt;&lt;code&gt;Future::poll&lt;&#x2F;code&gt;&lt;&#x2F;a&gt;
+contract:&lt;&#x2F;p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Note that on multiple calls to &lt;code&gt;poll&lt;&#x2F;code&gt;, only the &lt;code&gt;Waker&lt;&#x2F;code&gt; from the
+&lt;code&gt;Context&lt;&#x2F;code&gt; passed to the most recent call should be scheduled to
+receive a wakeup.&lt;&#x2F;p&gt;
+&lt;&#x2F;blockquote&gt;
+&lt;p&gt;A correctly-written driver already re-registers on every poll,
+because the &lt;code&gt;Waker&lt;&#x2F;code&gt; it gets on the &lt;em&gt;n&lt;&#x2F;em&gt;-th poll is not guaranteed
+to be the one it got on the &lt;em&gt;(n-1)&lt;&#x2F;em&gt;-th. Waking the evicted
+predecessor formalizes that: if a different task ends up polling
+the same future, the displaced task gets a chance to re-register
+itself instead of vanishing. This was a late commit, prompted by
+review, and it is what the CHANGELOG entry calls out by name.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;two-siblings-now-on-purpose&quot;&gt;Two siblings now, on purpose&lt;&#x2F;h2&gt;
+&lt;p&gt;The previous behavior didn’t disappear. It moved into its own
+module, &lt;code&gt;embassy-sync&#x2F;src&#x2F;waitqueue&#x2F;critical_section_waker.rs&lt;&#x2F;code&gt;, and
+got a name that says what it is:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;pub&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; struct&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; CriticalSectionWaker&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;    waker&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; GenericAtomicWaker&lt;&#x2F;span&gt;&lt;span&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;CriticalSectionRawMutex&lt;&#x2F;span&gt;&lt;span&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;This is a verbatim preservation of the old &lt;code&gt;AtomicWaker&lt;&#x2F;code&gt; body —
+the same &lt;code&gt;wake_by_ref + restore&lt;&#x2F;code&gt; flow, the same lack of an atomic
+state machine, the same critical section on the wake path. Call
+sites that depended on the old “replace without waking” semantics
+keep working with a one-word rename.&lt;&#x2F;p&gt;
+&lt;p&gt;The asymmetry is deliberate, and I want to be explicit about it
+because it matters for anyone reading older code: the new
+&lt;code&gt;AtomicWaker&lt;&#x2F;code&gt; wakes evicted predecessors; &lt;code&gt;GenericAtomicWaker&amp;lt;M&amp;gt;&lt;&#x2F;code&gt;
+does not, and &lt;code&gt;CriticalSectionWaker&lt;&#x2F;code&gt; (being a wrapper around it)
+does not either. Review caught an earlier commit that tried to
+bring &lt;code&gt;GenericAtomicWaker&lt;&#x2F;code&gt; along to the new semantics, and I
+reverted it. A public type that has been in the tree for years
+should not change behavior under callers without a much louder
+migration story than this PR is in a position to write — and
+there’s no need for one. Callers who want the new semantics have
+&lt;code&gt;AtomicWaker&lt;&#x2F;code&gt;; callers who want the old have the type they were
+already using.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;thumbv6-doesn-t-have-the-atomics&quot;&gt;thumbv6 doesn’t have the atomics&lt;&#x2F;h2&gt;
+&lt;p&gt;The lockless state machine assumes you can do
+&lt;code&gt;AtomicUsize::{compare_exchange, swap, fetch_or}&lt;&#x2F;code&gt; on the target.
+Cortex-M0&#x2F;M0+ (thumbv6m) can’t — no LDREX&#x2F;STREX in the instruction
+set, so the LLVM atomics for anything past naked load&#x2F;store aren’t
+there. The same goes for a handful of other targets in the embassy
+matrix (Xtensa S2, AVR, RV32I — anything missing the relevant
+&lt;code&gt;target_has_atomic&lt;&#x2F;code&gt; cfg).&lt;&#x2F;p&gt;
+&lt;p&gt;The PR’s solution is the obvious one: gate the new type on
+&lt;code&gt;#[cfg(target_has_atomic = &quot;32&quot;)]&lt;&#x2F;code&gt;, and on every other target make
+&lt;code&gt;AtomicWaker&lt;&#x2F;code&gt; a type alias for &lt;code&gt;CriticalSectionWaker&lt;&#x2F;code&gt;. Callers see
+the same type name; the implementation behind it is the one the
+hardware can actually run. The sibling type isn’t there for
+nostalgia. Some chips genuinely need it.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-the-wake-path-no-longer-does&quot;&gt;What the wake path no longer does&lt;&#x2F;h2&gt;
+&lt;p&gt;The benchmark on the bench was a GPIO IRQ wake on an FRDM-MCXA266
+(Cortex-M33 at 180 MHz); the lockless &lt;code&gt;wake()&lt;&#x2F;code&gt; body came out about
+290 ns shorter than the critical-section one. I’m not making that
+the headline. The wall-clock delta is small enough to be well
+within run-to-run noise on a 180 MHz core; if the structural
+change weren’t real, I would not trust that number to mean
+anything.&lt;&#x2F;p&gt;
+&lt;p&gt;The structural change is real, and it is what the PR is actually
+about. On any embassy target with &lt;code&gt;AtomicUsize&lt;&#x2F;code&gt;-class atomics —
+which is most of them — the wake path of &lt;code&gt;AtomicWaker&lt;&#x2F;code&gt; no longer
+disables interrupts. An IRQ handler that calls &lt;code&gt;waker.wake()&lt;&#x2F;code&gt;
+doesn’t enter a critical section, doesn’t pay the enter&#x2F;exit cost
+on every wake, and doesn’t impose a jitter floor on whatever
+higher-priority interrupt would otherwise have preempted it. The
+worst case for a preempting IRQ is now an &lt;code&gt;AtomicUsize&lt;&#x2F;code&gt; op or two
+and a &lt;code&gt;wake_by_ref&lt;&#x2F;code&gt; call. On chips that &lt;em&gt;can’t&lt;&#x2F;em&gt; do the atomics, the
+fallback is the type that was already in the tree; nothing
+regresses.&lt;&#x2F;p&gt;
+&lt;p&gt;None of this is novel. &lt;code&gt;futures::task::AtomicWaker&lt;&#x2F;code&gt; has been doing
+this on &lt;code&gt;std&lt;&#x2F;code&gt; for years, and the algorithm here is a direct port.
+What changes is that &lt;code&gt;embassy-sync&lt;&#x2F;code&gt; — and every embassy driver
+that uses &lt;code&gt;AtomicWaker&lt;&#x2F;code&gt; for IRQ-to-task wakeups — gets that
+property by default. A single-waiter waker can hand off the
+register-vs-wake race with a &lt;code&gt;fetch_or&lt;&#x2F;code&gt;-based state machine instead
+of a critical section, and the cost is one documented semantics
+change that &lt;code&gt;Future::poll&lt;&#x2F;code&gt; already required callers to honor.&lt;&#x2F;p&gt;
+</content>
+  </entry>
+  
+</feed>

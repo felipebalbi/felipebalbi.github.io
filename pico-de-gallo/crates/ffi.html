@@ -1,0 +1,554 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>pico-de-gallo-ffi - Pico de Gallo</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+        <!-- MathJax -->
+        <script async src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-70145703.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-d167d9bc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Pico de Gallo</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="pico-de-gallo-ffi"><a class="header" href="#pico-de-gallo-ffi"><code>pico-de-gallo-ffi</code></a></h1>
+<p><code>pico-de-gallo-ffi</code> is the C-facing surface for Pico de Gallo. It wraps
+<code>pico-de-gallo-lib</code> behind an <strong>opaque pointer</strong> and a stable <code>Status</code> enum so
+C, C++, Zig, and other FFI-friendly languages can use the device without
+knowing anything about Rust internals.</p>
+<p>At a glance:</p>
+<ul>
+<li>the device handle is opaque: C code only sees <code>const PicoDeGallo *</code>,</li>
+<li>the handle is safe to share across threads (<code>Send + Sync</code> on the Rust side),</li>
+<li>each FFI call drives the async Rust client with its own <code>block_on</code>,</li>
+<li>the crate builds as a <code>cdylib</code>:
+<ul>
+<li>Linux: <code>libpico_de_gallo_ffi.so</code></li>
+<li>macOS: <code>libpico_de_gallo_ffi.dylib</code></li>
+<li>Windows: <code>pico_de_gallo_ffi.dll</code></li>
+</ul>
+</li>
+</ul>
+<h2 id="lifecycle"><a class="header" href="#lifecycle">Lifecycle</a></h2>
+<p>Every FFI program follows the same three-step shape:</p>
+<ol>
+<li>create a handle,</li>
+<li>call <code>gallo_*</code> functions,</li>
+<li>free the handle.</li>
+</ol>
+<pre><code class="language-c">#include "pico_de_gallo.h"
+
+const PicoDeGallo *gallo = gallo_init();
+uint32_t id = 42;
+Status s = gallo_ping(gallo, &amp;id);
+gallo_free(gallo);
+</code></pre>
+<h3 id="initialization-and-teardown"><a class="header" href="#initialization-and-teardown">Initialization and teardown</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Function</th><th>Purpose</th></tr>
+</thead>
+<tbody>
+<tr><td><code>const PicoDeGallo *gallo_init(void)</code></td><td>Connect to the first matching board (lazy — failures surface on first RPC)</td></tr>
+<tr><td><code>const PicoDeGallo *gallo_init_with_serial_number(const char *serial)</code></td><td>Connect to a board with a specific USB serial number (lazy)</td></tr>
+<tr><td><code>const PicoDeGallo *gallo_init_strict(void)</code></td><td>Like <code>gallo_init</code> but calls <code>validate()</code> before returning; returns <code>NULL</code> on schema mismatch or device-not-present</td></tr>
+<tr><td><code>const PicoDeGallo *gallo_init_strict_with_serial_number(const char *serial)</code></td><td>Like the above with serial-number selection; recommended in production</td></tr>
+<tr><td><code>void gallo_free(const PicoDeGallo *gallo)</code></td><td>Release the opaque handle; <code>NULL</code> is a safe no-op</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="status-codes"><a class="header" href="#status-codes">Status Codes</a></h2>
+<p>All operational functions return <code>Status</code>.</p>
+<ul>
+<li><code>Status::Ok</code> is success.</li>
+<li>All failures are negative values.</li>
+<li>The values are part of the <strong>stable C ABI</strong>.</li>
+</ul>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p><code>Status</code> values are append-only. Do not renumber existing codes, and do not
+overload an old value with a new meaning. Existing C callers may already have
+those integers compiled into <code>switch</code> statements.</p>
+</blockquote>
+<p>The full status-code list lives in the
+<a href="../appendix/status-codes.html">Status Code Reference</a>.</p>
+<h2 id="function-reference"><a class="header" href="#function-reference">Function Reference</a></h2>
+<p>The generated header is the canonical API surface, but these are the functions
+you will use most often.</p>
+<h3 id="ping-and-device-metadata"><a class="header" href="#ping-and-device-metadata">Ping and device metadata</a></h3>
+<pre><code class="language-c">Status gallo_ping(const PicoDeGallo *gallo, uint32_t *id);
+
+Status gallo_version(const PicoDeGallo *gallo,
+                     uint16_t *major, uint16_t *minor, uint32_t *patch);
+
+Status gallo_get_device_info(const PicoDeGallo *gallo, GalloDeviceInfo *info);
+
+Status gallo_system_reset_subscriptions(const PicoDeGallo *gallo,
+                                        uint8_t *out_reset);
+</code></pre>
+<p><code>gallo_get_device_info</code> returns firmware version, schema version, hardware
+revision, and a capability bitfield.</p>
+<p><code>gallo_system_reset_subscriptions</code> tears down any GPIO subscriptions
+left over from a previous host session and writes the reset count to
+<code>*out_reset</code> (which may be <code>NULL</code> if the caller does not need the
+count). Subscriptions are server-side state that outlives the USB
+transport, so a host that crashed without calling
+<code>gallo_gpio_unsubscribe</code> leaves the affected pins owned by firmware
+monitor tasks. Call this once on connect, immediately after
+<code>gallo_init</code> (or after <code>validate()</code> in the Rust library), to reclaim
+those pins. The call is idempotent and cheap on a fresh device.</p>
+<h3 id="i2c"><a class="header" href="#i2c">I<sup>2</sup>C</a></h3>
+<pre><code class="language-c">Status gallo_i2c_read(const PicoDeGallo *gallo,
+                      uint8_t address, uint8_t *buf, size_t len);
+Status gallo_i2c_write(const PicoDeGallo *gallo,
+                       uint8_t address, const uint8_t *buf, size_t len);
+Status gallo_i2c_write_read(const PicoDeGallo *gallo,
+                            uint8_t address,
+                            const uint8_t *txbuf, size_t txlen,
+                            uint8_t *rxbuf, size_t rxlen);
+Status gallo_i2c_scan(const PicoDeGallo *gallo,
+                      bool include_reserved,
+                      uint8_t *buf, size_t buf_len, size_t *found);
+Status gallo_i2c_set_config(const PicoDeGallo *gallo, uint8_t frequency);
+Status gallo_i2c_get_config(const PicoDeGallo *gallo, uint8_t *out_frequency);
+</code></pre>
+<p><code>frequency</code> uses the wire enum encoding: <code>0 = Standard</code>, <code>1 = Fast</code>,
+<code>2 = FastPlus</code>.</p>
+<h4 id="i2c-batch"><a class="header" href="#i2c-batch">I<sup>2</sup>C batch</a></h4>
+<pre><code class="language-c">typedef struct GalloI2cBatchOp {
+    uint8_t       tag;       // 0 = Read, 1 = Write
+    uint16_t      read_len;  // Read variant
+    const uint8_t *data;     // Write variant (may be NULL when data_len == 0)
+    size_t        data_len;  // Write variant
+} GalloI2cBatchOp;
+
+Status gallo_i2c_batch(const PicoDeGallo *gallo,
+                       uint8_t address,
+                       const GalloI2cBatchOp *ops, size_t ops_count,
+                       uint8_t *out_buf, size_t out_capacity,
+                       size_t *out_len,
+                       uint16_t *out_failed_op);  // may be NULL
+</code></pre>
+<p>Operations run sequentially with a STOP between each (this is <em>not</em>
+repeated-start; for write-then-read to the same device use
+<code>gallo_i2c_write_read</code>). Concatenated read data is written to <code>out_buf</code>
+and the total length to <code>*out_len</code>. On failure, <code>*out_failed_op</code> (if
+non-NULL) receives the zero-based index of the operation that failed,
+and the status reflects the underlying I<sup>2</sup>C error
+(<code>I2cNack</code>, <code>I2cBusError</code>, etc.). <code>BufferTooLong</code> means <code>out_buf</code> was
+too small; <code>*out_len</code> still receives the required capacity.</p>
+<h3 id="spi"><a class="header" href="#spi">SPI</a></h3>
+<pre><code class="language-c">Status gallo_spi_read(const PicoDeGallo *gallo, uint8_t *buf, size_t len);
+Status gallo_spi_write(const PicoDeGallo *gallo, const uint8_t *buf, size_t len);
+Status gallo_spi_flush(const PicoDeGallo *gallo);
+Status gallo_spi_set_config(const PicoDeGallo *gallo,
+                            uint32_t frequency,
+                            bool spi_phase, bool spi_polarity);
+Status gallo_spi_get_config(const PicoDeGallo *gallo,
+                            uint32_t *out_frequency,
+                            bool *out_phase, bool *out_polarity);
+</code></pre>
+<h4 id="spi-full-duplex-transfer"><a class="header" href="#spi-full-duplex-transfer">SPI full-duplex transfer</a></h4>
+<pre><code class="language-c">Status gallo_spi_transfer(const PicoDeGallo *gallo,
+                          const uint8_t *write_buf,
+                          uint8_t       *read_buf,
+                          size_t         len);
+</code></pre>
+<p>Simultaneously sends <code>len</code> bytes from <code>write_buf</code> on MOSI and receives
+<code>len</code> bytes on MISO into <code>read_buf</code>. The two buffers may alias.
+Returns <code>BufferTooLong</code> if <code>len</code> exceeds the firmware transfer limit,
+or <code>SpiTransferFailed</code> on a generic SPI error.</p>
+<h4 id="spi-batch"><a class="header" href="#spi-batch">SPI batch</a></h4>
+<pre><code class="language-c">typedef struct GalloSpiBatchOp {
+    uint8_t       tag;       // 0 = Read, 1 = Write, 2 = Transfer, 3 = DelayNs
+    uint16_t      read_len;  // Read variant
+    const uint8_t *data;     // Write/Transfer variant (may be NULL when data_len == 0)
+    size_t        data_len;  // Write/Transfer variant
+    uint32_t      delay_ns;  // DelayNs variant
+} GalloSpiBatchOp;
+
+Status gallo_spi_batch(const PicoDeGallo *gallo,
+                       uint8_t cs_pin,
+                       const GalloSpiBatchOp *ops, size_t ops_count,
+                       uint8_t *out_buf, size_t out_capacity,
+                       size_t *out_len,
+                       uint16_t *out_failed_op);  // may be NULL
+</code></pre>
+<p>The firmware asserts <code>cs_pin</code> low before the first operation and
+deasserts it after the last (or on error), providing atomic
+<code>SpiDevice::transaction</code> semantics. Read data from <code>Read</code> and
+<code>Transfer</code> operations is concatenated into <code>out_buf</code> in order. On
+per-op failure, <code>*out_failed_op</code> (if non-NULL) receives the zero-based
+index. <code>BufferTooLong</code> means <code>out_buf</code> was too small; <code>*out_len</code> still
+receives the required capacity.</p>
+<h3 id="gpio"><a class="header" href="#gpio">GPIO</a></h3>
+<pre><code class="language-c">Status gallo_gpio_get(const PicoDeGallo *gallo, uint8_t pin, bool *state);
+Status gallo_gpio_put(const PicoDeGallo *gallo, uint8_t pin, bool state);
+Status gallo_gpio_wait_for_high(const PicoDeGallo *gallo, uint8_t pin);
+Status gallo_gpio_wait_for_low(const PicoDeGallo *gallo, uint8_t pin);
+Status gallo_gpio_wait_for_rising_edge(const PicoDeGallo *gallo, uint8_t pin);
+Status gallo_gpio_wait_for_falling_edge(const PicoDeGallo *gallo, uint8_t pin);
+Status gallo_gpio_wait_for_any_edge(const PicoDeGallo *gallo, uint8_t pin);
+Status gallo_gpio_set_config(const PicoDeGallo *gallo,
+                             uint8_t pin, uint8_t direction, uint8_t pull);
+Status gallo_gpio_subscribe(const PicoDeGallo *gallo, uint8_t pin, uint8_t edge);
+Status gallo_gpio_unsubscribe(const PicoDeGallo *gallo, uint8_t pin);
+</code></pre>
+<h3 id="uart"><a class="header" href="#uart">UART</a></h3>
+<pre><code class="language-c">Status gallo_uart_read(const PicoDeGallo *gallo,
+                       uint8_t *buf, uint16_t count,
+                       uint32_t timeout_ms, uint16_t *out_len);
+Status gallo_uart_write(const PicoDeGallo *gallo,
+                        const uint8_t *buf, uint16_t len);
+Status gallo_uart_flush(const PicoDeGallo *gallo);
+Status gallo_uart_set_config(const PicoDeGallo *gallo, uint32_t baud_rate);
+Status gallo_uart_get_config(const PicoDeGallo *gallo, uint32_t *out_baud_rate);
+</code></pre>
+<h3 id="pwm"><a class="header" href="#pwm">PWM</a></h3>
+<pre><code class="language-c">Status gallo_pwm_set_duty_cycle(const PicoDeGallo *gallo,
+                                uint8_t channel, uint16_t duty);
+Status gallo_pwm_get_duty_cycle(const PicoDeGallo *gallo,
+                                uint8_t channel,
+                                uint16_t *out_duty, uint16_t *out_max_duty);
+Status gallo_pwm_enable(const PicoDeGallo *gallo, uint8_t channel);
+Status gallo_pwm_disable(const PicoDeGallo *gallo, uint8_t channel);
+Status gallo_pwm_set_config(const PicoDeGallo *gallo,
+                            uint8_t channel,
+                            uint32_t frequency_hz, bool phase_correct);
+Status gallo_pwm_get_config(const PicoDeGallo *gallo,
+                            uint8_t channel,
+                            uint32_t *out_frequency_hz,
+                            bool *out_phase_correct, bool *out_enabled);
+</code></pre>
+<h3 id="adc"><a class="header" href="#adc">ADC</a></h3>
+<pre><code class="language-c">Status gallo_adc_read(const PicoDeGallo *gallo,
+                      uint8_t channel, uint16_t *out_value);
+Status gallo_adc_get_config(const PicoDeGallo *gallo,
+                            uint8_t *out_resolution_bits,
+                            uint16_t *out_nominal_reference_mv,
+                            uint8_t *out_num_gpio_channels);
+</code></pre>
+<h3 id="1-wire"><a class="header" href="#1-wire">1-Wire</a></h3>
+<pre><code class="language-c">Status gallo_onewire_reset(const PicoDeGallo *gallo, bool *out_present);
+Status gallo_onewire_read(const PicoDeGallo *gallo,
+                          uint8_t *buf, uint16_t len, uint16_t *out_len);
+Status gallo_onewire_write(const PicoDeGallo *gallo,
+                           const uint8_t *buf, uint16_t len);
+Status gallo_onewire_write_pullup(const PicoDeGallo *gallo,
+                                  const uint8_t *buf, uint16_t len,
+                                  uint16_t pullup_duration_ms);
+Status gallo_onewire_search(const PicoDeGallo *gallo,
+                            uint64_t *out_rom_ids, uint16_t max_count,
+                            uint16_t *out_count);
+</code></pre>
+<h2 id="building-and-linking"><a class="header" href="#building-and-linking">Building and Linking</a></h2>
+<h3 id="build-the-shared-library"><a class="header" href="#build-the-shared-library">Build the shared library</a></h3>
+<pre><code class="language-bash">cd crates/pico-de-gallo-ffi
+cargo build --release
+</code></pre>
+<p>Outputs:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Platform</th><th>Artifact</th></tr>
+</thead>
+<tbody>
+<tr><td>Linux</td><td><code>target/release/libpico_de_gallo_ffi.so</code></td></tr>
+<tr><td>macOS</td><td><code>target/release/libpico_de_gallo_ffi.dylib</code></td></tr>
+<tr><td>Windows</td><td><code>target/release/pico_de_gallo_ffi.dll</code> and <code>pico_de_gallo_ffi.dll.lib</code></td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="generated-header"><a class="header" href="#generated-header">Generated header</a></h3>
+<p>The header is generated by <code>cbindgen</code> during the build. Look under Cargo’s
+<code>OUT_DIR</code> for <code>pico_de_gallo.h</code>:</p>
+<pre><code class="language-text">target/release/build/pico-de-gallo-ffi-&lt;hash&gt;/out/include/pico_de_gallo.h
+</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>Do not hand-edit the header. It is generated from the Rust definitions and is
+supposed to stay in lockstep with them.</p>
+</blockquote>
+<h3 id="cbindgen-notes"><a class="header" href="#cbindgen-notes">cbindgen notes</a></h3>
+<p><code>cbindgen.toml</code> in the crate root controls generation. The important bits are:</p>
+<ul>
+<li>language: C,</li>
+<li>include guard: <code>PICO_DE_GALLO_H</code>,</li>
+<li>style: both tagged and typedef forms,</li>
+<li>line endings: LF.</li>
+</ul>
+<h2 id="complete-example"><a class="header" href="#complete-example">Complete Example</a></h2>
+<pre><code class="language-c">#include &lt;stdint.h&gt;
+#include &lt;stdio.h&gt;
+#include "pico_de_gallo.h"
+
+int main(void) {
+    const PicoDeGallo *gallo = gallo_init();
+    if (!gallo) {
+        fprintf(stderr, "Failed to connect to device\n");
+        return 1;
+    }
+
+    uint32_t id = 0xDEADBEEF;
+    Status s = gallo_ping(gallo, &amp;id);
+    if (s != Ok) {
+        fprintf(stderr, "Ping failed: %d\n", s);
+        gallo_free(gallo);
+        return 1;
+    }
+    printf("Ping OK, got back: 0x%08X\n", id);
+
+    uint16_t major, minor;
+    uint32_t patch;
+    s = gallo_version(gallo, &amp;major, &amp;minor, &amp;patch);
+    if (s == Ok) {
+        printf("Firmware v%u.%u.%u\n", major, minor, patch);
+    }
+
+    GalloDeviceInfo info;
+    s = gallo_get_device_info(gallo, &amp;info);
+    if (s == Ok) {
+        printf("Schema v%u.%u.%u, HW rev %u\n",
+               info.schema_major, info.schema_minor,
+               info.schema_patch, info.hw_version);
+    } else if (s == SchemaMismatch) {
+        fprintf(stderr, "Schema mismatch — update firmware or host library\n");
+    }
+
+    uint8_t buf[2] = {0};
+    s = gallo_i2c_read(gallo, 0x50, buf, sizeof(buf));
+    if (s != Ok) {
+        fprintf(stderr, "I2C read failed: %d\n", s);
+        gallo_free(gallo);
+        return 1;
+    }
+
+    printf("Read: 0x%02X 0x%02X\n", buf[0], buf[1]);
+    gallo_free(gallo);
+    return 0;
+}
+</code></pre>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../crates/hal.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../crates/python.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../crates/hal.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../crates/python.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>
