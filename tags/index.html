@@ -1,0 +1,57 @@
+<!doctype html><html lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><script>(function () {
+      var stored;
+      try { stored = sessionStorage.getItem('theme'); } catch (_) {}
+      var theme;
+      if (stored === 'light' || stored === 'dark') {
+        theme = stored;
+      } else {
+        theme = (window.matchMedia &&
+                 window.matchMedia('(prefers-color-scheme: dark)').matches)
+                 ? 'dark' : 'light';
+      }
+      document.documentElement.setAttribute('data-theme', theme);
+    })();</script><title>Tags · Felipe Balbi</title><meta content="Notes on embedded systems, Rust, and the craft of writing software." name=description><meta content="Felipe Balbi" name=author><link as=font crossorigin href=/fonts/aporetic-serif-regular.woff2 rel=preload type=font/woff2><link as=font crossorigin href=/fonts/aporetic-sans-regular.woff2 rel=preload type=font/woff2><link href="https://balbi.sh/style.css?h=c9b8d18614fec044ec5c" rel=stylesheet><link href=https://balbi.sh/giallo-light.css id=hl-light rel=stylesheet><link disabled href=https://balbi.sh/giallo-dark.css id=hl-dark rel=stylesheet><link title="Felipe Balbi" href=https://balbi.sh/atom.xml rel=alternate type=application/atom+xml><link href=https://balbi.sh/tags/ rel=canonical><link href=https://balbi.sh/favicon.svg rel=icon type=image/svg+xml><meta content="Felipe Balbi" property=og:title><meta content="Notes on embedded systems, Rust, and the craft of writing software." property=og:description><meta content=website property=og:type><meta content=https://balbi.sh/tags/ property=og:url><meta content=summary name=twitter:card><body><div class=wrap><header class=site-header><a class=site-name href=https://balbi.sh>Felipe Balbi</a><nav aria-label=Primary class=site-nav><a href=/posts/>Posts</a><a href=/pico-de-gallo/>Pico de Gallo Book</a><button aria-label="Toggle color theme" title="Toggle color theme" class=theme-toggle id=theme-toggle type=button><svg viewbox="0 0 24 24" aria-hidden=true class=icon-sun fill=none stroke=currentColor stroke-linecap=round stroke-linejoin=round stroke-width=2><circle cx=12 cy=12 r=4 /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg> <svg viewbox="0 0 24 24" aria-hidden=true class=icon-moon fill=none stroke=currentColor stroke-linecap=round stroke-linejoin=round stroke-width=2><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button></nav></header><main><h1>Tags</h1><ul class=post-list><li><time>1 post</time> <a href=https://balbi.sh/tags/async/>#async</a><li><time>1 post</time> <a href=https://balbi.sh/tags/atomics/>#atomics</a><li><time>1 post</time> <a href=https://balbi.sh/tags/bring-up/>#bring-up</a><li><time>1 post</time> <a href=https://balbi.sh/tags/concurrency/>#concurrency</a><li><time>4 posts</time> <a href=https://balbi.sh/tags/drivers/>#drivers</a><li><time>4 posts</time> <a href=https://balbi.sh/tags/embassy/>#embassy</a><li><time>7 posts</time> <a href=https://balbi.sh/tags/embedded/>#embedded</a><li><time>1 post</time> <a href=https://balbi.sh/tags/flexspi/>#flexspi</a><li><time>1 post</time> <a href=https://balbi.sh/tags/i3c/>#i3c</a><li><time>1 post</time> <a href=https://balbi.sh/tags/mcxa/>#mcxa</a><li><time>1 post</time> <a href=https://balbi.sh/tags/meta/>#meta</a><li><time>3 posts</time> <a href=https://balbi.sh/tags/pico-de-gallo/>#pico-de-gallo</a><li><time>1 post</time> <a href=https://balbi.sh/tags/rambo/>#rambo</a><li><time>1 post</time> <a href=https://balbi.sh/tags/release/>#release</a><li><time>7 posts</time> <a href=https://balbi.sh/tags/rust/>#rust</a><li><time>1 post</time> <a href=https://balbi.sh/tags/testing/>#testing</a><li><time>2 posts</time> <a href=https://balbi.sh/tags/tmp108/>#tmp108</a></ul></main><footer class=site-footer><div>© 2026 Felipe Balbi</div><div><a href=https://github.com/felipebalbi rel=me>GitHub</a> · <a href=/atom.xml>RSS</a></div></footer></div><script>(function () {
+      var root = document.documentElement;
+      var btn  = document.getElementById('theme-toggle');
+      var hlL  = document.getElementById('hl-light');
+      var hlD  = document.getElementById('hl-dark');
+      var mql  = window.matchMedia('(prefers-color-scheme: dark)');
+
+      function userChose() {
+        try {
+          var v = sessionStorage.getItem('theme');
+          return v === 'light' || v === 'dark';
+        } catch (_) { return false; }
+      }
+
+      function applyHighlight() {
+        var t = root.getAttribute('data-theme');
+        if (hlL) hlL.disabled = (t !== 'light');
+        if (hlD) hlD.disabled = (t !== 'dark');
+      }
+
+      function setTheme(t, persist) {
+        root.setAttribute('data-theme', t);
+        if (persist) {
+          try { sessionStorage.setItem('theme', t); } catch (_) {}
+        }
+        applyHighlight();
+      }
+
+      // Initial sync.
+      applyHighlight();
+
+      if (btn) {
+        btn.addEventListener('click', function () {
+          var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+          setTheme(next, true);
+        });
+      }
+
+      // Follow OS until the user makes a manual choice.
+      if (mql.addEventListener) {
+        mql.addEventListener('change', function (e) {
+          if (!userChose()) setTheme(e.matches ? 'dark' : 'light', false);
+        });
+      }
+    })();</script>

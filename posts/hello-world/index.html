@@ -1,0 +1,63 @@
+<!doctype html><html lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><script>(function () {
+      var stored;
+      try { stored = sessionStorage.getItem('theme'); } catch (_) {}
+      var theme;
+      if (stored === 'light' || stored === 'dark') {
+        theme = stored;
+      } else {
+        theme = (window.matchMedia &&
+                 window.matchMedia('(prefers-color-scheme: dark)').matches)
+                 ? 'dark' : 'light';
+      }
+      document.documentElement.setAttribute('data-theme', theme);
+    })();</script><title>Hello, world · Felipe Balbi</title><meta content="A new home on the web." name=description><meta content="Felipe Balbi" name=author><link as=font crossorigin href=/fonts/aporetic-serif-regular.woff2 rel=preload type=font/woff2><link as=font crossorigin href=/fonts/aporetic-sans-regular.woff2 rel=preload type=font/woff2><link href="https://balbi.sh/style.css?h=c9b8d18614fec044ec5c" rel=stylesheet><link href=https://balbi.sh/giallo-light.css id=hl-light rel=stylesheet><link disabled href=https://balbi.sh/giallo-dark.css id=hl-dark rel=stylesheet><link title="Felipe Balbi" href=https://balbi.sh/atom.xml rel=alternate type=application/atom+xml><link href=https://balbi.sh/posts/hello-world/ rel=canonical><link href=https://balbi.sh/favicon.svg rel=icon type=image/svg+xml><meta content="Hello, world" property=og:title><meta content="A new home on the web." property=og:description><meta content=article property=og:type><meta content=https://balbi.sh/posts/hello-world/ property=og:url><meta content=summary name=twitter:card><body><div class=wrap><header class=site-header><a class=site-name href=https://balbi.sh>Felipe Balbi</a><nav aria-label=Primary class=site-nav><a class=active href=/posts/>Posts</a><a href=/pico-de-gallo/>Pico de Gallo Book</a><button aria-label="Toggle color theme" title="Toggle color theme" class=theme-toggle id=theme-toggle type=button><svg viewbox="0 0 24 24" aria-hidden=true class=icon-sun fill=none stroke=currentColor stroke-linecap=round stroke-linejoin=round stroke-width=2><circle cx=12 cy=12 r=4 /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg> <svg viewbox="0 0 24 24" aria-hidden=true class=icon-moon fill=none stroke=currentColor stroke-linecap=round stroke-linejoin=round stroke-width=2><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button></nav></header><main><article><h1>Hello, world</h1><div class=post-meta><time datetime=2026-06-10T08:00:00>June 10, 2026</time><span class=post-tags> <a href=https://balbi.sh/tags/meta/>meta</a> </span><span>2 min read</span></div><p>This is the first post on the new version of <a href=/>balbi.sh</a>. The previous incarnation was a single HTML file with one link; this one is built with <a href=https://www.getzola.org/ rel=external>Zola</a> and styled after <a href=https://github.com/protesilaos/ef-themes rel=external>ef-melissa-light</a> — a warm, legible Emacs theme by Protesilaos Stavrou. Body text is set in <strong>Aporetic Serif</strong>, headings and UI in <strong>Aporetic Sans</strong>, and code in <strong>Aporetic Sans Mono</strong> — all from the same author as the colour palette.<h2 id=why-now>Why now</h2><p>I want a place to keep working notes — short writeups about the things I run into while building firmware. The bar for publishing here is low on purpose. If a problem took me more than an hour to figure out, it probably deserves a post so I (or you) don’t have to figure it out again next time.<h2 id=what-to-expect>What to expect</h2><p>Mostly:<ul><li><strong>Embedded Rust</strong> — Embassy, <code>embedded-hal</code>, async on tiny chips.<li><strong>Bare-metal C</strong> — when Rust isn’t an option, which is more often than I’d like.<li><strong>Tooling</strong> — probe-rs, defmt, the linker, the assembler, the things that quietly hold everything together.<li><strong>Occasional rants</strong> about debugging hardware at 2am.</ul><p>If you want to follow along, there’s an <a href=/atom.xml>Atom feed</a>.<h2 id=code-by-the-way>Code, by the way</h2><p>It looks like this:<pre class="giallo z-code"><code data-lang=rust><span class=giallo-l><span>#</span><span>[</span><span>embassy_executor</span><span class=z-keyword>::</span><span>task</span><span>]</span></span>
+<span class=giallo-l><span class=z-keyword>async</span><span class=z-keyword> fn</span><span class="z-entity z-name z-function"> blinky</span><span>(</span><span class=z-storage>mut</span><span class="z-variable z-other"> led</span><span class=z-keyword>:</span><span class="z-entity z-name z-type"> Output</span><span>&lt;</span><span>'</span><span class="z-entity z-name z-type">static</span><span>></span><span>)</span><span> {</span></span>
+<span class=giallo-l><span class=z-keyword>    loop</span><span> {</span></span>
+<span class=giallo-l><span class="z-variable z-other">        led</span><span class=z-keyword>.</span><span class="z-entity z-name z-function">toggle</span><span>(</span><span>)</span><span>;</span></span>
+<span class=giallo-l><span class="z-entity z-name z-type">        Timer</span><span class=z-keyword>::</span><span class="z-entity z-name z-function">after_millis</span><span>(</span><span class="z-constant z-numeric">500</span><span>)</span><span class=z-keyword>.</span><span class=z-keyword>await</span><span>;</span></span>
+<span class=giallo-l><span>    }</span></span>
+<span class=giallo-l><span>}</span></span></code></pre><p>That’s all for now. More soon.<nav class=post-nav><a href=/posts/>← All posts</a></nav></article></main><footer class=site-footer><div>© 2026 Felipe Balbi</div><div><a href=https://github.com/felipebalbi rel=me>GitHub</a> · <a href=/atom.xml>RSS</a></div></footer></div><script>(function () {
+      var root = document.documentElement;
+      var btn  = document.getElementById('theme-toggle');
+      var hlL  = document.getElementById('hl-light');
+      var hlD  = document.getElementById('hl-dark');
+      var mql  = window.matchMedia('(prefers-color-scheme: dark)');
+
+      function userChose() {
+        try {
+          var v = sessionStorage.getItem('theme');
+          return v === 'light' || v === 'dark';
+        } catch (_) { return false; }
+      }
+
+      function applyHighlight() {
+        var t = root.getAttribute('data-theme');
+        if (hlL) hlL.disabled = (t !== 'light');
+        if (hlD) hlD.disabled = (t !== 'dark');
+      }
+
+      function setTheme(t, persist) {
+        root.setAttribute('data-theme', t);
+        if (persist) {
+          try { sessionStorage.setItem('theme', t); } catch (_) {}
+        }
+        applyHighlight();
+      }
+
+      // Initial sync.
+      applyHighlight();
+
+      if (btn) {
+        btn.addEventListener('click', function () {
+          var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+          setTheme(next, true);
+        });
+      }
+
+      // Follow OS until the user makes a manual choice.
+      if (mql.addEventListener) {
+        mql.addEventListener('change', function (e) {
+          if (!userChose()) setTheme(e.matches ? 'dark' : 'light', false);
+        });
+      }
+    })();</script>

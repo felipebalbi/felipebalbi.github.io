@@ -1,0 +1,885 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+  <title>Felipe Balbi</title>
+  <subtitle>Notes on embedded systems, Rust, and the craft of writing software.</subtitle>
+  <link href="https://balbi.sh/tags/embassy/atom.xml" rel="self" type="application/atom+xml"/>
+  <link href="https://balbi.sh"/>
+  <generator uri="https://www.getzola.org/">Zola</generator>
+  <updated>2026-06-28T09:00:00+00:00</updated>
+  <id>https://balbi.sh/tags/embassy/atom.xml</id>
+  
+  <entry xml:lang="en">
+    <title>From &#x27;it works&#x27; to &#x27;I trust it&#x27;: two torture loops on a NOR driver</title>
+    <published>2026-06-28T09:00:00+00:00</published>
+    <updated>2026-06-28T09:00:00+00:00</updated>
+    <author><name>Felipe Balbi</name></author>
+    <link rel="alternate" href="https://balbi.sh/posts/flexspi-mcxa-hardening/" type="text/html"/>
+    <id>https://balbi.sh/posts/flexspi-mcxa-hardening/</id>
+    <summary type="html">A FlexSPI NOR driver that passed its self-test still wedged on a cancelled async future and silently zeroed a byte before an unaligned write. This is the story of the two soak rigs that caught both, and what trusting a driver actually takes.</summary>
+    <content type="html">&lt;p&gt;The FlexSPI NOR driver for the NXP MCXA5xx already worked. The
+blocking self-test was green, the examples ran, I could erase a
+sector, program a page, read it back, and watch the same bytes come
+out of the memory-mapped window. By the usual bar for “the driver
+works,” it worked.&lt;&#x2F;p&gt;
+&lt;p&gt;That bar is too low. A driver that passes its own happy-path
+self-test has demonstrated exactly one thing: that it can succeed when
+nothing goes wrong. It has said nothing about what happens when an
+async operation gets cancelled half a microsecond into a command
+shift, or when a caller does a partial-page write at an address the
+controller quietly dislikes. The distance between “it works” and “I
+trust it” is made entirely of those questions, and you don’t answer
+them by running the happy path again.&lt;&#x2F;p&gt;
+&lt;p&gt;You answer them by building something whose only job is to be nasty to
+the driver and to notice when the driver flinches. This post is about
+two such things — a pair of self-checking soak rigs for the
+&lt;code&gt;embassy-mcxa&lt;&#x2F;code&gt; FlexSPI driver — and the two bugs they caught on the
+way. The work landed in &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;embassy-rs&#x2F;embassy&#x2F;pull&#x2F;6389&quot;&gt;embassy-rs&#x2F;embassy#6389&lt;&#x2F;a&gt;, validated on an
+FRDM-MCXA577 with its on-board Winbond W25Q64 (8 MiB), and it builds on
+the register-level fixes (&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;embassy-rs&#x2F;embassy&#x2F;pull&#x2F;6386&quot;&gt;AHBCR&lt;&#x2F;a&gt;, &lt;code&gt;DLLCR&lt;&#x2F;code&gt;, &lt;code&gt;FLSHCR2&lt;&#x2F;code&gt;) from
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;embassy-rs&#x2F;embassy&#x2F;pull&#x2F;6386&quot;&gt;#6386&lt;&#x2F;a&gt; — more on how &lt;em&gt;those&lt;&#x2F;em&gt; got found in a moment, because it
+was the same rig.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-a-torture-loop-has-to-be&quot;&gt;What a torture loop has to be&lt;&#x2F;h2&gt;
+&lt;p&gt;A soak test that only loops the happy path faster is not a soak test;
+it’s a slow way to confirm what you already believed. To actually buy
+trust, the loop has to have a few properties, and getting those
+properties right was most of the work.&lt;&#x2F;p&gt;
+&lt;p&gt;It has to be &lt;strong&gt;adversarial&lt;&#x2F;strong&gt;: every round erases a fresh window,
+programs it with randomly-sized, randomly-placed sub-page writes and
+full pages, and then reads it back through &lt;em&gt;two independent paths&lt;&#x2F;em&gt; —
+the IP command path and the memory-mapped AHB window — asserting they
+agree with each other and with the pattern it wrote. A bug that lives
+in only one path can’t hide when the other path is watching.&lt;&#x2F;p&gt;
+&lt;p&gt;It has to be &lt;strong&gt;reproducible&lt;&#x2F;strong&gt;: every round is driven by a logged
+xorshift seed, so a failure three hours in isn’t a ghost — it’s a seed
+I can replay from a clean boot.&lt;&#x2F;p&gt;
+&lt;p&gt;It has to &lt;strong&gt;protect itself from itself&lt;&#x2F;strong&gt;: a torture loop that programs
+random addresses is one off-by-one away from scribbling on the sector
+it’s verifying, or wearing a single sector to death. So the window
+rotates by a prime stride to spread wear, a per-sector erase budget
+caps the damage, a wall-clock limit ends the run, and a &lt;strong&gt;never-erased
+canary sector&lt;&#x2F;strong&gt; sits off to the side. If a wild write ever lands in
+the canary, the canary stops matching, and I learn that the driver
+wrote somewhere it was never told to.&lt;&#x2F;p&gt;
+&lt;p&gt;Stripped of the bookkeeping, each round looks like this:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;loop&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;    let&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; seed&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; rng&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;next&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt;          &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; logged, so any failure replays&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;    let&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; window&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; next_window&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;seed&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; prime-stride rotation, wear-spread&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;    erase&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;window&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;?&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;    verify_erased&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;window&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;?&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;    for&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; write&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; in&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; random_writes&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;seed&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; window&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;        program&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;write&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;addr&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; write&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;bytes&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;?&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; The load-bearing assertion: two independent read paths must&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; agree with each other and with what we wrote.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;    assert_eq!&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;read_ip&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;window&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;   expected&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;seed&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;    assert_eq!&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;read_mmap&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;window&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; expected&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;seed&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;    assert_canary_intact&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;?&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt;        &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; nobody wrote where they shouldn&amp;#39;t&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;    if&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; elapsed&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt; &amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; LIMIT&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; break&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;span&gt; }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;The first time I pointed this at the driver, it didn’t get to a clean
+round. The IP path and the memory-mapped path disagreed, which is how
+the &lt;code&gt;AHBCR.AFLASHBASE&lt;&#x2F;code&gt; addressing bug surfaced — I fixed that
+separately in &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;embassy-rs&#x2F;embassy&#x2F;pull&#x2F;6386&quot;&gt;#6386&lt;&#x2F;a&gt; before any of the rest of this made
+sense. With that fixed, the rig got much further, and then found
+something stranger.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-it-found-first-the-byte-before-the-write-keeps-going-to-zero&quot;&gt;What it found first: the byte before the write keeps going to zero&lt;&#x2F;h2&gt;
+&lt;p&gt;The failure was small and specific, which is the worst kind. Most
+rounds were clean. But on rounds where the random writes happened to
+place one sub-page write starting at an address with &lt;code&gt;addr % 8&lt;&#x2F;code&gt; of 5 or
+7, and &lt;em&gt;another&lt;&#x2F;em&gt; write followed in the same page, the byte immediately
+&lt;em&gt;before&lt;&#x2F;em&gt; the second write’s start address came back as &lt;code&gt;0x00&lt;&#x2F;code&gt;. Not the
+bytes I wrote — those were fine. The byte &lt;em&gt;before&lt;&#x2F;em&gt; them, which I hadn’t
+touched in that operation at all.&lt;&#x2F;p&gt;
+&lt;p&gt;My first assumption was that I had a bug in the FIFO-fill loop: an
+off-by-one in how the driver packs the caller’s buffer into the
+controller’s TX FIFO. I went and read that loop very carefully, then
+did the thing I should have done first and diffed it, byte for byte,
+against NXP’s &lt;code&gt;FLEXSPI_WriteBlocking&lt;&#x2F;code&gt; in their SDK. It was identical.
+The driver was filling the FIFO exactly the way the vendor does.&lt;&#x2F;p&gt;
+&lt;p&gt;That reframed the whole problem. If the loop is byte-identical to the
+reference and the reference is trusted, the corruption isn’t in the
+loop — it’s in the controller’s handling of an unaligned write boundary
+between two consecutive writes in a page. A single write of any length,
+at any alignment, is fine. It’s specifically the seam between two
+sub-page writes when the second one starts unaligned that the IP
+mangles. This is a controller alignment quirk, and no amount of
+re-reading my code was going to fix a property of the silicon.&lt;&#x2F;p&gt;
+&lt;p&gt;So the fix isn’t to make the unaligned write work — it’s to make the
+unaligned write &lt;em&gt;impossible to ask for&lt;&#x2F;em&gt;, loudly, instead of letting it
+silently corrupt an adjacent byte. &lt;code&gt;page_program&lt;&#x2F;code&gt; now enforces a
+write-size contract: the start address and the length must both be
+8-byte aligned, and the write must stay within a single page. Anything
+else returns an error before a single byte reaches the flash.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; The 8 is a property of the FlexSPI IP&#x2F;DMA FIFO window,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; not of the flash chip. Name it so nobody &amp;quot;optimizes&amp;quot; it away.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;const&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; WRITE_GRANULARITY&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; usize&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 8&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;fn&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; check_program&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;addr&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; u32&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; len&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; usize&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; flash_size&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; u32&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Result&lt;&#x2F;span&gt;&lt;span&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; IoError&lt;&#x2F;span&gt;&lt;span&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;    if&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; addr&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; as&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; usize&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; %&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; WRITE_GRANULARITY&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; !=&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 0&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; |&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;|&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; len&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; %&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; WRITE_GRANULARITY&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; !=&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 0&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;        return&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Err&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;IoError&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;Misaligned&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;    match&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; addr&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;checked_add&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;len&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; as&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; u32&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;        Some&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;end&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; if&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; end&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; &amp;lt;=&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; flash_size&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;span&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;        _&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; return&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Err&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;IoError&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;OutOfBounds&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; ...plus the single-page check...&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;    Ok&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Two things made this an easy call rather than a regression. First, it’s
+the exact granularity the DMA write path already required (&lt;code&gt;len % 8 == 0&lt;&#x2F;code&gt;), so the async&#x2F;DMA side of the driver had always lived under this
+contract — I was only making the blocking side honest about it. Second,
+it maps cleanly onto &lt;code&gt;embedded-storage&lt;&#x2F;code&gt;’s &lt;code&gt;WRITE_SIZE&lt;&#x2F;code&gt; model, so a
+future trait impl falls out naturally rather than fighting the
+contract. The same pass also bounds-checks &lt;code&gt;read&lt;&#x2F;code&gt;, &lt;code&gt;erase_sector&lt;&#x2F;code&gt;, and
+&lt;code&gt;program&lt;&#x2F;code&gt; against the configured flash size, returning
+&lt;code&gt;IoError::OutOfBounds&lt;&#x2F;code&gt; instead of wrapping around. Both new variants
+went onto an already &lt;code&gt;#[non_exhaustive]&lt;&#x2F;code&gt; &lt;code&gt;IoError&lt;&#x2F;code&gt;, so none of this
+breaks callers — the only behavioural change is that a sub-page write
+now has to align to 8 bytes, where before it would silently eat the
+byte next door.&lt;&#x2F;p&gt;
+&lt;p&gt;Partial-page writes still work. They just work at 8-byte granularity,
+the way the hardware can actually deliver them. I updated the bundled
+examples to match (a &lt;code&gt;100&lt;&#x2F;code&gt;-byte partial write became &lt;code&gt;96&lt;&#x2F;code&gt;; the stress
+example’s program sizes got rounded to multiples of 8), which was a
+nice forcing function for confirming the contract was livable and not
+just defensible.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;pushing-the-same-idea-at-the-async-path&quot;&gt;Pushing the same idea at the async path&lt;&#x2F;h2&gt;
+&lt;p&gt;The blocking driver was now hardened and soaked. But the interesting
+half of an Embassy driver is the async half, and async brings a failure
+mode that blocking code simply doesn’t have: &lt;strong&gt;cancellation&lt;&#x2F;strong&gt;.&lt;&#x2F;p&gt;
+&lt;p&gt;In async Rust, the idiomatic way to bound an operation is to wrap it in
+&lt;code&gt;with_timeout&lt;&#x2F;code&gt;, or race it in a &lt;code&gt;select!&lt;&#x2F;code&gt;, or cancel the task it runs
+in. All three do the same thing under the hood: they &lt;em&gt;drop the future
+mid-flight&lt;&#x2F;em&gt;. The operation was in progress, and now it isn’t, and it
+never got to run whatever cleanup it might have wanted to run. Any
+async driver that can’t survive that is a driver with a landmine in it,
+waiting for the first caller who puts a timeout around a flash write.&lt;&#x2F;p&gt;
+&lt;p&gt;So the second rig, &lt;code&gt;flexspi-cancel-soak&lt;&#x2F;code&gt;, does that on purpose,
+thousands of times. It runs the same erase&#x2F;program&#x2F;verify integrity
+checks over the async + DMA path, and then it does something deliberately
+hostile: it takes a real operation, wraps it in &lt;code&gt;with_timeout&lt;&#x2F;code&gt; with a
+delay swept across a wide range — from about a microsecond (mid
+command-shift, the operation has barely started) out to a couple of
+milliseconds (mid write-in-progress, the flash is busy) — so the future
+gets dropped at every interesting phase of the transaction. Then it
+issues a &lt;em&gt;fresh&lt;&#x2F;em&gt; operation and asserts that one returns correct data.&lt;&#x2F;p&gt;
+&lt;p&gt;The elegant part of testing cancel-safety is that you barely need an
+assertion. A driver that isn’t cancel-safe doesn’t return wrong data
+after a botched cancellation — it &lt;em&gt;hangs the next operation forever&lt;&#x2F;em&gt;. So
+the test simply &lt;em&gt;reaching the next round&lt;&#x2F;em&gt;, across thousands of
+in-flight cancellations, is itself the pass signal. If the rig is still
+counting rounds, the driver is recovering. If it stops, it wedged.&lt;&#x2F;p&gt;
+&lt;p&gt;It stopped.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-it-found-second-a-dropped-future-wedges-the-controller&quot;&gt;What it found second: a dropped future wedges the controller&lt;&#x2F;h2&gt;
+&lt;p&gt;The symptom was a hang, deep in &lt;code&gt;prepare_ip_transfer&lt;&#x2F;code&gt;, spinning in
+&lt;code&gt;wait_idle()&lt;&#x2F;code&gt; waiting for a sequence engine that was never going to
+become idle. The diagnosis, once I dumped the controller state at the
+hang, was clear: the cancelled operation had left the FlexSPI sequence
+engine non-idle — chip-select still asserted, the TX FIFO in underrun —
+and the driver had no notion that it should clean any of that up. The
+&lt;em&gt;next&lt;&#x2F;em&gt; operation walked in, asked the engine to be idle, and waited for
+a condition that the &lt;em&gt;previous, cancelled&lt;&#x2F;em&gt; operation had made
+permanently false. One cancelled future, and the controller was bricked
+until reset.&lt;&#x2F;p&gt;
+&lt;p&gt;The fix is to stop trusting that the engine is idle just because the
+last operation “finished,” and instead make &lt;code&gt;prepare_ip_transfer&lt;&#x2F;code&gt;
+self-healing. On entry, if the engine isn’t idle — the fingerprint of a
+previously cancelled op — force it idle with a software reset before
+doing anything else:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;fn&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; prepare_ip_transfer&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;&amp;amp;&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt;mut&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-language&quot;&gt; self&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Result&lt;&#x2F;span&gt;&lt;span&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; IoError&lt;&#x2F;span&gt;&lt;span&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; A cancelled op leaves the sequence engine non-idle: CS still&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; asserted, TX FIFO underrun. Detect that fingerprint and recover.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; One SEQIDLE sample is authoritative here: SEQIDLE only deasserts&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; on a fresh IPCMD trigger, and none is pending at this point.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;    if&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; !&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-language&quot;&gt;self&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;seq_idle&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;        &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; Force idle, de-assert CS, reset the instruction pointer,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;        &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; flush the FIFOs. The LUT and controller config survive a&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;        &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; software reset -- the init path already relies on that.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-language&quot;&gt;        self&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;software_reset&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-language&quot;&gt;    self&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;wait_idle&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; ...load the IP command, trigger IPCMD...&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;    Ok&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;There’s a deliberate design decision hiding in what this fix &lt;em&gt;doesn’t&lt;&#x2F;em&gt;
+do. It does not add a timeout. The driver imposes no timeout of its own
+and keeps &lt;code&gt;embassy-time&lt;&#x2F;code&gt; out of its hot path entirely. Timeout &lt;em&gt;policy&lt;&#x2F;em&gt;
+— how long is too long, and whether to give up — belongs to the
+application, which already has &lt;code&gt;with_timeout&lt;&#x2F;code&gt; for exactly that. The
+driver’s job isn’t to decide the policy; it’s to make the policy
+&lt;em&gt;safe&lt;&#x2F;em&gt;. The self-healing recovery is precisely what lets a caller wrap
+any operation in &lt;code&gt;with_timeout&lt;&#x2F;code&gt; without fear: when their timeout
+elapses and drops the future, the driver un-wedges itself on the next
+call instead of staying broken. The cancellation that used to be a
+landmine is now just a thing that happens.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;the-payoff&quot;&gt;The payoff&lt;&#x2F;h2&gt;
+&lt;p&gt;With both fixes in, the two rigs ran clean:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;flexspi-soak&lt;&#x2F;code&gt;&lt;&#x2F;strong&gt; (blocking IP + memory-mapped): 384 rounds, zero
+mismatches between the IP and AHB paths, and every out-of-contract
+call — misaligned, page-crossing, out-of-range — returning the error
+it should.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;flexspi-cancel-soak&lt;&#x2F;code&gt;&lt;&#x2F;strong&gt; (async + DMA): 388 rounds, &lt;strong&gt;5,044
+in-flight cancellations&lt;&#x2F;strong&gt;, 3,880 clean recoveries, zero wedges, zero
+data corruption.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;Those 5,044 cancellations are the number I care about most, because
+every one of them is a &lt;code&gt;with_timeout&lt;&#x2F;code&gt; firing at a moment that, a week
+earlier, would have bricked the controller until the next reset.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-i-d-carry-to-the-next-driver&quot;&gt;What I’d carry to the next driver&lt;&#x2F;h2&gt;
+&lt;p&gt;A few things generalize past this one chip:&lt;&#x2F;p&gt;
+&lt;p&gt;A happy-path self-test proves a driver &lt;em&gt;can&lt;&#x2F;em&gt; work. It says nothing
+about whether you can trust it. Those are different claims, and only the
+second one matters once real callers show up.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;Cancel-safety is a first-class property of an async driver&lt;&#x2F;strong&gt;, not an
+edge case. If dropping an in-flight future can leave your peripheral in
+a state the next operation can’t recover from, you don’t have a working
+async driver yet — you have one that works until someone uses a timeout.
+And in Embassy, &lt;em&gt;someone always uses a timeout.&lt;&#x2F;em&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;Make illegal states loud.&lt;&#x2F;strong&gt; The unaligned write didn’t fail — it
+succeeded and corrupted a neighbour. A contract that turns “silently
+wrong” into “loudly refused” is worth more than it costs, every time.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;Seed your randomness.&lt;&#x2F;strong&gt; A fuzzing soak loop that can’t replay its own
+failures is a slot machine. The xorshift seed turned “it broke
+somewhere in three hours” into “it broke on this seed, here’s the
+repro.”&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;a-note-on-trusting-it&quot;&gt;A note on trusting it&lt;&#x2F;h2&gt;
+&lt;p&gt;I trust this driver today — on this board, with this flash part,
+against everything the two rigs throw at it. That’s a real and specific
+claim, and it’s also a smaller one than “it’s correct.” Both bugs in
+this post were invisible until the moment a rig was nasty enough to
+provoke them, and the honest conclusion to draw from that is &lt;em&gt;not&lt;&#x2F;em&gt; that
+I’ve now found the last one. It’s that the next rig, or the next caller
+with a workload I didn’t imagine, may well surface something these two
+didn’t. Soak tests buy confidence proportional to how mean they are, and
+no finite amount of meanness reaches a proof. If you run this driver and
+it does something neither rig caught, I’d genuinely like to know — that’s
+the rig I haven’t built yet.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-this-doesn-t-cover&quot;&gt;What this doesn’t cover&lt;&#x2F;h2&gt;
+&lt;p&gt;The usual caveats, and they’re real ones. This is one board, one flash
+part, one controller IP. The unaligned-write corruption is a quirk of
+&lt;em&gt;this&lt;&#x2F;em&gt; FlexSPI block, and I’d be unsurprised if it looked nothing like
+that on other silicon — the &lt;em&gt;shape&lt;&#x2F;em&gt; of the lesson (diff against the
+vendor reference; if your loop is identical, suspect the controller)
+transfers better than the specifics. The driver also doesn’t implement
+the &lt;code&gt;embedded-storage&lt;&#x2F;code&gt; traits yet, though the write-size contract was
+designed so it maps straight onto &lt;code&gt;WRITE_SIZE = 8&lt;&#x2F;code&gt; &#x2F; &lt;code&gt;ERASE_SIZE = 4096&lt;&#x2F;code&gt; when it does.&lt;&#x2F;p&gt;
+&lt;p&gt;The full set of fixes, the two soak rigs, and the hardware run logs are
+in &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;embassy-rs&#x2F;embassy&#x2F;pull&#x2F;6389&quot;&gt;embassy-rs&#x2F;embassy#6389&lt;&#x2F;a&gt;. If you’re bringing up FlexSPI on
+MCXA, I hope the rigs save you the half-week. If you’re doing it on
+something else and one of these patterns rhymes with what you’re seeing,
+I’d like to hear about it.&lt;&#x2F;p&gt;
+</content>
+  </entry>
+  
+  <entry xml:lang="en">
+    <title>Pico de Gallo: Release Announcement</title>
+    <published>2026-06-22T09:00:00+00:00</published>
+    <updated>2026-06-22T09:00:00+00:00</updated>
+    <author><name>Felipe Balbi</name></author>
+    <link rel="alternate" href="https://balbi.sh/posts/pico-de-gallo-reliability-release/" type="text/html"/>
+    <id>https://balbi.sh/posts/pico-de-gallo-reliability-release/</id>
+    <summary type="html">A coordinated, lockstep release across all seven Pico de Gallo crates. The wire schema bumped, so firmware and host upgrade together. Most of the work came out of a reliability review — bounded GPIO waits, a firmware watchdog, subscription-leak recovery, and stricter schema validation.</summary>
+    <content type="html">&lt;p&gt;&lt;a href=&quot;&#x2F;pico-de-gallo&#x2F;&quot;&gt;Pico de Gallo&lt;&#x2F;a&gt; turns an RP2350 into a USB-attached bridge that
+lets a host program drive real I²C, SPI, GPIO, PWM, ADC, UART, and
+1-Wire from &lt;code&gt;std&lt;&#x2F;code&gt; Rust, C, or Python — so you can write and test
+device drivers on your laptop instead of cross-compiling for an MCU
+every time. Today’s release moves the whole ecosystem forward at once.&lt;&#x2F;p&gt;
+&lt;p&gt;This is a &lt;strong&gt;lockstep release&lt;&#x2F;strong&gt;. The wire protocol in
+&lt;code&gt;pico-de-gallo-internal&lt;&#x2F;code&gt; went from schema 0.5 to 0.6, and under the
+pre-1.0 schema-versioning rule that is a breaking change. &lt;strong&gt;Firmware
+and host must be upgraded together&lt;&#x2F;strong&gt; — a 0.10 firmware will reject an
+older host’s RPCs, and a new host will refuse to talk to old firmware
+rather than silently mis-decode bytes on the wire. The
+&lt;a href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;pico-de-gallo-reliability-release&#x2F;#upgrade-and-compatibility&quot;&gt;upgrade notes&lt;&#x2F;a&gt; at the bottom have the full
+version table.&lt;&#x2F;p&gt;
+&lt;p&gt;Most of what landed here comes out of a reliability review that turned
+up a handful of real bugs: a GPIO wait could wedge the entire firmware
+dispatcher, a hung handler had no recovery path, GPIO subscriptions
+leaked when a host process crashed, and a bumped schema &lt;em&gt;major&lt;&#x2F;em&gt; could
+slip past validation and corrupt decoding silently. Each crate’s share
+of the fix is below.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;pico-de-gallo-internal-0-6-0-the-wire-protocol&quot;&gt;&lt;code&gt;pico-de-gallo-internal&lt;&#x2F;code&gt; 0.6.0 — the wire protocol&lt;&#x2F;h2&gt;
+&lt;p&gt;This is the crate every other one depends on, and the breaking schema
+bump that drives the lockstep.&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;GpioWaitRequest&lt;&#x2F;code&gt; gained a &lt;code&gt;timeout_ms: u32&lt;&#x2F;code&gt; field, used by all five
+&lt;code&gt;gpio&#x2F;wait-*&lt;&#x2F;code&gt; endpoints (&lt;code&gt;wait-high&lt;&#x2F;code&gt;, &lt;code&gt;wait-low&lt;&#x2F;code&gt;, &lt;code&gt;wait-rising&lt;&#x2F;code&gt;,
+&lt;code&gt;wait-falling&lt;&#x2F;code&gt;, &lt;code&gt;wait-any&lt;&#x2F;code&gt;). A value of &lt;code&gt;0&lt;&#x2F;code&gt; preserves the old
+wait-forever behavior; a non-zero value bounds the firmware-side wait
+and returns the new &lt;code&gt;GpioError::Timeout&lt;&#x2F;code&gt; on expiry. This is the wire
+half of the fix for the dispatcher wedge — a wait on a pin that never
+transitions used to block &lt;em&gt;every other endpoint&lt;&#x2F;em&gt; until you
+power-cycled the board.&lt;&#x2F;li&gt;
+&lt;li&gt;New &lt;code&gt;system&#x2F;reset-subscriptions&lt;&#x2F;code&gt; endpoint (request &lt;code&gt;()&lt;&#x2F;code&gt;, response
+&lt;code&gt;u8&lt;&#x2F;code&gt; count). GPIO subscriptions are server-side state that outlives
+the USB transport, so a host that crashed without sending
+&lt;code&gt;gpio&#x2F;unsubscribe&lt;&#x2F;code&gt; would strand those pins until a power cycle. This
+endpoint is the recovery path.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;Both changes are append-only on the wire, but the schema-version bump
+itself is what requires the coordinated upgrade.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;pico-de-gallo-lib-0-6-0-the-rust-host-library&quot;&gt;&lt;code&gt;pico-de-gallo-lib&lt;&#x2F;code&gt; 0.6.0 — the Rust host library&lt;&#x2F;h2&gt;
+&lt;ul&gt;
+&lt;li&gt;New &lt;code&gt;gpio_wait_for_{high,low,rising_edge,falling_edge,any_edge}_with_timeout&lt;&#x2F;code&gt;
+methods take a &lt;code&gt;std::time::Duration&lt;&#x2F;code&gt; and return
+&lt;code&gt;Err(PicoDeGalloError::Endpoint(GpioError::Timeout))&lt;&#x2F;code&gt; on expiry. The
+existing two-argument methods keep waiting forever by sending
+&lt;code&gt;timeout_ms: 0&lt;&#x2F;code&gt;.&lt;&#x2F;li&gt;
+&lt;li&gt;New &lt;code&gt;system_reset_subscriptions()&lt;&#x2F;code&gt; method returns the number of
+subscriptions it reset. The recommended connect sequence is now
+&lt;code&gt;new()&lt;&#x2F;code&gt; → &lt;code&gt;validate().await?&lt;&#x2F;code&gt; → &lt;code&gt;system_reset_subscriptions().await?&lt;&#x2F;code&gt;.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;code&gt;validate()&lt;&#x2F;code&gt; now checks &lt;code&gt;schema_major&lt;&#x2F;code&gt; in addition to
+&lt;code&gt;schema_minor&lt;&#x2F;code&gt;. Previously a firmware reporting a bumped major with a
+matching minor would pass validation and the host would then
+mis-decode wire bytes — silent garbage out. &lt;code&gt;ValidateError::SchemaMismatch&lt;&#x2F;code&gt;
+now carries &lt;code&gt;expected_major&lt;&#x2F;code&gt; &#x2F; &lt;code&gt;actual_major&lt;&#x2F;code&gt;, and its &lt;code&gt;Display&lt;&#x2F;code&gt;
+shows the full &lt;code&gt;MAJOR.MINOR.x&lt;&#x2F;code&gt; skew.&lt;&#x2F;li&gt;
+&lt;li&gt;Fixed: &lt;code&gt;validate()&lt;&#x2F;code&gt; no longer mis-classifies transport,
+postcard-decode, and frame-size errors as
+&lt;code&gt;ValidateError::LegacyFirmware&lt;&#x2F;code&gt;. Only the postcard-rpc “no handler
+for that key” signals (&lt;code&gt;UnknownKey&lt;&#x2F;code&gt;, &lt;code&gt;KeyTooSmall&lt;&#x2F;code&gt;) map to
+&lt;code&gt;LegacyFirmware&lt;&#x2F;code&gt;; everything else routes to &lt;code&gt;Comms&lt;&#x2F;code&gt;, so you stop
+being told to upgrade firmware that is already current.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;code&gt;MAX_BATCH_OPS&lt;&#x2F;code&gt; and &lt;code&gt;MAX_TRANSFER_SIZE&lt;&#x2F;code&gt; are now re-exported, so you
+don’t have to depend on the wire crate just to validate batch sizes.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h2 id=&quot;pico-de-gallo-hal-0-6-0-the-embedded-hal-layer&quot;&gt;&lt;code&gt;pico-de-gallo-hal&lt;&#x2F;code&gt; 0.6.0 — the &lt;code&gt;embedded-hal&lt;&#x2F;code&gt; layer&lt;&#x2F;h2&gt;
+&lt;ul&gt;
+&lt;li&gt;New &lt;code&gt;Hal::new_validated()&lt;&#x2F;code&gt; and &lt;code&gt;Hal::new_validated_with_serial_number()&lt;&#x2F;code&gt;
+constructors call &lt;code&gt;validate()&lt;&#x2F;code&gt; before returning, failing loudly on a
+disconnected device or a schema mismatch. The lazy &lt;code&gt;Hal::new()&lt;&#x2F;code&gt; still
+defers failures to the first RPC if that’s what you want. A standalone
+&lt;code&gt;Hal::validate()&lt;&#x2F;code&gt; accessor lets you check after the fact.&lt;&#x2F;li&gt;
+&lt;li&gt;New &lt;code&gt;Hal::system_reset_subscriptions() -&amp;gt; Result&amp;lt;u8, SystemHalError&amp;gt;&lt;&#x2F;code&gt;
+exposes the subscription teardown that previously required dropping
+down to &lt;code&gt;pico-de-gallo-lib&lt;&#x2F;code&gt;. Recommended right after
+&lt;code&gt;new_validated()&lt;&#x2F;code&gt; in any app that uses GPIO subscriptions.&lt;&#x2F;li&gt;
+&lt;li&gt;New &lt;code&gt;Gpio::wait_for_*_with_timeout&lt;&#x2F;code&gt; inherent async methods accept a
+&lt;code&gt;Duration&lt;&#x2F;code&gt; and return &lt;code&gt;GpioError::Timeout&lt;&#x2F;code&gt; on expiry. They’re
+inherent methods rather than trait methods because
+&lt;code&gt;embedded-hal-async&lt;&#x2F;code&gt;’s &lt;code&gt;Wait&lt;&#x2F;code&gt; trait has no notion of a timeout; the
+trait methods keep their wait-forever semantics.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;code&gt;AdcChannel&lt;&#x2F;code&gt;, &lt;code&gt;AdcConfigurationInfo&lt;&#x2F;code&gt;, &lt;code&gt;GpioDirection&lt;&#x2F;code&gt;, &lt;code&gt;GpioEdge&lt;&#x2F;code&gt;,
+and &lt;code&gt;GpioPull&lt;&#x2F;code&gt; are now re-exported — driver authors no longer need
+&lt;code&gt;pico-de-gallo-lib&lt;&#x2F;code&gt; in their &lt;code&gt;Cargo.toml&lt;&#x2F;code&gt; just for these types.&lt;&#x2F;li&gt;
+&lt;li&gt;New &lt;code&gt;HalInitError&lt;&#x2F;code&gt; and &lt;code&gt;SystemHalError&lt;&#x2F;code&gt; types, and a fix for a stale
+doc-comment that referenced a &lt;code&gt;Hal::uart_set_config&lt;&#x2F;code&gt; method that
+never existed.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h2 id=&quot;pico-de-gallo-ffi-0-7-0-the-c-bindings&quot;&gt;&lt;code&gt;pico-de-gallo-ffi&lt;&#x2F;code&gt; 0.7.0 — the C bindings&lt;&#x2F;h2&gt;
+&lt;ul&gt;
+&lt;li&gt;New &lt;code&gt;gallo_init_strict()&lt;&#x2F;code&gt; and &lt;code&gt;gallo_init_strict_with_serial_number()&lt;&#x2F;code&gt;
+call &lt;code&gt;validate()&lt;&#x2F;code&gt; internally and return &lt;code&gt;NULL&lt;&#x2F;code&gt; on device-not-found,
+schema mismatch, or legacy firmware. Prefer these over the lazy
+&lt;code&gt;gallo_init&lt;&#x2F;code&gt; in production C — failures surface at construct time
+instead of on the first RPC.&lt;&#x2F;li&gt;
+&lt;li&gt;New &lt;code&gt;gallo_gpio_wait_for_{high,low,rising_edge,falling_edge,any_edge}_with_timeout_ms&lt;&#x2F;code&gt;
+functions. &lt;code&gt;timeout_ms == 0&lt;&#x2F;code&gt; keeps the wait-forever behavior;
+non-zero bounds it and returns &lt;code&gt;Status::GpioTimeout&lt;&#x2F;code&gt; (&lt;code&gt;-70&lt;&#x2F;code&gt;). These
+need firmware schema 0.6+; older firmware returns
+&lt;code&gt;Status::SchemaMismatch&lt;&#x2F;code&gt;.&lt;&#x2F;li&gt;
+&lt;li&gt;New &lt;code&gt;gallo_system_reset_subscriptions()&lt;&#x2F;code&gt; with
+&lt;code&gt;SystemResetSubscriptionsFailed&lt;&#x2F;code&gt; (&lt;code&gt;-69&lt;&#x2F;code&gt;).&lt;&#x2F;li&gt;
+&lt;li&gt;The high-throughput primitives &lt;code&gt;gallo_spi_transfer&lt;&#x2F;code&gt;, &lt;code&gt;gallo_spi_batch&lt;&#x2F;code&gt;,
+and &lt;code&gt;gallo_i2c_batch&lt;&#x2F;code&gt; are now reachable from C, via the tagged structs
+&lt;code&gt;GalloSpiBatchOp&lt;&#x2F;code&gt; &#x2F; &lt;code&gt;GalloI2cBatchOp&lt;&#x2F;code&gt;. On a per-operation failure an
+optional &lt;code&gt;out_failed_op&lt;&#x2F;code&gt; receives the zero-based index of the failing
+op. New status codes: &lt;code&gt;I2cBatchFailed&lt;&#x2F;code&gt; (&lt;code&gt;-66&lt;&#x2F;code&gt;), &lt;code&gt;SpiBatchFailed&lt;&#x2F;code&gt;
+(&lt;code&gt;-67&lt;&#x2F;code&gt;), &lt;code&gt;SpiTransferFailed&lt;&#x2F;code&gt; (&lt;code&gt;-68&lt;&#x2F;code&gt;). The wire protocol is unchanged
+here — this is pure FFI surface over existing endpoints.&lt;&#x2F;li&gt;
+&lt;li&gt;All &lt;code&gt;gallo_*&lt;&#x2F;code&gt; functions now take &lt;code&gt;const PicoDeGallo *&lt;&#x2F;code&gt; for the device
+handle. The ABI is unchanged, but C consumers that previously cast
+away &lt;code&gt;const&lt;&#x2F;code&gt; on every call can drop those casts, and headers built
+with &lt;code&gt;-Wcast-qual&lt;&#x2F;code&gt; stop warning. The handle remains &lt;code&gt;Send + Sync&lt;&#x2F;code&gt; and
+interior-mutable.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h2 id=&quot;pyco-de-gallo-0-4-2-the-python-bindings&quot;&gt;&lt;code&gt;pyco-de-gallo&lt;&#x2F;code&gt; 0.4.2 — the Python bindings&lt;&#x2F;h2&gt;
+&lt;ul&gt;
+&lt;li&gt;New &lt;code&gt;pyco_de_gallo.open_strict()&lt;&#x2F;code&gt; and
+&lt;code&gt;open_strict_with_serial_number(serial_number)&lt;&#x2F;code&gt; call &lt;code&gt;validate()&lt;&#x2F;code&gt;
+before returning the handle and raise &lt;code&gt;RuntimeError&lt;&#x2F;code&gt; on
+device-not-found, schema mismatch, or legacy firmware. Prefer these
+over the lazy &lt;code&gt;open()&lt;&#x2F;code&gt; in production Python.&lt;&#x2F;li&gt;
+&lt;li&gt;New &lt;code&gt;gpio_wait_for_*_with_timeout(timeout_ms: int)&lt;&#x2F;code&gt; methods — &lt;code&gt;0&lt;&#x2F;code&gt;
+waits forever, non-zero raises &lt;code&gt;RuntimeError&lt;&#x2F;code&gt; on &lt;code&gt;GpioError::Timeout&lt;&#x2F;code&gt;.
+Requires firmware schema 0.6+.&lt;&#x2F;li&gt;
+&lt;li&gt;New &lt;code&gt;system_reset_subscriptions()&lt;&#x2F;code&gt; returns an &lt;code&gt;int&lt;&#x2F;code&gt;.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h2 id=&quot;gallo-cli-0-7-0-the-command-line-tool&quot;&gt;&lt;code&gt;gallo&lt;&#x2F;code&gt; (CLI) 0.7.0 — the command-line tool&lt;&#x2F;h2&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;gallo&lt;&#x2F;code&gt; now calls &lt;code&gt;validate()&lt;&#x2F;code&gt; at the top of every subcommand except
+&lt;code&gt;list&lt;&#x2F;code&gt; and &lt;code&gt;version&lt;&#x2F;code&gt;. A schema-version mismatch is reported up front
+with an actionable message that points at &lt;code&gt;gallo version&lt;&#x2F;code&gt; and tells
+you to re-flash the firmware or install a matching &lt;code&gt;gallo&lt;&#x2F;code&gt;, instead
+of surfacing as a confusing &lt;code&gt;CommsFailed&lt;&#x2F;code&gt; on the first RPC. &lt;code&gt;list&lt;&#x2F;code&gt; is
+exempt because it doesn’t touch a connected device; &lt;code&gt;version&lt;&#x2F;code&gt; is
+exempt because it &lt;em&gt;is&lt;&#x2F;em&gt; the diagnostic that reports schema skew.&lt;&#x2F;li&gt;
+&lt;li&gt;Everything else is unchanged. The existing &lt;code&gt;gpio&lt;&#x2F;code&gt; subcommands
+(&lt;code&gt;get&lt;&#x2F;code&gt;, &lt;code&gt;put&lt;&#x2F;code&gt;, &lt;code&gt;set-config&lt;&#x2F;code&gt;, &lt;code&gt;monitor&lt;&#x2F;code&gt;) keep working. The CLI doesn’t
+expose &lt;code&gt;gpio wait-for-*&lt;&#x2F;code&gt; subcommands, so bounded waits stay available
+through the Rust, C, and Python libraries.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h2 id=&quot;pico-de-gallo-firmware-0-10-0-the-device&quot;&gt;&lt;code&gt;pico-de-gallo-firmware&lt;&#x2F;code&gt; 0.10.0 — the device&lt;&#x2F;h2&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;gpio_wait_for_*&lt;&#x2F;code&gt; handlers now honor the per-request &lt;code&gt;timeout_ms&lt;&#x2F;code&gt;.
+Non-zero values wrap embassy’s &lt;code&gt;wait_for_*_edge()&lt;&#x2F;code&gt; future in
+&lt;code&gt;embassy_time::with_timeout(...)&lt;&#x2F;code&gt; and return &lt;code&gt;GpioError::Timeout&lt;&#x2F;code&gt; on
+expiry; &lt;code&gt;0&lt;&#x2F;code&gt; keeps the pre-0.6 wait-forever behavior.&lt;&#x2F;li&gt;
+&lt;li&gt;An embassy-rp watchdog is now enabled at a 2-second timeout, fed
+every 800 ms by a dedicated &lt;code&gt;watchdog_feeder_task&lt;&#x2F;code&gt;. It’s a separate
+task on purpose — a wedged handler can’t be trusted to feed a
+handler-based scheme — so the device recovers from any future handler
+hang. &lt;code&gt;pause_on_debug(true)&lt;&#x2F;code&gt; keeps debugger sessions from resetting
+the chip.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;code&gt;i2c_scan_handler&lt;&#x2F;code&gt; now wraps each per-address probe in a 50 ms
+timeout, so one slow-to-NAK address no longer burns the whole scan
+budget.&lt;&#x2F;li&gt;
+&lt;li&gt;New &lt;code&gt;system&#x2F;reset-subscriptions&lt;&#x2F;code&gt; handler iterates the GPIO monitor
+slots, signals each live one to stop, awaits the pin back from its
+monitor task, and returns it to the context. It’s idempotent and
+cheap when nothing is subscribed — the device-side half of the
+subscription-leak recovery.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;Together these close the dispatcher-wedge regression (a &lt;code&gt;gpio_wait&lt;&#x2F;code&gt; on
+a never-transitioning pin blocking every other endpoint), the
+no-recovery-from-a-hung-handler gap, and the worst-case impact of a
+flaky I²C bus on &lt;code&gt;i2c_scan&lt;&#x2F;code&gt;.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;upgrade-and-compatibility&quot;&gt;Upgrade and compatibility&lt;&#x2F;h2&gt;
+&lt;p&gt;Because the wire schema changed, &lt;strong&gt;flash the new firmware and update
+your host crate in the same step&lt;&#x2F;strong&gt;. Mixed versions won’t talk to each
+other — by design, the new validation refuses rather than mis-decodes.&lt;&#x2F;p&gt;
+&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Crate&lt;&#x2F;th&gt;&lt;th&gt;Old&lt;&#x2F;th&gt;&lt;th&gt;New&lt;&#x2F;th&gt;&lt;&#x2F;tr&gt;&lt;&#x2F;thead&gt;&lt;tbody&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;pico-de-gallo-internal&lt;&#x2F;code&gt;&lt;&#x2F;td&gt;&lt;td&gt;0.5.0&lt;&#x2F;td&gt;&lt;td&gt;0.6.0&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;pico-de-gallo-lib&lt;&#x2F;code&gt;&lt;&#x2F;td&gt;&lt;td&gt;0.5.0&lt;&#x2F;td&gt;&lt;td&gt;0.6.0&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;pico-de-gallo-hal&lt;&#x2F;code&gt;&lt;&#x2F;td&gt;&lt;td&gt;0.5.0&lt;&#x2F;td&gt;&lt;td&gt;0.6.0&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;pico-de-gallo-ffi&lt;&#x2F;code&gt;&lt;&#x2F;td&gt;&lt;td&gt;0.6.0&lt;&#x2F;td&gt;&lt;td&gt;0.7.0&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;gallo&lt;&#x2F;code&gt; (CLI)&lt;&#x2F;td&gt;&lt;td&gt;0.6.0&lt;&#x2F;td&gt;&lt;td&gt;0.7.0&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;pyco-de-gallo&lt;&#x2F;code&gt;&lt;&#x2F;td&gt;&lt;td&gt;0.2.0&lt;&#x2F;td&gt;&lt;td&gt;0.4.2&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;pico-de-gallo-firmware&lt;&#x2F;code&gt;&lt;&#x2F;td&gt;&lt;td&gt;0.9.0&lt;&#x2F;td&gt;&lt;td&gt;0.10.0&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;&#x2F;tbody&gt;&lt;&#x2F;table&gt;
+&lt;p&gt;After flashing, point the host at the device and confirm the schema
+lines up:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;shellsession&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;$&lt;&#x2F;span&gt;&lt;span&gt; gallo version&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;For new code, reach for the validating entry points so a version skew
+or a missing board fails at construct time rather than on the first
+call:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;Rust library: &lt;code&gt;PicoDeGallo::new()&lt;&#x2F;code&gt; → &lt;code&gt;validate().await?&lt;&#x2F;code&gt; →
+&lt;code&gt;system_reset_subscriptions().await?&lt;&#x2F;code&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;HAL: &lt;code&gt;Hal::new_validated()&lt;&#x2F;code&gt;, then &lt;code&gt;system_reset_subscriptions()&lt;&#x2F;code&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;C: &lt;code&gt;gallo_init_strict()&lt;&#x2F;code&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;Python: &lt;code&gt;pyco_de_gallo.open_strict()&lt;&#x2F;code&gt;&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;If you hit a schema-mismatch error after upgrading only one side, that
+mismatch is the new validation doing its job. Re-flash or re-install so
+both ends report the same schema, and you’re good.&lt;&#x2F;p&gt;
+</content>
+  </entry>
+  
+  <entry xml:lang="en">
+    <title>I3C target mode on MCXA: three things the datasheet didn&#x27;t warn me about</title>
+    <published>2026-06-20T09:00:00+00:00</published>
+    <updated>2026-06-20T09:00:00+00:00</updated>
+    <author><name>Felipe Balbi</name></author>
+    <link rel="alternate" href="https://balbi.sh/posts/i3c-target-mcxa-bring-up-gotchas/" type="text/html"/>
+    <id>https://balbi.sh/posts/i3c-target-mcxa-bring-up-gotchas/</id>
+    <summary type="html">A single-chip, single-driver bring-up story for I3C target mode on NXP MCXA. Three concrete gotchas, three diagnoses, three fixes, and the checklist I wish I&#x27;d had on day one.</summary>
+    <content type="html">&lt;p&gt;I spent the last several weeks bringing up an I3C &lt;em&gt;target&lt;&#x2F;em&gt; driver for
+the NXP MCXA family (MCXA2xx and MCXA5xx share the same I3C IP) inside
+the embassy HAL. “Target” is what I3C calls the role I²C calls
+“&lt;em&gt;slave&lt;&#x2F;em&gt;”: the device that sits on the bus, responds to a controller,
+and can also raise an in-band interrupt (IBI) and service a directed
+read without anyone toggling a sideband pin.  The use case was the
+boring one: a Rust target talking to a Rust controller, raising IBIs
+and returning responses for a few million iterations without
+panicking.&lt;&#x2F;p&gt;
+&lt;p&gt;The driver landed in &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;embassy-rs&#x2F;embassy&#x2F;pull&#x2F;6160&quot;&gt;embassy-rs&#x2F;embassy#6160&lt;&#x2F;a&gt; and the soak rig
+has now ticked past 50 million IBI-then-directed-read iterations at
+16-byte payloads, bus at 1.5 MHz SDR, against an NXP SDK controller
+on the other end. It got there by way of three corner cases that
+each took longer to diagnose than to fix, and that each looked
+nothing like what I’d assumed they were when I started chasing them.
+This post is those three.&lt;&#x2F;p&gt;
+&lt;p&gt;One caveat up front: this is one vendor, one HAL crate, one
+bring-up. I have no idea whether these gotchas generalize to other
+I3C silicon. The shape of &lt;em&gt;how the bugs hid&lt;&#x2F;em&gt; probably transfers;
+the specific register names and timing numbers don’t.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;the-setup&quot;&gt;The setup&lt;&#x2F;h2&gt;
+&lt;p&gt;The hardware is two MCXA boards wired together over their I3C0
+peripherals: one running the Rust controller, one running the Rust
+target, both on top of the &lt;code&gt;embassy-mcxa&lt;&#x2F;code&gt; HAL. The bus runs SDR at
+1.5 MHz push-pull &#x2F; 750 kHz open-drain. The exchange under test is the
+obvious one: controller writes a few bytes, target raises an IBI,
+controller responds with a directed read, target returns a pre-loaded
+payload, repeat. The target’s RX path is DMA-fed into a bbqueue ring
+so the IRQ can drain &lt;code&gt;SRDATAB&lt;&#x2F;code&gt; at line rate while the consuming task
+takes its time — that ring is what makes the soak loop possible at
+all, but it isn’t where any of these three gotchas live.&lt;&#x2F;p&gt;
+&lt;p&gt;For the first few days everything worked. Then the rig started
+panicking after twenty thousand to a few hundred thousand
+iterations with &lt;code&gt;InvalidStart&lt;&#x2F;code&gt; or &lt;code&gt;SdrParity&lt;&#x2F;code&gt; on the target side,
+and I’d go back to staring at register dumps.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;gotcha-1-the-target-clock-was-4x-too-slow-and-the-symptom-was-on-the-controller&quot;&gt;Gotcha 1: the target clock was 4× too slow, and the symptom was on the controller&lt;&#x2F;h2&gt;
+&lt;p&gt;The first failure mode looked like SDA contention around the IBI
+handshake — once every few hundred thousand iterations, the
+controller would see a frame with bad parity, or the target would
+surface &lt;code&gt;SERRWARN.INVSTART&lt;&#x2F;code&gt; on what should have been a clean
+repeated-Start. Not every IBI; not even most IBIs. Just enough to
+be unmissable in soak and unreproducible at the bench.&lt;&#x2F;p&gt;
+&lt;p&gt;I lost a day re-reading the IBI sequencing code for a race that
+wasn’t there before I gave up and added a &lt;code&gt;dump_registers()&lt;&#x2F;code&gt;
+method on both sides — one defmt line each, every &lt;code&gt;M*&lt;&#x2F;code&gt; &#x2F; &lt;code&gt;S*&lt;&#x2F;code&gt;
+register as a raw &lt;code&gt;u32&lt;&#x2F;code&gt;. Diffed against the NXP SDK’s target on
+the same wires, every register matched byte-for-byte except
+&lt;code&gt;SCONFIG&lt;&#x2F;code&gt;. I had &lt;code&gt;BAMATCH=1&lt;&#x2F;code&gt; on the mcxa5xx example and
+&lt;code&gt;BAMATCH=2&lt;&#x2F;code&gt; on mcxa2xx; the SDK had &lt;code&gt;BAMATCH=11&lt;&#x2F;code&gt;.&lt;&#x2F;p&gt;
+&lt;p&gt;BAMATCH is the count, in I3C functional-clock cycles, the target
+waits after seeing bus-idle before declaring the bus “available.”
+The HAL computes it as &lt;code&gt;fclk_MHz - 1&lt;&#x2F;code&gt; — correct, but only if
+&lt;code&gt;fclk&lt;&#x2F;code&gt; is in the range the I3C spec assumes. The MCXA examples
+were feeding I3C0 at roughly 3 MHz (mcxa5xx) and 2.8 MHz
+(mcxa2xx), giving bus-available times of 0.36 µs and 0.67 µs; the
+spec puts the minimum at 1 µs and the SDK runs at 12 MHz
+(0.92 µs). With BAMATCH expiring sub-microsecond, the target was
+declaring the bus available before the controller had finished
+releasing SDA, and very occasionally both ends would drive the
+line at the same time. That was the parity error and the
+&lt;code&gt;INVSTART&lt;&#x2F;code&gt;: SDA contention manifesting one full transaction
+downstream of the actual race.&lt;&#x2F;p&gt;
+&lt;p&gt;The fix is one line in the example clock-tree setup: route
+I3C0_FCLK from FRO_LF (12 MHz exact) with a &#x2F;1 divider, and the
+HAL’s math produces &lt;code&gt;BAMATCH=11&lt;&#x2F;code&gt;. &lt;code&gt;SCONFIG&lt;&#x2F;code&gt; becomes &lt;code&gt;0x140b0019&lt;&#x2F;code&gt;
+exactly, matching the SDK. The soak loop went from failing inside
+half a million iterations to running indefinitely clean.&lt;&#x2F;p&gt;
+&lt;p&gt;The lesson: when a vendor’s reference and yours run on the same
+wires and only one is reliable, dump every register on both sides
+post-init and diff them — the difference is almost never where
+you’re looking. And if a peripheral’s clock contributes to a
+&lt;em&gt;bus-timing&lt;&#x2F;em&gt; parameter rather than just a baud rate, check that
+field’s spec minimum before you trust the formula the HAL uses to
+compute it.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;gotcha-2-raising-the-ibi-before-the-fifo-was-loaded&quot;&gt;Gotcha 2: raising the IBI before the FIFO was loaded&lt;&#x2F;h2&gt;
+&lt;p&gt;With the clocks corrected, the soak rig hit a different failure:
+&lt;code&gt;SERRWARN.INVSTART&lt;&#x2F;code&gt; on the target, during the IBI-payload phase
+itself this time. The trace was unambiguous — the controller ACK’d
+the IBI, issued a repeated-Start with the target’s dynamic address
+and the read bit, started clocking SCL — and the target’s TX FIFO
+was empty when the first byte was demanded. The cause was an
+ordering bug in &lt;code&gt;dma_respond_to_read_with_ibi&lt;&#x2F;code&gt;: arm TX DMA, set
+&lt;code&gt;SCTRL.EVENT = Ibi&lt;&#x2F;code&gt;, then wait for DMA to drain into the FIFO.
+The IBI arbitration plus the controller’s auto-IBI ACK plus the
+repeated-Start plus the read bit takes about 640 ns at 1.5 MHz —
+on a quiet executor DMA setup wins that race; under realistic
+Embassy load it doesn’t.&lt;&#x2F;p&gt;
+&lt;p&gt;The intuitive fix is to invert the order — drain DMA synchronously,
+push the end-marker via &lt;code&gt;SWDATABE&lt;&#x2F;code&gt;, &lt;em&gt;then&lt;&#x2F;em&gt; raise &lt;code&gt;EVENT = Ibi&lt;&#x2F;code&gt;.
+This works perfectly up to the TX FIFO depth, which on this IP is
+8 bytes. The moment you try a 9-byte payload it deadlocks: DMA
+blocks waiting for FIFO space; the FIFO won’t drain because the
+controller hasn’t been told there’s anything to read; the
+controller hasn’t been told because the IBI hasn’t gone out. The
+shape the fix has to take is the one the NXP SDK uses, and isn’t
+the one I’d have guessed: arm DMA, raise the IBI &lt;em&gt;immediately&lt;&#x2F;em&gt;,
+then await DMA completion while the controller drains the FIFO at
+the same rate DMA fills it.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; Arm DMA first so the first transfer is in flight.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-language&quot;&gt;self&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;dma_arm_tx&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;buf&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; end_marker&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;await&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;?&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; Raise IBI immediately. Controller starts clocking; FIFO drains&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; concurrently with DMA filling it.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-language&quot;&gt;self&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;regs&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;sctrl&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;modify&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;|&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;w&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;|&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; w&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;set_event&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt;Event&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;Ibi&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; Now wait for DMA. The FIFO is active throughout.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-language&quot;&gt;self&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;dma_wait_complete&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;await&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;?&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;The lesson I keep relearning: when “obviously correct order” and
+“actually correct order” disagree, the hardware is usually right.
+If a peripheral’s FIFO is meant to be filled concurrently with
+being drained, you can’t fill it sequentially before signalling
+the drain, however much safer that feels.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;gotcha-3-the-post-ibi-stop-turned-my-repeated-start-into-a-fresh-frame&quot;&gt;Gotcha 3: the post-IBI Stop turned my repeated-Start into a fresh frame&lt;&#x2F;h2&gt;
+&lt;p&gt;The third one took longer to believe than it did to find. With
+clocks correct and the IBI ordering fixed, Rust↔Rust soak still
+failed — much later — and the failure mode was that the target’s
+directed-read response was misaligned by a byte, or surfaced as
+&lt;code&gt;InvalidStart&lt;&#x2F;code&gt; immediately after a successful IBI.&lt;&#x2F;p&gt;
+&lt;p&gt;The IBI itself was clean. The handshake worked. The TX FIFO was
+loaded correctly. The problem was that the controller side, in
+&lt;code&gt;async_wait_for_ibi&lt;&#x2F;code&gt;, was emitting an &lt;code&gt;async_stop&lt;&#x2F;code&gt; once the IBI
+completed. That turned the next &lt;code&gt;async_read&lt;&#x2F;code&gt; the caller issued
+into a fresh Start at the dynamic address, rather than the
+repeated-Start the target’s pre-loaded response was sitting there
+expecting. The target was set up for Sr→addr→R; the controller
+handed it Stop→Start→addr→R; the framing went sideways.&lt;&#x2F;p&gt;
+&lt;p&gt;The fix is to delete the &lt;code&gt;async_stop&lt;&#x2F;code&gt;. After a successful IBI the
+bus is already in &lt;code&gt;NORMACT&lt;&#x2F;code&gt; and the controller can issue a
+repeated-Start directly into the directed-read. The function’s doc
+comment now spells out at some length why putting the Stop back
+would be wrong, because the temptation to “clean up after yourself”
+by trailing every transaction with a Stop is real.&lt;&#x2F;p&gt;
+&lt;p&gt;The lesson is shorter than the bug: I3C, like I²C, distinguishes
+Start, repeated-Start, and Stop, and the &lt;em&gt;target’s&lt;&#x2F;em&gt; response state
+machine cares which one comes next. Pre-load a response for a
+repeated-Start, hand the target a fresh Start instead, and you
+don’t get a parity error — you get a perfectly framed read that
+returns the wrong bytes. That’s the worst kind of bug to have in
+soak: the symptom looks like data corruption, not a protocol
+violation.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-i-d-do-first-next-time&quot;&gt;What I’d do first next time&lt;&#x2F;h2&gt;
+&lt;p&gt;If I were starting an I3C target bring-up on this family of silicon
+tomorrow, in this order:&lt;&#x2F;p&gt;
+&lt;p&gt;First, &lt;strong&gt;set the I3C functional clock to 12 MHz exactly&lt;&#x2F;strong&gt; and
+verify &lt;code&gt;SCONFIG.BAMATCH&lt;&#x2F;code&gt; post-init against the spec’s 1 µs
+bus-available minimum. The HAL’s formula is correct; whether the
+input clock makes it produce a legal value is on you. FRO_LF &#x2F;1
+gives you 12 MHz exact and matches the SDK.&lt;&#x2F;p&gt;
+&lt;p&gt;Second, &lt;strong&gt;add a &lt;code&gt;dump_registers()&lt;&#x2F;code&gt; method to both controller and
+target from day one&lt;&#x2F;strong&gt; and call it after init in the examples. One
+defmt line each, every &lt;code&gt;M*&lt;&#x2F;code&gt; &#x2F; &lt;code&gt;S*&lt;&#x2F;code&gt; register as a raw &lt;code&gt;u32&lt;&#x2F;code&gt;. The cost
+is trivial; the diagnostic value the first time something goes weird
+against a known-good reference is disproportionate. Of course,
+remember to remove that method prior to producing a PR. That method is
+easy to write and only useful when things go awry. In general, we
+don’t need it.&lt;&#x2F;p&gt;
+&lt;p&gt;Third, &lt;strong&gt;mirror the vendor SDK’s ordering on anything that combines
+DMA, FIFO, and bus signalling&lt;&#x2F;strong&gt; even if it looks wrong: arm DMA,
+signal the bus, &lt;em&gt;then&lt;&#x2F;em&gt; wait for completion. Don’t drain the FIFO
+before raising the IBI. Don’t emit a Stop after an IBI if the next
+thing you expect is a directed read.&lt;&#x2F;p&gt;
+&lt;p&gt;Those three would have saved me the bulk of the bring-up time.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-this-doesn-t-cover&quot;&gt;What this doesn’t cover&lt;&#x2F;h2&gt;
+&lt;p&gt;One developer, one family of silicon, two boards on a bench. I have no
+idea how I3C target mode looks on other vendors’ IP, and I’d be
+surprised if specific register names, FIFO depths, or clock-tree
+dependencies transferred. The PR also contains a handful of smaller
+fixes I didn’t write up — a stale &lt;code&gt;MERRWARN&lt;&#x2F;code&gt; warning leaking across
+frames, a racy &lt;code&gt;state == Slvreq&lt;&#x2F;code&gt; guard in the IBI wake path, a
+controller-side ODHPP-vs-baud-rate calculation race — each of which
+fixed a real failure but wasn’t structurally interesting enough to
+earn a section. Read the PR if you want the full list.&lt;&#x2F;p&gt;
+&lt;p&gt;If you’re bringing up I3C target mode on MCXA, I hope this saves you
+the half-week. If you’re doing it on something else and one of these
+patterns rhymes with what you’re seeing, I’d genuinely like to hear
+about it.&lt;&#x2F;p&gt;
+</content>
+  </entry>
+  
+  <entry xml:lang="en">
+    <title>Waking up without a critical section</title>
+    <published>2026-06-13T21:38:00+00:00</published>
+    <updated>2026-06-13T21:38:00+00:00</updated>
+    <author><name>Felipe Balbi</name></author>
+    <link rel="alternate" href="https://balbi.sh/posts/lockless-atomic-waker-embassy/" type="text/html"/>
+    <id>https://balbi.sh/posts/lockless-atomic-waker-embassy/</id>
+    <summary type="html">embassy-rs&#x2F;embassy#6111 replaces embassy-sync&#x27;s critical-section-based AtomicWaker with a lockless three-state one ported from futures::task::AtomicWaker. Why fetch_or is the right primitive on the register&#x2F;wake race, what the wake path no longer has to do, and why the old behavior is still available as CriticalSectionWaker.</summary>
+    <content type="html">&lt;p&gt;A GPIO interrupt fires. The handler’s job is small: flip a status
+bit, call &lt;code&gt;waker.wake()&lt;&#x2F;code&gt;, return. The task that was parked on that
+pin is now ready to run, and the executor will get to it on the next
+poll.&lt;&#x2F;p&gt;
+&lt;p&gt;Until you look at what &lt;code&gt;waker.wake()&lt;&#x2F;code&gt; actually did. On every embassy
+target, until very recently, that one call took out a critical
+section — a global interrupt disable, held for the duration of the
+register-or-wake operation — because the &lt;code&gt;AtomicWaker&lt;&#x2F;code&gt; in
+&lt;code&gt;embassy-sync&lt;&#x2F;code&gt; was a typedef-style alias for
+&lt;code&gt;GenericAtomicWaker&amp;lt;CriticalSectionRawMutex&amp;gt;&lt;&#x2F;code&gt;. On Cortex-M that is
+exactly what it sounds like: the wake path raised BASEPRI (or
+disabled IRQs outright on older parts), did its bookkeeping, and
+lowered it again. A higher-priority interrupt that arrived in the
+middle had to wait. One async task’s wake imposed a jitter floor on
+every other interrupt in the system.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;embassy-rs&#x2F;embassy&#x2F;pull&#x2F;6111&quot;&gt;embassy-rs&#x2F;embassy#6111&lt;&#x2F;a&gt;
+replaces that. The new &lt;code&gt;AtomicWaker&lt;&#x2F;code&gt; is a port of
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;docs.rs&#x2F;futures&#x2F;latest&#x2F;futures&#x2F;task&#x2F;struct.AtomicWaker.html&quot;&gt;&lt;code&gt;futures::task::AtomicWaker&lt;&#x2F;code&gt;&lt;&#x2F;a&gt;
+— the one that has been doing this on &lt;code&gt;std&lt;&#x2F;code&gt; targets for years —
+adapted for &lt;code&gt;no_std&lt;&#x2F;code&gt;. The trade I made is concrete: a small atomic
+state machine in place of the critical section, plus one documented
+semantics change that &lt;code&gt;Future::poll&lt;&#x2F;code&gt; already required callers to
+honor. The old behavior is kept verbatim under a new name,
+&lt;code&gt;CriticalSectionWaker&lt;&#x2F;code&gt;, for the chips and the call sites that still
+want it.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-the-type-used-to-be&quot;&gt;What the type used to be&lt;&#x2F;h2&gt;
+&lt;p&gt;The pre-#6111 definition is essentially one line:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;pub&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; type&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; AtomicWaker&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; GenericAtomicWaker&lt;&#x2F;span&gt;&lt;span&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;CriticalSectionRawMutex&lt;&#x2F;span&gt;&lt;span&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;code&gt;GenericAtomicWaker&amp;lt;M&amp;gt;&lt;&#x2F;code&gt; wraps an &lt;code&gt;Option&amp;lt;Waker&amp;gt;&lt;&#x2F;code&gt; in a
+&lt;code&gt;Mutex&amp;lt;M, Cell&amp;lt;...&amp;gt;&amp;gt;&lt;&#x2F;code&gt;. With &lt;code&gt;M = CriticalSectionRawMutex&lt;&#x2F;code&gt;, every
+&lt;code&gt;register()&lt;&#x2F;code&gt; and every &lt;code&gt;wake()&lt;&#x2F;code&gt; calls &lt;code&gt;critical_section::with(...)&lt;&#x2F;code&gt;,
+which on Cortex-M expands to “disable interrupts, run the closure,
+restore the previous mask.” The closure itself is tiny — replace a
+cell, maybe clone, maybe call &lt;code&gt;wake_by_ref&lt;&#x2F;code&gt; — but the whole CPU is
+now refusing to acknowledge anything else for the duration.&lt;&#x2F;p&gt;
+&lt;p&gt;That is fine when &lt;code&gt;wake()&lt;&#x2F;code&gt; is a background bookkeeping call. It is
+much less fine when &lt;code&gt;wake()&lt;&#x2F;code&gt; is itself a high-priority IRQ handler
+whose latency you care about, or when a &lt;em&gt;different&lt;&#x2F;em&gt; high-priority
+IRQ arrives during the wake and has to wait for an unrelated
+cell-swap to finish before it gets to run.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;the-three-state-machine&quot;&gt;The three-state machine&lt;&#x2F;h2&gt;
+&lt;p&gt;The new type, in &lt;code&gt;embassy-sync&#x2F;src&#x2F;waitqueue&#x2F;atomic_waker.rs&lt;&#x2F;code&gt;,
+replaces the mutex with a packed &lt;code&gt;AtomicUsize&lt;&#x2F;code&gt; and three constants:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;const&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; WAITING&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; usize&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;     =&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 0&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;const&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; REGISTERING&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; usize&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 0b01&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;const&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; WAKING&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; usize&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;      =&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 0b10&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;The important thing about those constants — and this came out of
+review, so it’s now spelled out in the source comments — is that
+they are &lt;strong&gt;flags, not exclusive states&lt;&#x2F;strong&gt;. &lt;code&gt;REGISTERING | WAKING&lt;&#x2F;code&gt;
+(0b11) is a legal, intentional state of the machine. It means a
+&lt;code&gt;register()&lt;&#x2F;code&gt; is mid-flight &lt;em&gt;and&lt;&#x2F;em&gt; a &lt;code&gt;wake()&lt;&#x2F;code&gt; arrived while it was
+running, and the wake has been flagged as pending. The encoding is
+load-bearing: only the holder of &lt;code&gt;REGISTERING&lt;&#x2F;code&gt; or &lt;code&gt;WAKING&lt;&#x2F;code&gt; (and
+never both at once, by virtue of the protocol) is allowed to touch
+the underlying waker cell, and the 0b11 state is what tells the
+in-flight &lt;code&gt;register()&lt;&#x2F;code&gt; that there is wake duty waiting for it on
+the way out.&lt;&#x2F;p&gt;
+&lt;p&gt;The wake side is short and worth showing in full:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;match&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-language&quot;&gt; self&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;state&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;fetch_or&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;WAKING&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; AcqRel&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;    WAITING&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;        &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; We own the cell. Fire the wake, release.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;        unsafe&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;            if&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; let&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Some&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;w&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; &amp;amp;&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;*&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-language&quot;&gt;self&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;waker&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;get&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;                w&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;wake_by_ref&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;            }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-language&quot;&gt;        self&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;state&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;swap&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;WAITING&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Release&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;    _&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;        &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; Somebody else owns the cell. They&amp;#39;ll deliver the wake.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Two arms, and that is the whole thing. If the prior state was
+&lt;code&gt;WAITING&lt;&#x2F;code&gt;, we are now the sole owner of the cell via the &lt;code&gt;WAKING&lt;&#x2F;code&gt;
+bit; we invoke the stored waker by reference, then drop the bit. If
+the prior state was &lt;code&gt;REGISTERING&lt;&#x2F;code&gt;, the OR has produced
+&lt;code&gt;REGISTERING | WAKING&lt;&#x2F;code&gt;, and we deliberately do nothing else,
+because the in-flight &lt;code&gt;register()&lt;&#x2F;code&gt; will see our bit on its way out
+and deliver the wake itself.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;why-fetch-or-and-not-compare-exchange&quot;&gt;Why fetch_or and not compare_exchange&lt;&#x2F;h2&gt;
+&lt;p&gt;This is the load-bearing decision in the whole PR, and review asked
+the obvious question: shouldn’t this be a &lt;code&gt;compare_exchange&lt;&#x2F;code&gt;? It’s
+the safer default, the one you reach for first.&lt;&#x2F;p&gt;
+&lt;p&gt;It would be silently wrong here. Consider the race:&lt;&#x2F;p&gt;
+&lt;ol&gt;
+&lt;li&gt;A task calls &lt;code&gt;register(cx.waker())&lt;&#x2F;code&gt;. The CAS from &lt;code&gt;WAITING&lt;&#x2F;code&gt; to
+&lt;code&gt;REGISTERING&lt;&#x2F;code&gt; succeeds; we now own the cell and start installing
+the new waker.&lt;&#x2F;li&gt;
+&lt;li&gt;Mid-installation, an interrupt fires and calls &lt;code&gt;wake()&lt;&#x2F;code&gt;.&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;p&gt;If &lt;code&gt;wake()&lt;&#x2F;code&gt; did &lt;code&gt;compare_exchange(WAITING, WAKING, ...)&lt;&#x2F;code&gt;, that CAS
+would observe &lt;code&gt;REGISTERING&lt;&#x2F;code&gt;, fail, and &lt;em&gt;silently return&lt;&#x2F;em&gt; — there is no
+prior value it could have CAS-ed against that would have encoded “a
+wake is pending.” The in-flight &lt;code&gt;register()&lt;&#x2F;code&gt; would then finish, CAS
+its own state cleanly back from &lt;code&gt;REGISTERING&lt;&#x2F;code&gt; to &lt;code&gt;WAITING&lt;&#x2F;code&gt;, and never
+learn that anything happened. The waker is installed, nobody is going
+to invoke it, the task is hung. The kind of bug you find at 2am after
+staring at the screen for an hour wondering why an interrupt that you
+can &lt;em&gt;see&lt;&#x2F;em&gt; on the registers isn’t producing a task wakeup.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;code&gt;fetch_or(WAKING, AcqRel)&lt;&#x2F;code&gt; doesn’t have that failure mode. The
+wake’s contribution to the state word is unconditional and visible
+to whoever observes the state next. The in-flight &lt;code&gt;register()&lt;&#x2F;code&gt;
+tries to release with &lt;code&gt;compare_exchange(REGISTERING, WAITING, ...)&lt;&#x2F;code&gt;
+on its way out; that CAS will &lt;em&gt;fail&lt;&#x2F;em&gt; exactly when a wake raced it,
+because the observed state is now &lt;code&gt;REGISTERING | WAKING&lt;&#x2F;code&gt;, not
+&lt;code&gt;REGISTERING&lt;&#x2F;code&gt;. The failure branch is the handoff signal: it takes
+the freshly-installed waker out of the cell, clears both bits with
+a &lt;code&gt;swap&lt;&#x2F;code&gt;, and invokes the waker &lt;em&gt;after&lt;&#x2F;em&gt; releasing the cell — so
+that a user waker that re-enters &lt;code&gt;register()&lt;&#x2F;code&gt; or &lt;code&gt;wake()&lt;&#x2F;code&gt; on the
+same &lt;code&gt;AtomicWaker&lt;&#x2F;code&gt; from inside &lt;code&gt;wake()&lt;&#x2F;code&gt; cannot deadlock against
+our own state.&lt;&#x2F;p&gt;
+&lt;p&gt;The wake is delivered exactly once, by whichever side observes the
+contention. The handoff is structural, not best-effort. &lt;code&gt;fetch_or&lt;&#x2F;code&gt;
+is doing more than “atomic OR” here; it is the data structure that
+makes the race path correct.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-changed-in-the-contract&quot;&gt;What changed in the contract&lt;&#x2F;h2&gt;
+&lt;p&gt;There is one user-visible semantic difference, and the PR owns it
+in the CHANGELOG: &lt;code&gt;AtomicWaker::register()&lt;&#x2F;code&gt; now wakes the
+&lt;em&gt;previously registered&lt;&#x2F;em&gt; waker if you replace it with a different
+one. This matches what
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;docs.rs&#x2F;embassy-sync&#x2F;latest&#x2F;embassy_sync&#x2F;waitqueue&#x2F;struct.WakerRegistration.html&quot;&gt;&lt;code&gt;WakerRegistration&lt;&#x2F;code&gt;&lt;&#x2F;a&gt;
+has always done. The pre-#6111 &lt;code&gt;AtomicWaker&lt;&#x2F;code&gt; would silently drop
+the old waker on the floor.&lt;&#x2F;p&gt;
+&lt;p&gt;The reason this is safe is that &lt;code&gt;Future::poll&lt;&#x2F;code&gt; is already
+documented to require it. The relevant line in the
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;doc.rust-lang.org&#x2F;std&#x2F;future&#x2F;trait.Future.html#tymethod.poll&quot;&gt;&lt;code&gt;Future::poll&lt;&#x2F;code&gt;&lt;&#x2F;a&gt;
+contract:&lt;&#x2F;p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Note that on multiple calls to &lt;code&gt;poll&lt;&#x2F;code&gt;, only the &lt;code&gt;Waker&lt;&#x2F;code&gt; from the
+&lt;code&gt;Context&lt;&#x2F;code&gt; passed to the most recent call should be scheduled to
+receive a wakeup.&lt;&#x2F;p&gt;
+&lt;&#x2F;blockquote&gt;
+&lt;p&gt;A correctly-written driver already re-registers on every poll,
+because the &lt;code&gt;Waker&lt;&#x2F;code&gt; it gets on the &lt;em&gt;n&lt;&#x2F;em&gt;-th poll is not guaranteed
+to be the one it got on the &lt;em&gt;(n-1)&lt;&#x2F;em&gt;-th. Waking the evicted
+predecessor formalizes that: if a different task ends up polling
+the same future, the displaced task gets a chance to re-register
+itself instead of vanishing. This was a late commit, prompted by
+review, and it is what the CHANGELOG entry calls out by name.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;two-siblings-now-on-purpose&quot;&gt;Two siblings now, on purpose&lt;&#x2F;h2&gt;
+&lt;p&gt;The previous behavior didn’t disappear. It moved into its own
+module, &lt;code&gt;embassy-sync&#x2F;src&#x2F;waitqueue&#x2F;critical_section_waker.rs&lt;&#x2F;code&gt;, and
+got a name that says what it is:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;pub&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; struct&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; CriticalSectionWaker&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;    waker&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; GenericAtomicWaker&lt;&#x2F;span&gt;&lt;span&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;CriticalSectionRawMutex&lt;&#x2F;span&gt;&lt;span&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;This is a verbatim preservation of the old &lt;code&gt;AtomicWaker&lt;&#x2F;code&gt; body —
+the same &lt;code&gt;wake_by_ref + restore&lt;&#x2F;code&gt; flow, the same lack of an atomic
+state machine, the same critical section on the wake path. Call
+sites that depended on the old “replace without waking” semantics
+keep working with a one-word rename.&lt;&#x2F;p&gt;
+&lt;p&gt;The asymmetry is deliberate, and I want to be explicit about it
+because it matters for anyone reading older code: the new
+&lt;code&gt;AtomicWaker&lt;&#x2F;code&gt; wakes evicted predecessors; &lt;code&gt;GenericAtomicWaker&amp;lt;M&amp;gt;&lt;&#x2F;code&gt;
+does not, and &lt;code&gt;CriticalSectionWaker&lt;&#x2F;code&gt; (being a wrapper around it)
+does not either. Review caught an earlier commit that tried to
+bring &lt;code&gt;GenericAtomicWaker&lt;&#x2F;code&gt; along to the new semantics, and I
+reverted it. A public type that has been in the tree for years
+should not change behavior under callers without a much louder
+migration story than this PR is in a position to write — and
+there’s no need for one. Callers who want the new semantics have
+&lt;code&gt;AtomicWaker&lt;&#x2F;code&gt;; callers who want the old have the type they were
+already using.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;thumbv6-doesn-t-have-the-atomics&quot;&gt;thumbv6 doesn’t have the atomics&lt;&#x2F;h2&gt;
+&lt;p&gt;The lockless state machine assumes you can do
+&lt;code&gt;AtomicUsize::{compare_exchange, swap, fetch_or}&lt;&#x2F;code&gt; on the target.
+Cortex-M0&#x2F;M0+ (thumbv6m) can’t — no LDREX&#x2F;STREX in the instruction
+set, so the LLVM atomics for anything past naked load&#x2F;store aren’t
+there. The same goes for a handful of other targets in the embassy
+matrix (Xtensa S2, AVR, RV32I — anything missing the relevant
+&lt;code&gt;target_has_atomic&lt;&#x2F;code&gt; cfg).&lt;&#x2F;p&gt;
+&lt;p&gt;The PR’s solution is the obvious one: gate the new type on
+&lt;code&gt;#[cfg(target_has_atomic = &quot;32&quot;)]&lt;&#x2F;code&gt;, and on every other target make
+&lt;code&gt;AtomicWaker&lt;&#x2F;code&gt; a type alias for &lt;code&gt;CriticalSectionWaker&lt;&#x2F;code&gt;. Callers see
+the same type name; the implementation behind it is the one the
+hardware can actually run. The sibling type isn’t there for
+nostalgia. Some chips genuinely need it.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-the-wake-path-no-longer-does&quot;&gt;What the wake path no longer does&lt;&#x2F;h2&gt;
+&lt;p&gt;The benchmark on the bench was a GPIO IRQ wake on an FRDM-MCXA266
+(Cortex-M33 at 180 MHz); the lockless &lt;code&gt;wake()&lt;&#x2F;code&gt; body came out about
+290 ns shorter than the critical-section one. I’m not making that
+the headline. The wall-clock delta is small enough to be well
+within run-to-run noise on a 180 MHz core; if the structural
+change weren’t real, I would not trust that number to mean
+anything.&lt;&#x2F;p&gt;
+&lt;p&gt;The structural change is real, and it is what the PR is actually
+about. On any embassy target with &lt;code&gt;AtomicUsize&lt;&#x2F;code&gt;-class atomics —
+which is most of them — the wake path of &lt;code&gt;AtomicWaker&lt;&#x2F;code&gt; no longer
+disables interrupts. An IRQ handler that calls &lt;code&gt;waker.wake()&lt;&#x2F;code&gt;
+doesn’t enter a critical section, doesn’t pay the enter&#x2F;exit cost
+on every wake, and doesn’t impose a jitter floor on whatever
+higher-priority interrupt would otherwise have preempted it. The
+worst case for a preempting IRQ is now an &lt;code&gt;AtomicUsize&lt;&#x2F;code&gt; op or two
+and a &lt;code&gt;wake_by_ref&lt;&#x2F;code&gt; call. On chips that &lt;em&gt;can’t&lt;&#x2F;em&gt; do the atomics, the
+fallback is the type that was already in the tree; nothing
+regresses.&lt;&#x2F;p&gt;
+&lt;p&gt;None of this is novel. &lt;code&gt;futures::task::AtomicWaker&lt;&#x2F;code&gt; has been doing
+this on &lt;code&gt;std&lt;&#x2F;code&gt; for years, and the algorithm here is a direct port.
+What changes is that &lt;code&gt;embassy-sync&lt;&#x2F;code&gt; — and every embassy driver
+that uses &lt;code&gt;AtomicWaker&lt;&#x2F;code&gt; for IRQ-to-task wakeups — gets that
+property by default. A single-waiter waker can hand off the
+register-vs-wake race with a &lt;code&gt;fetch_or&lt;&#x2F;code&gt;-based state machine instead
+of a critical section, and the cost is one documented semantics
+change that &lt;code&gt;Future::poll&lt;&#x2F;code&gt; already required callers to honor.&lt;&#x2F;p&gt;
+</content>
+  </entry>
+  
+</feed>

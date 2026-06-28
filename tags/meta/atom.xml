@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+  <title>Felipe Balbi</title>
+  <subtitle>Notes on embedded systems, Rust, and the craft of writing software.</subtitle>
+  <link href="https://balbi.sh/tags/meta/atom.xml" rel="self" type="application/atom+xml"/>
+  <link href="https://balbi.sh"/>
+  <generator uri="https://www.getzola.org/">Zola</generator>
+  <updated>2026-06-10T08:00:00+00:00</updated>
+  <id>https://balbi.sh/tags/meta/atom.xml</id>
+  
+  <entry xml:lang="en">
+    <title>Hello, world</title>
+    <published>2026-06-10T08:00:00+00:00</published>
+    <updated>2026-06-10T08:00:00+00:00</updated>
+    <author><name>Felipe Balbi</name></author>
+    <link rel="alternate" href="https://balbi.sh/posts/hello-world/" type="text/html"/>
+    <id>https://balbi.sh/posts/hello-world/</id>
+    <summary type="html">A new home on the web.</summary>
+    <content type="html">&lt;p&gt;This is the first post on the new version of &lt;a href=&quot;&#x2F;&quot;&gt;balbi.sh&lt;&#x2F;a&gt;. The
+previous incarnation was a single HTML file with one link; this one is
+built with &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;www.getzola.org&#x2F;&quot;&gt;Zola&lt;&#x2F;a&gt; and styled after
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;protesilaos&#x2F;ef-themes&quot;&gt;ef-melissa-light&lt;&#x2F;a&gt; — a warm,
+legible Emacs theme by Protesilaos Stavrou. Body text is set in
+&lt;strong&gt;Aporetic Serif&lt;&#x2F;strong&gt;, headings and UI in &lt;strong&gt;Aporetic Sans&lt;&#x2F;strong&gt;, and code in
+&lt;strong&gt;Aporetic Sans Mono&lt;&#x2F;strong&gt; — all from the same author as the colour
+palette.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;why-now&quot;&gt;Why now&lt;&#x2F;h2&gt;
+&lt;p&gt;I want a place to keep working notes — short writeups about the things
+I run into while building firmware. The bar for publishing here is low
+on purpose. If a problem took me more than an hour to figure out, it
+probably deserves a post so I (or you) don’t have to figure it out
+again next time.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-to-expect&quot;&gt;What to expect&lt;&#x2F;h2&gt;
+&lt;p&gt;Mostly:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;Embedded Rust&lt;&#x2F;strong&gt; — Embassy, &lt;code&gt;embedded-hal&lt;&#x2F;code&gt;, async on tiny chips.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;strong&gt;Bare-metal C&lt;&#x2F;strong&gt; — when Rust isn’t an option, which is more often
+than I’d like.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;strong&gt;Tooling&lt;&#x2F;strong&gt; — probe-rs, defmt, the linker, the assembler, the things
+that quietly hold everything together.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;strong&gt;Occasional rants&lt;&#x2F;strong&gt; about debugging hardware at 2am.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;If you want to follow along, there’s an &lt;a href=&quot;&#x2F;atom.xml&quot;&gt;Atom feed&lt;&#x2F;a&gt;.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;code-by-the-way&quot;&gt;Code, by the way&lt;&#x2F;h2&gt;
+&lt;p&gt;It looks like this:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;#&lt;&#x2F;span&gt;&lt;span&gt;[&lt;&#x2F;span&gt;&lt;span&gt;embassy_executor&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;task&lt;&#x2F;span&gt;&lt;span&gt;]&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;async&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; fn&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; blinky&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt;mut&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; led&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Output&lt;&#x2F;span&gt;&lt;span&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span&gt;&amp;#39;&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;static&lt;&#x2F;span&gt;&lt;span&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;    loop&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;        led&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;toggle&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;        Timer&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;after_millis&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;500&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;await&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;That’s all for now. More soon.&lt;&#x2F;p&gt;
+</content>
+  </entry>
+  
+</feed>
