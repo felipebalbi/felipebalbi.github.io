@@ -24,6 +24,8 @@ each took longer to diagnose than to fix, and that each looked
 nothing like what I'd assumed they were when I started chasing them.
 This post is those three.
 
+<!-- more -->
+
 One caveat up front: this is one vendor, one HAL crate, one
 bring-up. I have no idea whether these gotchas generalize to other
 I3C silicon. The shape of *how the bugs hid* probably transfers;

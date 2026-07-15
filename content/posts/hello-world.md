@@ -15,6 +15,8 @@ legible Emacs theme by Protesilaos Stavrou. Body text is set in
 **Aporetic Sans Mono** — all from the same author as the colour
 palette.
 
+<!-- more -->
+
 ## Why now
 
 I want a place to keep working notes — short writeups about the things

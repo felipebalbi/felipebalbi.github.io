@@ -28,6 +28,8 @@ time of writing, the only crate on crates.io that lists
 five distinct chip behaviors, every one of them runs on a normal dev
 machine as soon as you have the chip on a breadboard.
 
+<!-- more -->
+
 What follows is what I do, and why. None of it is novel; most of it
 is the kind of thing that becomes obvious once the constraint
 "every example must be runnable, by anyone, on the actual chip"

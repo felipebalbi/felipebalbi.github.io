@@ -57,7 +57,8 @@
   <link id="hl-dark"  rel="stylesheet" href="{{ get_url(path='giallo-dark.css')  }}" disabled>
 
   {% if config.generate_feeds %}
-  <link rel="alternate" type="application/atom+xml" title="{{ config.title }}" href="{{ get_url(path='atom.xml', trailing_slash=false) }}">
+  <link rel="alternate" type="application/atom+xml" title="{{ config.title }} (Atom)" href="{{ get_url(path='atom.xml', trailing_slash=false) }}">
+  <link rel="alternate" type="application/rss+xml" title="{{ config.title }} (RSS)" href="{{ get_url(path='rss.xml', trailing_slash=false) }}">
   {% endif %}
   <link rel="canonical" href="{{ current_url | default(value=config.base_url) | safe }}">
 
@@ -118,7 +119,7 @@
       <div>&copy; {{ now() | date(format='%Y') }} {{ config.extra.author | default(value=config.title) }}</div>
       <div>
         {% if config.extra.github %}<a href="{{ config.extra.github }}" rel="me">GitHub</a>{% endif %}
-        {% if config.generate_feeds %} &middot; <a href="/atom.xml">RSS</a>{% endif %}
+        {% if config.generate_feeds %} &middot; <a href="/atom.xml">Atom</a> &middot; <a href="/rss.xml">RSS</a>{% endif %}
       </div>
     </footer>
   </div>

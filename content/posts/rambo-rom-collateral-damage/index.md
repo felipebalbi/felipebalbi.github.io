@@ -14,6 +14,8 @@ runs it from there — flash never gets touched. On every board I'd used
 it with before, it just worked. On the RT685, every run ended in a
 HardFault before the first test got a chance to do anything.
 
+<!-- more -->
+
 The diagnosis took longer than the bug deserved. The RT685's boot ROM
 was power-cycling almost every SRAM partition on the way to user code —
 including the one the test binary was linked into. The instructions

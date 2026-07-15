@@ -12,6 +12,8 @@ lets a host program drive real I²C, SPI, GPIO, PWM, ADC, UART, and
 device drivers on your laptop instead of cross-compiling for an MCU
 every time. Today's release moves the whole ecosystem forward at once.
 
+<!-- more -->
+
 This is a **lockstep release**. The wire protocol in
 `pico-de-gallo-internal` went from schema 0.5 to 0.6, and under the
 pre-1.0 schema-versioning rule that is a breaking change. **Firmware

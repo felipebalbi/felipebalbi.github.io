@@ -17,6 +17,8 @@ that runs on my laptop, against the real sensor, over a real bus.
 This post is about how that works, why it's nice, and what you can do
 once your "embedded" driver is just a Rust program with `std`.
 
+<!-- more -->
+
 ## The loop I'm trying to escape
 
 The traditional embedded dev loop looks something like this:

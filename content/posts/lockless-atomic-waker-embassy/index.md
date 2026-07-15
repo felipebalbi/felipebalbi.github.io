@@ -23,6 +23,8 @@ lowered it again. A higher-priority interrupt that arrived in the
 middle had to wait. One async task's wake imposed a jitter floor on
 every other interrupt in the system.
 
+<!-- more -->
+
 [embassy-rs/embassy#6111](https://github.com/embassy-rs/embassy/pull/6111)
 replaces that. The new `AtomicWaker` is a port of
 [`futures::task::AtomicWaker`](https://docs.rs/futures/latest/futures/task/struct.AtomicWaker.html)

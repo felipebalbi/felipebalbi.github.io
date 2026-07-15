@@ -21,6 +21,8 @@ controller quietly dislikes. The distance between "it works" and "I
 trust it" is made entirely of those questions, and you don't answer
 them by running the happy path again.
 
+<!-- more -->
+
 You answer them by building something whose only job is to be nasty to
 the driver and to notice when the driver flinches. This post is about
 two such things — a pair of self-checking soak rigs for the

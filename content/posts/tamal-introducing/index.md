@@ -13,6 +13,8 @@ illegal, and hands you back a structured trace of what happened.
 [Enhanced Serial Peripheral Interface][espi-spec] (eSPI, base spec
 rev 1.0).
 
+<!-- more -->
+
 [mole]: https://github.com/felipebalbi/mole
 [espi-spec]: https://www.intel.com/content/www/us/en/support/articles/000020952/software/chipset-software.html
 
