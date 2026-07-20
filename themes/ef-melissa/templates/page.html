@@ -28,3 +28,22 @@
   </nav>
 </article>
 {% endblock %}
+
+{% block head_extra %}
+  {% if page.extra.math %}
+  {# MathJax v3, loaded only on pages that opt in with [extra] math = true.
+     Dollar delimiters only: Zola/CommonMark strips \( \) \[ \] backslashes.
+     CHTML renders in currentColor, so it follows the light/dark toggle. #}
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['$', '$']],
+        displayMath: [['$$', '$$']],
+        processEscapes: true
+      },
+      options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  {% endif %}
+{% endblock %}
