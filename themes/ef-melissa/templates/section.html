@@ -8,9 +8,14 @@
 
 <ul class="post-list" style="margin-top:2rem">
   {% for page in section.pages %}
+    {% set excerpt = page.summary | default(value="") | striptags | trim %}
     <li>
       <time datetime="{{ page.date }}">{{ page.date | date(format='%Y-%m-%d') }}</time>
-      <a href="{{ page.permalink }}">{{ page.title }}</a>
+      <div class="post-entry">
+        <a class="post-title" href="{{ page.permalink }}">{{ page.title }}</a>
+        {% if excerpt %}<p class="post-excerpt">{{ excerpt | truncate(length=300) }}</p>{% endif %}
+        <a class="post-more" href="{{ page.permalink }}">Read more &rarr;</a>
+      </div>
     </li>
   {% endfor %}
 </ul>
