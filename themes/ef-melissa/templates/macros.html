@@ -9,3 +9,8 @@
   </div>
 </li>
 {% endmacro post_entry %}
+
+{# Inline "N post(s)" with correct pluralization. Kept on ONE line on
+   purpose: this renders inside <p>/<time>, so any newline in the macro
+   body would leak whitespace into the surrounding text. #}
+{% macro post_count(count) %}{{ count }} post{% if count != 1 %}s{% endif %}{% endmacro post_count %}

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "macros.html" as macros %}
 
 {% block title %}Tags &middot; {{ config.title }}{% endblock %}
 
@@ -7,7 +8,7 @@
 <ul class="post-list">
   {% for term in terms %}
     <li>
-      <time>{{ term.pages | length }} post{% if term.pages | length != 1 %}s{% endif %}</time>
+      <time>{{ macros::post_count(count=term.pages | length) }}</time>
       <a href="{{ term.permalink }}">#{{ term.name }}</a>
     </li>
   {% endfor %}
