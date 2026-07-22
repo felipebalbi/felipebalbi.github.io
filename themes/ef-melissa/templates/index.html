@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "macros.html" as macros %}
 
 {% block content %}
 <section class="intro">
@@ -13,15 +14,7 @@
   <h2 class="section-title">Recent posts</h2>
   <ul class="post-list">
     {% for page in posts_section.pages | slice(end=10) %}
-      {% set excerpt = page.summary | default(value="") | striptags | trim %}
-      <li>
-        <time datetime="{{ page.date }}">{{ page.date | date(format='%Y-%m-%d') }}</time>
-        <div class="post-entry">
-          <a class="post-title" href="{{ page.permalink }}">{{ page.title }}</a>
-          {% if excerpt %}<p class="post-excerpt">{{ excerpt | truncate(length=300) }}</p>{% endif %}
-          <a class="post-more" href="{{ page.permalink }}">Read more &rarr;</a>
-        </div>
-      </li>
+      {{ macros::post_entry(page=page) }}
     {% endfor %}
   </ul>
   {% if posts_section.pages | length > 10 %}
