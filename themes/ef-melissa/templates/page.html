@@ -21,7 +21,7 @@
     {% if page.reading_time %}<span>{{ page.reading_time }} min read</span>{% endif %}
   </div>
 
-  {{ page.content | safe }}
+  {{ page.content | replace(from='<section class="footnotes">', to='<section class="footnotes"><h2 class="footnotes-title">Footnotes</h2>') | safe }}
 
   <nav class="post-nav">
     <a href="/posts/">&larr; All posts</a>

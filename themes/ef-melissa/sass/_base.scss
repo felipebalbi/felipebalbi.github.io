@@ -171,6 +171,23 @@ hr {
   margin: 2.5rem 0;
 }
 
+// ---- Footnotes --------------------------------------------
+// Zola renders bottom footnotes as a bare <section class="footnotes">
+// with no separation from the body. Set them apart as a tinted panel
+// (heading injected by page.html) instead of a rule line.
+.footnotes {
+  margin-top: 3rem;
+  padding: 1.25rem 1.5rem;
+  background: var(--bg-alt);
+  border-radius: 6px;
+}
+.footnotes-title {
+  margin: 0 0 0.75rem;
+  font-size: 1.3rem;
+}
+.footnotes-list { margin: 0; }
+.footnotes-list > li:last-child > p:last-child { margin-bottom: 0; }
+
 img, video {
   max-width: 100%;
   height: auto;
