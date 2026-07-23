@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-1ba74092.js";
+            window.path_to_searchindex_js = "../searchindex-4f8c22da.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-d167d9bc.js"></script>
@@ -177,7 +177,7 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="releases--compatibility"><a class="header" href="#releases--compatibility">Releases &amp; Compatibility</a></h1>
-<p>Pico de Gallo releases are automated, but compatibility still depends on humans
+<p>Pico de Gallo releases are cut by hand, and compatibility depends on humans
 understanding which pieces move together.</p>
 <h2 id="tag-prefixes"><a class="header" href="#tag-prefixes">Tag prefixes</a></h2>
 <p>Each published surface has its own release tag prefix:</p>
@@ -199,13 +199,19 @@ understanding which pieces move together.</p>
 </table>
 </div>
 <h2 id="what-drives-a-release"><a class="header" href="#what-drives-a-release">What drives a release?</a></h2>
-<p>The project uses <code>release-please</code>. Day-to-day, contributors land Conventional
-Commits with crate scopes such as <code>feat(internal): ...</code> or <code>fix(firmware): ...</code>.
-From that history, release-please opens and maintains one release PR per crate.</p>
+<p>Releases are <strong>manual</strong>. A maintainer bumps each crate’s
+<code>[package].version</code>, updates the cross-crate dependency specs and the
+<code>CHANGELOG.md</code>, merges to <code>main</code>, and then pushes one tag per component. The
+tag-triggered <code>release-*.yml</code> workflows publish to crates.io / PyPI and build
+the binary artifacts.</p>
+<p>Contributors still land Conventional Commits with crate scopes such as
+<code>feat(internal): ...</code> or <code>fix(firmware): ...</code> — that scoped history is what a
+maintainer reads when hand-writing the CHANGELOG and deciding which crates to
+bump.</p>
 <blockquote class="blockquote-tag blockquote-tag-tip">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>Tip</p>
-<p>The scope is not decoration. It is part of how release automation decides what
-to version and publish.</p>
+<p>The scope is not decoration. It tells the release author what changed in each
+crate and where the version bump belongs.</p>
 </blockquote>
 <h2 id="protocol-changes-are-lockstep-changes"><a class="header" href="#protocol-changes-are-lockstep-changes">Protocol changes are lockstep changes</a></h2>
 <p>When the wire protocol changes, compatibility is broader than one crate tag.
@@ -223,8 +229,8 @@ release cycle.</p>
 </ul>
 <blockquote class="blockquote-tag blockquote-tag-important">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Important</p>
-<p><code>release-please</code> does not enforce wire coupling for you. If a protocol change
-lands without its matching host and firmware updates, users will feel it.</p>
+<p>Nothing enforces wire coupling for you. If a protocol change lands without its
+matching host and firmware version bumps, users will feel it.</p>
 </blockquote>
 <h2 id="how-users-check-compatibility"><a class="header" href="#how-users-check-compatibility">How users check compatibility</a></h2>
 <p>There are two main compatibility checks:</p>
@@ -255,10 +261,11 @@ fast instead of guessing.</p>
 <h2 id="msrv-and-release-hygiene"><a class="header" href="#msrv-and-release-hygiene">MSRV and release hygiene</a></h2>
 <p>The workspace tracks Rust 1.90 as its MSRV, and CI checks it explicitly. That
 includes the host workspace and the firmware workspace.</p>
-<p>For contributor-only release details, including manual-tag edge cases, see
+<p>For contributor-only release details, including the full manual-release
+checklist, see
 <a href="https://github.com/OpenDevicePartnership/pico-de-gallo/blob/main/AGENTS.md"><code>AGENTS.md</code></a>
 and the repository’s
-<a href="https://github.com/OpenDevicePartnership/pico-de-gallo/blob/main/.github/RELEASE-PLEASE.md"><code>RELEASE-PLEASE.md</code></a>.</p>
+<a href="https://github.com/OpenDevicePartnership/pico-de-gallo/blob/main/.github/RELEASE.md"><code>RELEASE.md</code></a>.</p>
 
                     </main>
 
