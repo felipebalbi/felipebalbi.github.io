@@ -1,6 +1,7 @@
 +++
 title = "Tamal: Wiring Uart Through Composition"
 date = 2026-07-24T09:00:00
+draft = true
 description = "Reading Tamal's UART top end to end: the five-line umbrella that is the first block with no behaviour of its own, where the baud number comes home to the type because the top owns the generator, where the interface is precisely the receiver's ports and the transmitter's ports set side by side with the oversample tick gone internal, where the body is not a computation but a wiring diagram written as three where-bound equations Clash elaborates structurally into a netlist, where one heartbeat is generated once and fanned into both machines so a single shared time base makes the loopback land dead-center, and where the four wires that leave the block are the seam at which the self-contained UART finally joins the loader and the engine."
 [taxonomies]
 tags = ["haskell", "clash", "fpga", "tamal", "uart", "composition"]

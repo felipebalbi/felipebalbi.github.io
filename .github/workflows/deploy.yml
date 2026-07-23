@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: '10 8 * * *'      # daily 08:10 UTC — tune to your preferred publish hour
 
 concurrency:
   group: pages-deploy
@@ -18,6 +20,23 @@ jobs:
     steps:
       - name: Checkout main
         uses: actions/checkout@v4
+
+      # Publish any post whose `date` has arrived: flip `draft = true` -> `false`
+      # (scripts/publish-due.py), then persist that flip back to main so later
+      # normal builds keep the post live. Flip + build + deploy run in this one
+      # job because a GITHUB_TOKEN push does not re-trigger workflows.
+      - name: Publish posts due today
+        id: publish
+        run: python3 scripts/publish-due.py
+
+      - name: Commit flipped drafts back to main
+        if: steps.publish.outputs.changed == 'true'
+        run: |
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m "publish: posts due on $(date -u +%Y-%m-%d)"
+          git push origin HEAD:main
 
       - name: Install Zola
         run: |
