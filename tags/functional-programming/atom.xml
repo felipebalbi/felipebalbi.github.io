@@ -1,0 +1,432 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+  <title>Felipe Balbi</title>
+  <subtitle>Notes on embedded systems, Rust, and the craft of writing software.</subtitle>
+  <link href="https://balbi.sh/tags/functional-programming/atom.xml" rel="self" type="application/atom+xml"/>
+  <link href="https://balbi.sh"/>
+  <generator uri="https://www.getzola.org/">Zola</generator>
+  <updated>2026-07-19T09:00:00+00:00</updated>
+  <id>https://balbi.sh/tags/functional-programming/atom.xml</id>
+  
+  <entry xml:lang="en">
+    <title>Enough Haskell to Read Tamal</title>
+    <published>2026-07-19T09:00:00+00:00</published>
+    <updated>2026-07-19T09:00:00+00:00</updated>
+    <author><name>Felipe Balbi</name></author>
+    <link rel="alternate" href="https://balbi.sh/posts/tamal-haskell-primer/" type="text/html"/>
+    <id>https://balbi.sh/posts/tamal-haskell-primer/</id>
+    <summary type="html">&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;felipebalbi&#x2F;tamal&quot;&gt;Tamal&lt;&#x2F;a&gt; is an FPGA eSPI exerciser, and its gateware — the UART, the
+cycle engine, the ALU, the CRC unit, the loader, the trace ring — is
+written in Haskell and compiled straight to hardware by &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;clash-lang.org&quot;&gt;Clash&lt;&#x2F;a&gt;. This
+is the first post in a series that opens up that gateware one block at
+a time and reads each one end to end.&lt;&#x2F;p&gt;
+&lt;p&gt;There’s a catch, and if you’re here at all you can probably feel it
+coming. Approach this code from C, Rust, or Verilog — which is where
+most people who care about an eSPI exerciser are standing — and the
+source can read like line noise. &lt;code&gt;::&lt;&#x2F;code&gt;, &lt;code&gt;-&amp;gt;&lt;&#x2F;code&gt;, &lt;code&gt;\case&lt;&#x2F;code&gt;,
+&lt;code&gt;deriving stock&lt;&#x2F;code&gt;, &lt;code&gt;BitVector 32&lt;&#x2F;code&gt;, a lone &lt;code&gt;mealy&lt;&#x2F;code&gt; perched atop a module
+like an incantation. None of it is &lt;em&gt;hard&lt;&#x2F;em&gt;. All of it is unfamiliar,
+and unfamiliar is enough to stop you at the door.&lt;&#x2F;p&gt;
+&lt;p&gt;So before the series spends a whole post on the &lt;code&gt;Uart&lt;&#x2F;code&gt; or the
+&lt;code&gt;Engine&lt;&#x2F;code&gt;, this one pays down the syntax tax up front. Think of it as a
+Rosetta Stone: just enough Haskell that a Tamal signature stops being
+an obstacle and starts being documentation.&lt;&#x2F;p&gt;
+&lt;p&gt;Two honest caveats about scope. This is &lt;strong&gt;not&lt;&#x2F;strong&gt; a Haskell course —
+there are excellent ones, and I’m not writing another — and it
+deliberately steers &lt;em&gt;around&lt;&#x2F;em&gt; the deep theory: no monad tutorial, no
+functor laws, no monoids, none of the machinery a “learn Haskell” book
+leads with. The goal is narrow and practical: by the end you should be
+able to look at a Tamal type signature, a &lt;code&gt;data&lt;&#x2F;code&gt; block, a &lt;code&gt;case&lt;&#x2F;code&gt;, and
+the &lt;code&gt;mealy&lt;&#x2F;code&gt; at the top of an engine and know exactly what you’re seeing
+— not prove theorems about it, just &lt;em&gt;read&lt;&#x2F;em&gt; it. That’s the whole job.&lt;&#x2F;p&gt;</summary>
+    
+    <content type="html">&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;felipebalbi&#x2F;tamal&quot;&gt;Tamal&lt;&#x2F;a&gt; is an FPGA eSPI exerciser, and its gateware — the UART, the
+cycle engine, the ALU, the CRC unit, the loader, the trace ring — is
+written in Haskell and compiled straight to hardware by &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;clash-lang.org&quot;&gt;Clash&lt;&#x2F;a&gt;. This
+is the first post in a series that opens up that gateware one block at
+a time and reads each one end to end.&lt;&#x2F;p&gt;
+&lt;p&gt;There’s a catch, and if you’re here at all you can probably feel it
+coming. Approach this code from C, Rust, or Verilog — which is where
+most people who care about an eSPI exerciser are standing — and the
+source can read like line noise. &lt;code&gt;::&lt;&#x2F;code&gt;, &lt;code&gt;-&amp;gt;&lt;&#x2F;code&gt;, &lt;code&gt;\case&lt;&#x2F;code&gt;,
+&lt;code&gt;deriving stock&lt;&#x2F;code&gt;, &lt;code&gt;BitVector 32&lt;&#x2F;code&gt;, a lone &lt;code&gt;mealy&lt;&#x2F;code&gt; perched atop a module
+like an incantation. None of it is &lt;em&gt;hard&lt;&#x2F;em&gt;. All of it is unfamiliar,
+and unfamiliar is enough to stop you at the door.&lt;&#x2F;p&gt;
+&lt;p&gt;So before the series spends a whole post on the &lt;code&gt;Uart&lt;&#x2F;code&gt; or the
+&lt;code&gt;Engine&lt;&#x2F;code&gt;, this one pays down the syntax tax up front. Think of it as a
+Rosetta Stone: just enough Haskell that a Tamal signature stops being
+an obstacle and starts being documentation.&lt;&#x2F;p&gt;
+&lt;p&gt;Two honest caveats about scope. This is &lt;strong&gt;not&lt;&#x2F;strong&gt; a Haskell course —
+there are excellent ones, and I’m not writing another — and it
+deliberately steers &lt;em&gt;around&lt;&#x2F;em&gt; the deep theory: no monad tutorial, no
+functor laws, no monoids, none of the machinery a “learn Haskell” book
+leads with. The goal is narrow and practical: by the end you should be
+able to look at a Tamal type signature, a &lt;code&gt;data&lt;&#x2F;code&gt; block, a &lt;code&gt;case&lt;&#x2F;code&gt;, and
+the &lt;code&gt;mealy&lt;&#x2F;code&gt; at the top of an engine and know exactly what you’re seeing
+— not prove theorems about it, just &lt;em&gt;read&lt;&#x2F;em&gt; it. That’s the whole job.&lt;&#x2F;p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;&#x2F;span&gt;&lt;h2 id=&quot;f-a-b-is-just-f-a-b&quot;&gt;&lt;code&gt;f :: A -&amp;gt; B&lt;&#x2F;code&gt; is just &lt;code&gt;f : A → B&lt;&#x2F;code&gt;&lt;&#x2F;h2&gt;
+&lt;p&gt;Start with the single most important translation, because once it
+clicks the rest follows. In mathematics you write a function as
+$f : A \to B$, read aloud as “$f$ takes an $A$ and gives you a $B$.”
+That arrow is the entire idea.&lt;&#x2F;p&gt;
+&lt;p&gt;Haskell writes the exact same statement as &lt;code&gt;f :: A -&amp;gt; B&lt;&#x2F;code&gt;. The &lt;code&gt;-&amp;gt;&lt;&#x2F;code&gt; is
+the arrow. The only oddity is the doubled colon: &lt;code&gt;::&lt;&#x2F;code&gt; reads “has
+type.” A single &lt;code&gt;:&lt;&#x2F;code&gt; would have been the obvious choice, but it was
+already spoken for — in Haskell &lt;code&gt;:&lt;&#x2F;code&gt; is the list-cons operator — so the
+type annotation had to take the double. Read &lt;code&gt;f :: A -&amp;gt; B&lt;&#x2F;code&gt; as “&lt;code&gt;f&lt;&#x2F;code&gt; has
+type $A \to B$,” and you are reading the mathematics.&lt;&#x2F;p&gt;
+&lt;p&gt;Here is the smallest honest example:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;double&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; ::&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Int&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Int&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;double n &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;=&lt;&#x2F;span&gt;&lt;span&gt; n &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;*&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 2&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;The first line is the type; the second the definition. And I do mean
+&lt;em&gt;mapping&lt;&#x2F;em&gt;, not &lt;em&gt;procedure&lt;&#x2F;em&gt;. &lt;code&gt;double&lt;&#x2F;code&gt; is not a recipe of steps that
+mutate something on the way to a result — it is the mathematical object
+that associates each &lt;code&gt;Int&lt;&#x2F;code&gt; with another, no more alive than the
+function $x \mapsto 2x$ on a chalkboard. Feed it &lt;code&gt;21&lt;&#x2F;code&gt; and you get &lt;code&gt;42&lt;&#x2F;code&gt;,
+today, tomorrow, on every core, with nothing else happening anywhere.
+That last clause has a name: &lt;strong&gt;purity&lt;&#x2F;strong&gt;. Same input, same output, no
+side effects, no hidden state read or written.&lt;&#x2F;p&gt;
+&lt;p&gt;If you build hardware you already own the mental model, and it is worth
+stating loudly because it is load-bearing for everything Clash does:&lt;&#x2F;p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;A block of combinational logic is a pure function of its inputs.&lt;&#x2F;p&gt;
+&lt;&#x2F;blockquote&gt;
+&lt;p&gt;A truth table is literally $f : \text{inputs} \to \text{outputs}$:
+same inputs, same outputs, every time, no memory of what came before —
+that &lt;em&gt;is&lt;&#x2F;em&gt; purity, in gates instead of lambda calculus. It is the whole
+reason a functional language can describe a circuit at all: your
+design’s combinational core and a pure Haskell function are the same
+kind of object, and Clash is the compiler that notices.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;a-quick-tour-of-categories&quot;&gt;A quick tour of categories&lt;&#x2F;h2&gt;
+&lt;p&gt;Once functions are arrows, the natural question is: what do you
+actually &lt;em&gt;do&lt;&#x2F;em&gt; with them? Strip it down and there are exactly two
+moves.&lt;&#x2F;p&gt;
+&lt;p&gt;The first is &lt;strong&gt;composition&lt;&#x2F;strong&gt;. Given $f : A \to B$ and $g : B \to C$ —
+the target of the first matching the source of the second — you run
+them nose to tail and get a single arrow $A \to C$. Mathematicians
+write it $g \circ f$ (“$g$ after $f$”); Haskell writes it &lt;code&gt;g . f&lt;&#x2F;code&gt;, a
+single dot:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;--&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; (.) :: (b -&amp;gt; c) -&amp;gt; (a -&amp;gt; b) -&amp;gt; (a -&amp;gt; c)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;pipeline &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;=&lt;&#x2F;span&gt;&lt;span&gt; decode &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt; validate &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt; receive&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Read that right to left: &lt;code&gt;receive&lt;&#x2F;code&gt;, then &lt;code&gt;validate&lt;&#x2F;code&gt;, then &lt;code&gt;decode&lt;&#x2F;code&gt;.
+The comment is just the arrow-matching rule spelled out — give &lt;code&gt;.&lt;&#x2F;code&gt; an
+arrow &lt;code&gt;b -&amp;gt; c&lt;&#x2F;code&gt; and an arrow &lt;code&gt;a -&amp;gt; b&lt;&#x2F;code&gt;, and it hands back the composite
+&lt;code&gt;a -&amp;gt; c&lt;&#x2F;code&gt;. If you have ever built a datapath as a chain of stages, each
+feeding the next, you have built exactly this.&lt;&#x2F;p&gt;
+&lt;p&gt;The second move is humbler still: the &lt;strong&gt;identity&lt;&#x2F;strong&gt;, a do-nothing arrow
+$A \to A$ that hands its input straight back. It sounds too trivial to
+mention, but it is the neutral element that makes composition
+well-behaved — the wire from a stage to itself.&lt;&#x2F;p&gt;
+&lt;p&gt;Those two ingredients, plus two laws, are the entire definition of a
+&lt;strong&gt;category&lt;&#x2F;strong&gt;: some &lt;em&gt;objects&lt;&#x2F;em&gt;, &lt;em&gt;arrows&lt;&#x2F;em&gt; between them, a way to
+&lt;em&gt;compose&lt;&#x2F;em&gt; arrows whose ends line up, and an &lt;em&gt;identity&lt;&#x2F;em&gt; arrow on every
+object, subject to&lt;&#x2F;p&gt;
+&lt;p&gt;$$ f \circ \mathrm{id} = f = \mathrm{id} \circ f $$&lt;&#x2F;p&gt;
+&lt;p&gt;$$ (h \circ g) \circ f = h \circ (g \circ f) $$&lt;&#x2F;p&gt;
+&lt;p&gt;The first law says the identity truly does nothing; the second says
+composition doesn’t care how you parenthesise a chain — only order
+matters, not grouping. That is the whole axiom set. There is no third
+page.&lt;&#x2F;p&gt;
+&lt;p&gt;Now the part that trips people up. Sets with functions between them do
+form a category — objects are sets, arrows are functions, composition
+the ordinary $g \circ f$ — and it has a name, &lt;strong&gt;Set&lt;&#x2F;strong&gt;. Haskell types
+with functions form another. So it can &lt;em&gt;sound&lt;&#x2F;em&gt; like categories are
+just “sets, restated.” They are not.&lt;&#x2F;p&gt;
+&lt;p&gt;Here is a category with no sets and no functions in sight. Take any
+&lt;strong&gt;preorder&lt;&#x2F;strong&gt; — a set with a $\le$ relation that is reflexive and
+transitive, like divisibility on the integers. Make the elements the
+&lt;em&gt;objects&lt;&#x2F;em&gt;, and draw one arrow $a \to b$ precisely when $a \le b$.
+Composition? If $a \le b$ and $b \le c$ then $a \le c$: that
+transitivity &lt;em&gt;is&lt;&#x2F;em&gt; the composite. The identity? $a \le a$: reflexivity.
+The laws hold for free, and you have a category in which an “arrow” is
+not a mapping of anything — it is a &lt;em&gt;fact&lt;&#x2F;em&gt;, that one thing sits below
+another.&lt;&#x2F;p&gt;
+&lt;p&gt;That is the honest version of the “superset” story. Category theory
+does not &lt;em&gt;contain&lt;&#x2F;em&gt; set theory — &lt;strong&gt;Set is one example among many.&lt;&#x2F;strong&gt; It
+steps back from &lt;em&gt;what the objects are made of&lt;&#x2F;em&gt; — sets, integers,
+types, states — and studies only the pattern they share: things,
+arrows, and a law-abiding notion of composition. Forget the elements;
+keep the plumbing.&lt;&#x2F;p&gt;
+&lt;p&gt;You need none of this to type a &lt;code&gt;.&lt;&#x2F;code&gt; into a Haskell file. But it buys
+the right mental model for the rest of this post:&lt;&#x2F;p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Composition is the primary verb.&lt;&#x2F;p&gt;
+&lt;&#x2F;blockquote&gt;
+&lt;p&gt;A type signature full of &lt;code&gt;-&amp;gt;&lt;&#x2F;code&gt; is not a scary pile of punctuation. It
+is a chain of arrows, and your job when reading Tamal is usually just
+to see where each arrow starts, where it ends, and how they snap
+together.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;arrows-in-a-row-currying&quot;&gt;Arrows in a row: currying&lt;&#x2F;h2&gt;
+&lt;p&gt;If a function is one arrow from one input to one output, here is a
+puzzle. Why does addition have &lt;em&gt;two&lt;&#x2F;em&gt; arrows?&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;add&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; ::&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Int&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Int&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Int&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;add x y &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;=&lt;&#x2F;span&gt;&lt;span&gt; x &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;+&lt;&#x2F;span&gt;&lt;span&gt; y&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;addFive&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; ::&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Int&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Int&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;addFive &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;=&lt;&#x2F;span&gt;&lt;span&gt; add &lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;5&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;The resolution is a single rule: &lt;code&gt;-&amp;gt;&lt;&#x2F;code&gt; associates to the &lt;strong&gt;right&lt;&#x2F;strong&gt;. So
+&lt;code&gt;Int -&amp;gt; Int -&amp;gt; Int&lt;&#x2F;code&gt; secretly means &lt;code&gt;Int -&amp;gt; (Int -&amp;gt; Int)&lt;&#x2F;code&gt; — “give me an
+&lt;code&gt;Int&lt;&#x2F;code&gt;, and I hand you back &lt;em&gt;a function&lt;&#x2F;em&gt; of type &lt;code&gt;Int -&amp;gt; Int&lt;&#x2F;code&gt;.” &lt;code&gt;add&lt;&#x2F;code&gt;
+does not take two arguments at all: it takes one &lt;code&gt;Int&lt;&#x2F;code&gt; and returns a
+function still waiting for the second. Every Haskell function takes
+exactly one argument; the multi-arrow signatures everywhere are sugar
+for this chain. The trick has a name — &lt;strong&gt;currying&lt;&#x2F;strong&gt;, after Haskell
+Curry, who also lent the language its first name.&lt;&#x2F;p&gt;
+&lt;p&gt;The payoff is that you can stop halfway. &lt;code&gt;add 5&lt;&#x2F;code&gt; is a complete value —
+the function that adds five to whatever comes next. Supplying some
+arguments now and the rest later is &lt;strong&gt;partial application&lt;&#x2F;strong&gt;, and
+&lt;code&gt;addFive&lt;&#x2F;code&gt; is exactly that.&lt;&#x2F;p&gt;
+&lt;p&gt;The hardware reading is direct, and worth holding onto:&lt;&#x2F;p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Partial application is a circuit family parameterised by
+configuration.&lt;&#x2F;p&gt;
+&lt;&#x2F;blockquote&gt;
+&lt;p&gt;Fix the configuration bits now; feed the data later. &lt;code&gt;add 5&lt;&#x2F;code&gt; is the
+adder with one operand strapped to a constant — a specialized block
+carved out of a general one. You will see this shape all over Tamal:
+the ALU’s signature
+&lt;code&gt;alu :: AluOp -&amp;gt; BitVector 32 -&amp;gt; BitVector 32 -&amp;gt; BitVector 32&lt;&#x2F;code&gt; reads
+left to right as “pick an operation, then hand me two 32-bit operands,
+and I’ll give you a 32-bit result.” Thanks to currying, &lt;code&gt;alu Add&lt;&#x2F;code&gt; is
+already meaningful on its own — the two-operand adder, carved out of
+the general ALU by pinning the opcode. Configuration first, data
+second, all the way down.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;types-as-data-algebraic-data-types&quot;&gt;Types as data: algebraic data types&lt;&#x2F;h2&gt;
+&lt;p&gt;Now the syntax you will meet more than any other: &lt;code&gt;data&lt;&#x2F;code&gt;, the keyword
+that builds new types. Haskell’s are called &lt;strong&gt;algebraic data types&lt;&#x2F;strong&gt;,
+and the name is a promise about how they are built — from two
+operations you already know, even if never by these names.&lt;&#x2F;p&gt;
+&lt;p&gt;Start with the simpler one, the &lt;strong&gt;sum type&lt;&#x2F;strong&gt;. Each &lt;code&gt;|&lt;&#x2F;code&gt; is an
+alternative — read it as “or”:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;data&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Color&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; Red&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; |&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; Green&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; |&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; Blue&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;A &lt;code&gt;Color&lt;&#x2F;code&gt; is &lt;code&gt;Red&lt;&#x2F;code&gt; &lt;strong&gt;or&lt;&#x2F;strong&gt; &lt;code&gt;Green&lt;&#x2F;code&gt; &lt;strong&gt;or&lt;&#x2F;strong&gt; &lt;code&gt;Blue&lt;&#x2F;code&gt;, and nothing else.
+This is a C or Rust &lt;code&gt;enum&lt;&#x2F;code&gt;, and if that were all you ever used it for
+it would already earn its keep. Tamal’s engine lifecycle is exactly
+this shape — a &lt;code&gt;Phase&lt;&#x2F;code&gt; that is &lt;code&gt;Idle&lt;&#x2F;code&gt; or &lt;code&gt;Preamble&lt;&#x2F;code&gt; or &lt;code&gt;Fetch&lt;&#x2F;code&gt; or one
+of a handful of other named states, the FSM’s state register written
+as a type.&lt;&#x2F;p&gt;
+&lt;p&gt;The other operation is the &lt;strong&gt;product type&lt;&#x2F;strong&gt;, better known as a struct
+or record — a bundle that holds one field &lt;strong&gt;and&lt;&#x2F;strong&gt; another &lt;strong&gt;and&lt;&#x2F;strong&gt;
+another:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;data&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Point&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; Point&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; x&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; ::&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Int&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; y&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; ::&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Int&lt;&#x2F;span&gt;&lt;span&gt; }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;A &lt;code&gt;Point&lt;&#x2F;code&gt; carries an &lt;code&gt;x&lt;&#x2F;code&gt; and a &lt;code&gt;y&lt;&#x2F;code&gt;, both at once. The record syntax
+throws in a gift: each field name is also an accessor function. Write
+that &lt;code&gt;data&lt;&#x2F;code&gt; and you get &lt;code&gt;x :: Point -&amp;gt; Int&lt;&#x2F;code&gt; for free, no boilerplate.
+Tamal’s engine state is one big record of this kind, a
+&lt;code&gt;State { phase, pc, regs, ... }&lt;&#x2F;code&gt; threaded through every step — program
+counter, register file, current phase, all in one value.&lt;&#x2F;p&gt;
+&lt;p&gt;Constructors are allowed to carry data, which is where sum and product
+combine into something sharper than a C &lt;code&gt;enum&lt;&#x2F;code&gt;:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;data&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Shape&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;  =&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; Circle&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Double&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;  |&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; Rectangle&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Double&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Double&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;A &lt;code&gt;Shape&lt;&#x2F;code&gt; is &lt;em&gt;either&lt;&#x2F;em&gt; a &lt;code&gt;Circle&lt;&#x2F;code&gt; carrying one &lt;code&gt;Double&lt;&#x2F;code&gt; (its radius)
+&lt;em&gt;or&lt;&#x2F;em&gt; a &lt;code&gt;Rectangle&lt;&#x2F;code&gt; carrying two (width and height). The tag and its
+payload travel together — and, as the next section shows, you cannot
+reach the payload without first checking the tag. A Rust programmer
+will recognize this immediately; it is a data-bearing &lt;code&gt;enum&lt;&#x2F;code&gt;.&lt;&#x2F;p&gt;
+&lt;p&gt;So why “algebraic”? Because you are literally doing arithmetic on
+types. A sum &lt;strong&gt;adds&lt;&#x2F;strong&gt; possibilities; a product &lt;strong&gt;multiplies&lt;&#x2F;strong&gt; them.
+Count the inhabitants and the algebra is exact: $|A + B| = |A| + |B|$
+for a sum, and $|A \times B| = |A| \cdot |B|$ for a product. &lt;code&gt;Bool&lt;&#x2F;code&gt;
+has 2 values; the pair &lt;code&gt;(Bool, Bool)&lt;&#x2F;code&gt; has $2 \cdot 2 = 4$;
+&lt;code&gt;Either Bool Bool&lt;&#x2F;code&gt; has $2 + 2 = 4$. That counting is no party trick —
+it is exactly why the compiler can tell whether you have handled every
+case, which matters a great deal for state machines.&lt;&#x2F;p&gt;
+&lt;p&gt;One member of the family deserves special mention, because it is how
+Haskell abolishes the null pointer:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;data&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Maybe&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; a&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; Nothing&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; |&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; Just&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; a&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;code&gt;Maybe a&lt;&#x2F;code&gt; has two constructors: &lt;code&gt;Nothing&lt;&#x2F;code&gt;, carrying no data, or
+&lt;code&gt;Just&lt;&#x2F;code&gt;, carrying an &lt;code&gt;a&lt;&#x2F;code&gt;. It is the type of “a value that might be
+absent” — but the absence lives &lt;em&gt;in the type&lt;&#x2F;em&gt;, out in the open. There
+is no null &lt;code&gt;a&lt;&#x2F;code&gt; hiding inside an ordinary &lt;code&gt;a&lt;&#x2F;code&gt; waiting to segfault you;
+if a value might be missing, its type says &lt;code&gt;Maybe&lt;&#x2F;code&gt;, and you can’t use
+it as a bare &lt;code&gt;a&lt;&#x2F;code&gt; — you have to pattern-match, and if you skip the
+&lt;code&gt;Nothing&lt;&#x2F;code&gt; case the build warns you, by name, before you ever run it.
+In Tamal a step returning a &lt;code&gt;Maybe Ring&lt;&#x2F;code&gt; states a fact about hardware:
+&lt;em&gt;at most one trace-RAM write happens this cycle&lt;&#x2F;em&gt; — zero or one, never a
+smuggled “sometimes.” A write-enable line, promoted to a type.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;taking-types-apart-pattern-matching&quot;&gt;Taking types apart: pattern matching&lt;&#x2F;h2&gt;
+&lt;p&gt;If &lt;code&gt;data&lt;&#x2F;code&gt; is how you build a value, &lt;strong&gt;pattern matching&lt;&#x2F;strong&gt; is how you
+take one apart — and it is the mirror image, constructor for
+constructor. The tool is the &lt;code&gt;case&lt;&#x2F;code&gt; expression:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;area&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; ::&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Shape&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Double&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;area s &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;=&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; case&lt;&#x2F;span&gt;&lt;span&gt; s &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;of&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;  Circle&lt;&#x2F;span&gt;&lt;span&gt; r      &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;-&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 3.14159&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; *&lt;&#x2F;span&gt;&lt;span&gt; r &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;*&lt;&#x2F;span&gt;&lt;span&gt; r&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;  Rectangle&lt;&#x2F;span&gt;&lt;span&gt; w h &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;-&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt; w &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;*&lt;&#x2F;span&gt;&lt;span&gt; h&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Read &lt;code&gt;case s of&lt;&#x2F;code&gt; as “look at which &lt;code&gt;Shape&lt;&#x2F;code&gt; &lt;code&gt;s&lt;&#x2F;code&gt; actually is.” If it was
+built with &lt;code&gt;Circle&lt;&#x2F;code&gt;, the first branch fires and binds &lt;code&gt;r&lt;&#x2F;code&gt; to the
+radius packed inside; if &lt;code&gt;Rectangle&lt;&#x2F;code&gt;, the second binds &lt;code&gt;w&lt;&#x2F;code&gt; and &lt;code&gt;h&lt;&#x2F;code&gt;.
+This is the “you can’t get the payload without checking the tag” rule
+made concrete: the only route to &lt;code&gt;r&lt;&#x2F;code&gt; is to match &lt;code&gt;Circle r&lt;&#x2F;code&gt;, and inside
+that branch the compiler &lt;em&gt;knows&lt;&#x2F;em&gt; a radius is there.&lt;&#x2F;p&gt;
+&lt;p&gt;When a function is nothing but one &lt;code&gt;case&lt;&#x2F;code&gt; on its final argument — which
+is most of the time — there is a shorthand that drops the ceremony,
+&lt;code&gt;\case&lt;&#x2F;code&gt;:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;area&amp;#39;&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; ::&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Shape&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Double&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;area&amp;#39; &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;=&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; \&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;case&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;  Circle&lt;&#x2F;span&gt;&lt;span&gt; r      &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;-&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 3.14159&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; *&lt;&#x2F;span&gt;&lt;span&gt; r &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;*&lt;&#x2F;span&gt;&lt;span&gt; r&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;  Rectangle&lt;&#x2F;span&gt;&lt;span&gt; w h &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;-&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt; w &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;*&lt;&#x2F;span&gt;&lt;span&gt; h&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Same behaviour, one fewer name to invent; &lt;code&gt;\case&lt;&#x2F;code&gt; is “a function that
+immediately pattern-matches on the argument I didn’t bother to name.”
+You will see it constantly in Tamal — most of the gateware’s logic &lt;em&gt;is&lt;&#x2F;em&gt;
+a match on some state or opcode.&lt;&#x2F;p&gt;
+&lt;p&gt;Here is the part that should make a hardware engineer sit up straight.
+The compiler does &lt;strong&gt;exhaustiveness checking&lt;&#x2F;strong&gt;: if your &lt;code&gt;case&lt;&#x2F;code&gt; over a
+sum type leaves out a constructor, you get a warning pointing at the
+exact one you missed. Now recall that a &lt;code&gt;Phase&lt;&#x2F;code&gt; is a sum type and the
+engine’s next-state logic is a &lt;code&gt;case&lt;&#x2F;code&gt; over it. That means the question
+every FSM review is supposed to ask —&lt;&#x2F;p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Did you handle every state?&lt;&#x2F;p&gt;
+&lt;&#x2F;blockquote&gt;
+&lt;p&gt;— is answered by the compiler, on every build, for free. Add a new
+&lt;code&gt;Phase&lt;&#x2F;code&gt; and forget to wire it into the next-state logic, and the build
+tells you before you run a test, let alone open a waveform. It is the
+most boring flavour of formal-ish guarantee, and one of the most
+valuable: a whole category of “unhandled state” bugs surfaces at build
+time instead of in a waveform.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;types-with-behaviour-typeclasses-and-deriving&quot;&gt;Types with behaviour: typeclasses and &lt;code&gt;deriving&lt;&#x2F;code&gt;&lt;&#x2F;h2&gt;
+&lt;p&gt;The last piece of everyday syntax is how Haskell attaches &lt;em&gt;behaviour&lt;&#x2F;em&gt;
+to types. A &lt;strong&gt;typeclass&lt;&#x2F;strong&gt; is an interface — a named set of operations
+a type can choose to support:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;class&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Eq&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; a&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; where&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;  (&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;==&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; ::&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; a&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; a&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Bool&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;This declares &lt;code&gt;Eq&lt;&#x2F;code&gt;, the class of types whose values can be compared:
+an &lt;code&gt;Eq&lt;&#x2F;code&gt; must supply a &lt;code&gt;==&lt;&#x2F;code&gt; taking two of its values and returning a
+&lt;code&gt;Bool&lt;&#x2F;code&gt;. A concrete type opts in with an &lt;strong&gt;instance&lt;&#x2F;strong&gt; — the actual &lt;code&gt;==&lt;&#x2F;code&gt;
+for &lt;code&gt;Int&lt;&#x2F;code&gt;, for &lt;code&gt;Color&lt;&#x2F;code&gt;, for whatever. If you write Rust this is a
+&lt;strong&gt;trait&lt;&#x2F;strong&gt;; in modern C++, a &lt;strong&gt;concept&lt;&#x2F;strong&gt;. What it is &lt;em&gt;not&lt;&#x2F;em&gt;, despite the
+keyword, is an object-oriented class: no fields, no constructors, no
+inheritance tree, no &lt;code&gt;this&lt;&#x2F;code&gt;. A typeclass is a contract a type
+satisfies, not a box a value lives inside.&lt;&#x2F;p&gt;
+&lt;p&gt;Typeclasses exist to enable &lt;strong&gt;bounded polymorphism&lt;&#x2F;strong&gt; — one function
+that works for &lt;em&gt;any&lt;&#x2F;em&gt; type, provided it supports the operations you
+need. The signature carries the requirement:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;elem&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; ::&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Eq&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; a&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; a&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt; [&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;a&lt;&#x2F;span&gt;&lt;span&gt;]&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Bool&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Read the &lt;code&gt;=&amp;gt;&lt;&#x2F;code&gt; as a &lt;strong&gt;constraint arrow&lt;&#x2F;strong&gt;: “for &lt;strong&gt;any&lt;&#x2F;strong&gt; type &lt;code&gt;a&lt;&#x2F;code&gt; that is
+an &lt;code&gt;Eq&lt;&#x2F;code&gt;, &lt;code&gt;elem&lt;&#x2F;code&gt; takes an &lt;code&gt;a&lt;&#x2F;code&gt; and a list of &lt;code&gt;a&lt;&#x2F;code&gt; and says whether the
+value is in the list.” The part before &lt;code&gt;=&amp;gt;&lt;&#x2F;code&gt; is a precondition on the
+caller — &lt;em&gt;given that &lt;code&gt;a&lt;&#x2F;code&gt; can be compared&lt;&#x2F;em&gt; — and the part after is the
+ordinary type. &lt;code&gt;elem&lt;&#x2F;code&gt; does not care whether &lt;code&gt;a&lt;&#x2F;code&gt; is &lt;code&gt;Int&lt;&#x2F;code&gt; or &lt;code&gt;Color&lt;&#x2F;code&gt;; it
+only asks that &lt;code&gt;==&lt;&#x2F;code&gt; exist.&lt;&#x2F;p&gt;
+&lt;p&gt;Which brings us to the incantation stapled to nearly every &lt;code&gt;data&lt;&#x2F;code&gt;
+declaration in Tamal:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;data&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Phase&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; Idle&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; |&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; Running&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; |&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; Halted&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;  deriving&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; stock&lt;&#x2F;span&gt;&lt;span&gt; (&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt;Generic&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Show&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Eq&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Enum&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Bounded&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;  deriving&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; anyclass&lt;&#x2F;span&gt;&lt;span&gt; (&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt;NFDataX&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;code&gt;deriving&lt;&#x2F;code&gt; is the compiler offering to write the boring instances for
+you, so you never hand-roll a &lt;code&gt;==&lt;&#x2F;code&gt; that just compares constructors. The
+list looks like noise the first time; here is what each name buys, so
+it stops looking like noise:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;Show&lt;&#x2F;code&gt;&lt;&#x2F;strong&gt; — the type is printable, so a failing property test can
+show you the exact value it choked on.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;Eq&lt;&#x2F;code&gt;&lt;&#x2F;strong&gt; — values can be compared with &lt;code&gt;==&lt;&#x2F;code&gt;.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;Enum&lt;&#x2F;code&gt;&lt;&#x2F;strong&gt; and &lt;strong&gt;&lt;code&gt;Bounded&lt;&#x2F;code&gt;&lt;&#x2F;strong&gt; — “list me every constructor, in
+order,” which is exactly what an exhaustive test over all &lt;code&gt;Phase&lt;&#x2F;code&gt;s
+needs.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;Generic&lt;&#x2F;code&gt;&lt;&#x2F;strong&gt; — a structural, machine-readable description of the
+type that other libraries build on top of; plumbing, rarely read by
+humans.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;NFDataX&lt;&#x2F;code&gt;&lt;&#x2F;strong&gt; — the one that is really about hardware. It is Clash’s
+way of saying &lt;strong&gt;this type is allowed to sit in a register&lt;&#x2F;strong&gt; — that
+its values, including “undefined at power-up,” are well-defined
+enough to be stored in a flip-flop.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;The &lt;code&gt;stock&lt;&#x2F;code&gt; versus &lt;code&gt;anyclass&lt;&#x2F;code&gt; split is only &lt;em&gt;which machinery&lt;&#x2F;em&gt; writes
+the instance — a built-in strategy for the classic classes, a
+generics-based one for &lt;code&gt;NFDataX&lt;&#x2F;code&gt;. It is a detail you will copy more
+often than you think about. The takeaway: a wall of &lt;code&gt;deriving&lt;&#x2F;code&gt; atop a
+Tamal type is not doing anything deep — it is the compiler filling in
+equality, printing, enumeration, and “fits in a register,” so the
+author didn’t have to.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;types-that-count-widths-in-the-type&quot;&gt;Types that count: widths in the type&lt;&#x2F;h2&gt;
+&lt;p&gt;Here is the feature that startles newcomers most, and delights them
+shortly after: in Clash, &lt;strong&gt;numbers can live in types.&lt;&#x2F;strong&gt;&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;x&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;     ::&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; BitVector&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 32&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt;   --&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; exactly 32 bits&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;lanes&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; ::&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Vec&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 4&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Bit&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt;      --&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; exactly 4 elements&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;i&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;     ::&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Index&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 5&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt;        --&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; a value 0..4, and never 5&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;The &lt;code&gt;32&lt;&#x2F;code&gt;, the &lt;code&gt;4&lt;&#x2F;code&gt;, and the &lt;code&gt;5&lt;&#x2F;code&gt; are not runtime values or comments.
+They are &lt;em&gt;part of the type&lt;&#x2F;em&gt;, checked at compile time like everything
+else. &lt;code&gt;BitVector 32&lt;&#x2F;code&gt; is the type of exactly-32-bit vectors — not “up to
+32,” not “32 by convention,” exactly 32. &lt;code&gt;Vec 4 Bit&lt;&#x2F;code&gt; is a vector of
+exactly four bits. &lt;code&gt;Index 5&lt;&#x2F;code&gt; is a number in the range &lt;code&gt;0..4&lt;&#x2F;code&gt; and, by
+construction, &lt;em&gt;never&lt;&#x2F;em&gt; 5 — the natural type for an index into something
+with five slots.&lt;&#x2F;p&gt;
+&lt;p&gt;Because the width is in the type, the compiler enforces it. You cannot
+index past the end of a &lt;code&gt;Vec 4&lt;&#x2F;code&gt;, because the index type will not let
+the out-of-range value exist in the first place. You cannot wire a
+&lt;code&gt;BitVector 4&lt;&#x2F;code&gt; into a port expecting a &lt;code&gt;BitVector 8&lt;&#x2F;code&gt;; they are different
+types and the mismatch is a compile error. The clean way to say what
+that buys you:&lt;&#x2F;p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;The compiler is a wire-width checker.&lt;&#x2F;p&gt;
+&lt;&#x2F;blockquote&gt;
+&lt;p&gt;Anyone who has written RTL knows the dread here. In Verilog a width
+mismatch is not an error — it is a silent zero-extension or, worse, a
+silent truncation you discover three days later as a dropped high bit.
+In Clash the same mistake is a type error, reported by name, before you
+run a single test. Tamal leans on this everywhere: an &lt;code&gt;Unsigned AW&lt;&#x2F;code&gt;,
+where &lt;code&gt;AW&lt;&#x2F;code&gt; is the address width, carries the program-counter size in
+the type; an &lt;code&gt;Index 5&lt;&#x2F;code&gt; pins a five-state micro-FSM step to exactly its
+five legal values. A whole class of off-by-one-bit bugs never makes it
+past the compiler — a strictly better place to catch them than a logic
+analyzer.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;from-pure-functions-to-hardware-signal-and-mealy&quot;&gt;From pure functions to hardware: &lt;code&gt;Signal&lt;&#x2F;code&gt; and &lt;code&gt;mealy&lt;&#x2F;code&gt;&lt;&#x2F;h2&gt;
+&lt;p&gt;Everything up to now has been combinational: pure functions, inputs to
+outputs, no memory. But hardware has clocks, and sequential logic needs
+a notion of &lt;strong&gt;time&lt;&#x2F;strong&gt;. Clash spells time with a type called &lt;code&gt;Signal&lt;&#x2F;code&gt;:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;counter&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; ::&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Signal&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; dom&lt;&#x2F;span&gt;&lt;span&gt; (&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt;Unsigned&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 8&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Read &lt;code&gt;Signal dom a&lt;&#x2F;code&gt; as “a value of type &lt;code&gt;a&lt;&#x2F;code&gt; that may change on every
+clock tick, in clock domain &lt;code&gt;dom&lt;&#x2F;code&gt;.” It is an endless stream — one
+sample per cycle, across all of time — which is precisely what a wire
+&lt;em&gt;is&lt;&#x2F;em&gt; once you stop looking at a single instant and watch it over the
+whole run. The &lt;code&gt;dom&lt;&#x2F;code&gt; parameter names the clock domain, so the type
+system can stop two clocks from crossing by accident; for reading Tamal
+you can mostly gloss it as “the clock.”&lt;&#x2F;p&gt;
+&lt;p&gt;The bridge from the pure world to the clocked one is a single function,
+&lt;code&gt;mealy&lt;&#x2F;code&gt;:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;--&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; mealy :: (s -&amp;gt; i -&amp;gt; (s, o)) -&amp;gt; s -&amp;gt; (Signal dom i -&amp;gt; Signal dom o)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;step&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; ::&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; State&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Input&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt; (&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt;State&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Output&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Look past the parameters and the shape is simple. You write an
+ordinary, pure step function — current state and input in, next state
+and output out — plus an initial state. &lt;code&gt;mealy&lt;&#x2F;code&gt; takes those two things
+and hands back a function on &lt;code&gt;Signal&lt;&#x2F;code&gt;s: a real register holding the
+state, clocked, with your step function as its next-state and output
+logic. That is a textbook &lt;strong&gt;Mealy machine&lt;&#x2F;strong&gt;, which is where the name
+comes from, and it is the heart of the design — Tamal’s engine is,
+quite literally, &lt;code&gt;mealy stepM initState&lt;&#x2F;code&gt;.&lt;&#x2F;p&gt;
+&lt;p&gt;This is the punchline behind the &lt;a href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-introducing&#x2F;&quot;&gt;introduction post&lt;&#x2F;a&gt;’s claim
+that its tests run in under a second. &lt;code&gt;stepM&lt;&#x2F;code&gt; is just a function —
+&lt;code&gt;State&lt;&#x2F;code&gt; and &lt;code&gt;Input&lt;&#x2F;code&gt; in, new &lt;code&gt;State&lt;&#x2F;code&gt; and &lt;code&gt;Output&lt;&#x2F;code&gt; out, pure, no clock,
+no simulator — so you can hammer it with thousands of property tests in
+milliseconds against a reference model, and only &lt;em&gt;after&lt;&#x2F;em&gt; you trust it
+does &lt;code&gt;mealy&lt;&#x2F;code&gt; make it hardware. The pure core is the part you test;
+&lt;code&gt;mealy&lt;&#x2F;code&gt; is the thin bridge to silicon. We’ll pull that thread in the
+block posts; for now it is enough to spot the &lt;code&gt;mealy&lt;&#x2F;code&gt; at the top of a
+module and read it as “clocked state machine, its brain the pure
+function beside it.”&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;where-to-go-next&quot;&gt;Where to go next&lt;&#x2F;h2&gt;
+&lt;p&gt;That is the whole toolkit. Look back at what you can now read without
+flinching: a Tamal type signature is $f : A \to B$ with the widths
+written into the types; a &lt;code&gt;data&lt;&#x2F;code&gt; block is sums and products, with
+&lt;code&gt;Maybe&lt;&#x2F;code&gt; for the things that might be absent; a &lt;code&gt;case&lt;&#x2F;code&gt; or &lt;code&gt;\case&lt;&#x2F;code&gt; takes
+those values apart, exhaustively, with the compiler checking your work;
+the stack of &lt;code&gt;deriving&lt;&#x2F;code&gt; clauses is the compiler filling in equality,
+printing, enumeration, and “fits in a register”; a &lt;code&gt;BitVector n&lt;&#x2F;code&gt; or an
+&lt;code&gt;Index n&lt;&#x2F;code&gt; is a wire whose width the type system guards; and the &lt;code&gt;mealy&lt;&#x2F;code&gt;
+at the top of a module is a clocked state machine wrapped around an
+ordinary, testable function.&lt;&#x2F;p&gt;
+&lt;p&gt;None of that is the &lt;em&gt;interesting&lt;&#x2F;em&gt; part of Tamal. It is the syntax you
+had to stop tripping over so the interesting part could show through.
+Next in the series we do exactly that: open a single block and read it
+end to end, top to bottom, no hand-waving. I’ll start with a gentle
+one — the CRC unit, or the UART, something small enough to hold whole
+in your head — now that the Haskell is no longer standing between you
+and the hardware. Bring the mental model of arrows snapping together;
+that is most of what you will need.&lt;&#x2F;p&gt;
+</content>
+  </entry>
+  
+</feed>

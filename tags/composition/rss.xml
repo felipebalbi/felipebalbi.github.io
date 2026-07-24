@@ -1,0 +1,482 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"
+     xmlns:atom="http://www.w3.org/2005/Atom"
+     xmlns:content="http://purl.org/rss/1.0/modules/content/"
+     xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Felipe Balbi</title>
+    <link>https://balbi.sh</link>
+    <description>Notes on embedded systems, Rust, and the craft of writing software.</description>
+    <generator>Zola</generator>
+    <language>en</language>
+    <lastBuildDate>Fri, 24 Jul 2026 09:00:00 +0000</lastBuildDate>
+    <atom:link href="https://balbi.sh/tags/composition/rss.xml" rel="self" type="application/rss+xml"/>
+    
+    <item>
+      <title>Tamal: Wiring Uart Through Composition</title>
+      <link>https://balbi.sh/posts/tamal-uart-top/</link>
+      <guid isPermaLink="true">https://balbi.sh/posts/tamal-uart-top/</guid>
+      <pubDate>Fri, 24 Jul 2026 09:00:00 +0000</pubDate>
+      <dc:creator>Felipe Balbi</dc:creator>
+      <description>&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-uart-rx&#x2F;&quot;&gt;receiver&lt;&#x2F;a&gt; we read yesterday closed the keystone. It wired the
+transmitter’s line into its own, shared one tick between them, fed a
+random byte in one end and got the same byte, bit-for-bit, out the other
+— first with an always-true tick, then with the real fractional-3.125
+heartbeat the &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-uart-baudgen&#x2F;&quot;&gt;baud generator&lt;&#x2F;a&gt; fought to keep honest. By the
+last paragraph the UART &lt;em&gt;worked&lt;&#x2F;em&gt;, end to end, and I told you it was
+behind us.&lt;&#x2F;p&gt;
+&lt;p&gt;It was — as behaviour. But there is a small dishonesty in having
+watched the whole thing run without ever reading the file that makes it
+a &lt;em&gt;single thing&lt;&#x2F;em&gt;. Those loopback tests called &lt;code&gt;uartTx&lt;&#x2F;code&gt; and &lt;code&gt;uartRx&lt;&#x2F;code&gt; and
+shared a &lt;code&gt;tick&lt;&#x2F;code&gt; by hand, or they called &lt;code&gt;uart&lt;&#x2F;code&gt; — and that &lt;code&gt;uart&lt;&#x2F;code&gt;, the
+five-line module this post is about, we leaned on and never once read.
+This is the shortest post in the series, because its subject is the
+shortest module in the UART: the top, the umbrella, the seam. And it
+earns its own post for exactly one reason — it is the first Tamal
+module with &lt;strong&gt;no behaviour of its own.&lt;&#x2F;strong&gt; The &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-crc&#x2F;&quot;&gt;CRC&lt;&#x2F;a&gt; computed a
+residue; the &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-uart-baudgen&#x2F;&quot;&gt;baud generator&lt;&#x2F;a&gt; counted a phase; the
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-uart-tx&#x2F;&quot;&gt;transmitter&lt;&#x2F;a&gt; drove a wire; the &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-uart-rx&#x2F;&quot;&gt;receiver&lt;&#x2F;a&gt; recovered one.
+&lt;code&gt;Tamal.Uart&lt;&#x2F;code&gt; does none of these. It &lt;em&gt;connects&lt;&#x2F;em&gt; the ones that do. Its
+whole content is composition, and composition — how three blocks that
+each own one idea become one block that owns none — is the subject.&lt;&#x2F;p&gt;
+&lt;p&gt;Every post so far ended by pointing &lt;em&gt;forward&lt;&#x2F;em&gt;, at the next block. This
+one points &lt;em&gt;inward&lt;&#x2F;em&gt;, at the wiring.&lt;&#x2F;p&gt;</description>
+      
+      <content:encoded>&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-uart-rx&#x2F;&quot;&gt;receiver&lt;&#x2F;a&gt; we read yesterday closed the keystone. It wired the
+transmitter’s line into its own, shared one tick between them, fed a
+random byte in one end and got the same byte, bit-for-bit, out the other
+— first with an always-true tick, then with the real fractional-3.125
+heartbeat the &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-uart-baudgen&#x2F;&quot;&gt;baud generator&lt;&#x2F;a&gt; fought to keep honest. By the
+last paragraph the UART &lt;em&gt;worked&lt;&#x2F;em&gt;, end to end, and I told you it was
+behind us.&lt;&#x2F;p&gt;
+&lt;p&gt;It was — as behaviour. But there is a small dishonesty in having
+watched the whole thing run without ever reading the file that makes it
+a &lt;em&gt;single thing&lt;&#x2F;em&gt;. Those loopback tests called &lt;code&gt;uartTx&lt;&#x2F;code&gt; and &lt;code&gt;uartRx&lt;&#x2F;code&gt; and
+shared a &lt;code&gt;tick&lt;&#x2F;code&gt; by hand, or they called &lt;code&gt;uart&lt;&#x2F;code&gt; — and that &lt;code&gt;uart&lt;&#x2F;code&gt;, the
+five-line module this post is about, we leaned on and never once read.
+This is the shortest post in the series, because its subject is the
+shortest module in the UART: the top, the umbrella, the seam. And it
+earns its own post for exactly one reason — it is the first Tamal
+module with &lt;strong&gt;no behaviour of its own.&lt;&#x2F;strong&gt; The &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-crc&#x2F;&quot;&gt;CRC&lt;&#x2F;a&gt; computed a
+residue; the &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-uart-baudgen&#x2F;&quot;&gt;baud generator&lt;&#x2F;a&gt; counted a phase; the
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-uart-tx&#x2F;&quot;&gt;transmitter&lt;&#x2F;a&gt; drove a wire; the &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-uart-rx&#x2F;&quot;&gt;receiver&lt;&#x2F;a&gt; recovered one.
+&lt;code&gt;Tamal.Uart&lt;&#x2F;code&gt; does none of these. It &lt;em&gt;connects&lt;&#x2F;em&gt; the ones that do. Its
+whole content is composition, and composition — how three blocks that
+each own one idea become one block that owns none — is the subject.&lt;&#x2F;p&gt;
+&lt;p&gt;Every post so far ended by pointing &lt;em&gt;forward&lt;&#x2F;em&gt;, at the next block. This
+one points &lt;em&gt;inward&lt;&#x2F;em&gt;, at the wiring.&lt;&#x2F;p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;&#x2F;span&gt;&lt;h2 id=&quot;the-entire-source&quot;&gt;The entire source&lt;&#x2F;h2&gt;
+&lt;p&gt;Minus the license header and the doc-comment — and there is nothing
+else to minus, no helper to hide — here is &lt;code&gt;src&#x2F;Tamal&#x2F;Uart.hs&lt;&#x2F;code&gt; in full:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;module&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt; Tamal.Uart&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; uart&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  )&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; where&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;import&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt; Clash.Prelude&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;import&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt; Tamal.Uart.BaudGen&lt;&#x2F;span&gt;&lt;span&gt; (&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;oversampleTick&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;import&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt; Tamal.Uart.Rx&lt;&#x2F;span&gt;&lt;span&gt; (&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;uartRx&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;import&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt; Tamal.Uart.Tx&lt;&#x2F;span&gt;&lt;span&gt; (&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;uartTx&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;uart&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; ::&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;  forall&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; baud&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; dom&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt;HiddenClockResetEnable&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; dom&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; KnownDomain&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; dom&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; KnownNat&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; baud&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&amp;gt;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;  SNat&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; baud&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;  Signal&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; dom&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Bit&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;  Signal&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; dom&lt;&#x2F;span&gt;&lt;span&gt; (&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt;Maybe&lt;&#x2F;span&gt;&lt;span&gt; (&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt;BitVector&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 8&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Signal&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; dom&lt;&#x2F;span&gt;&lt;span&gt; (&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt;Maybe&lt;&#x2F;span&gt;&lt;span&gt; (&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt;BitVector&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 8&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Signal&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; dom&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Bool&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Signal&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; dom&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Bit&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Signal&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; dom&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Bool&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  )&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;uart baud rxLine txByte &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;=&lt;&#x2F;span&gt;&lt;span&gt; (&lt;&#x2F;span&gt;&lt;span&gt;rxByte&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span&gt; rxErr&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span&gt; txLine&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span&gt; txReady&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt; where&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  tick &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;=&lt;&#x2F;span&gt;&lt;span&gt; oversampleTick baud&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;&#x2F;span&gt;&lt;span&gt;rxByte&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span&gt; rxErr&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; uartRx tick rxLine&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;&#x2F;span&gt;&lt;span&gt;txLine&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span&gt; txReady&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; uartTx tick txByte&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;That is the whole module. A header with something new in it, a type
+signature longer than the code it types, and a body of four lines —
+one to name the tick, two to place the machines, and a return that
+bundles their outputs. No &lt;code&gt;data&lt;&#x2F;code&gt; declarations, because the top remembers
+nothing. No &lt;code&gt;mealy&lt;&#x2F;code&gt;, no &lt;code&gt;register&lt;&#x2F;code&gt;, because it clocks nothing. No
+&lt;code&gt;where&lt;&#x2F;code&gt;-hidden &lt;code&gt;step&lt;&#x2F;code&gt;, because it decides nothing. For the first time in
+the series the entire module fits in a paragraph, and every line is
+either a type or a wire.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;three-imports-and-one-door&quot;&gt;Three imports and one door&lt;&#x2F;h2&gt;
+&lt;p&gt;The opening beat is the &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-crc&#x2F;&quot;&gt;CRC&lt;&#x2F;a&gt; module’s, played a fifth time, and I
+will be as quick as the fifth playing deserves:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;module&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt; Tamal.Uart&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; uart&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  )&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; where&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;import&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt; Clash.Prelude&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;code&gt;module Tamal.Uart&lt;&#x2F;code&gt; names the module after its path — &lt;code&gt;src&#x2F;Tamal&#x2F;Uart.hs&lt;&#x2F;code&gt;,
+the one &lt;em&gt;without&lt;&#x2F;em&gt; a third dot, the parent directory of
+&lt;code&gt;Tamal.Uart.BaudGen&lt;&#x2F;code&gt;, &lt;code&gt;Tamal.Uart.Rx&lt;&#x2F;code&gt;, and &lt;code&gt;Tamal.Uart.Tx&lt;&#x2F;code&gt;. Only &lt;code&gt;uart&lt;&#x2F;code&gt;
+leaves through the one door in the wall, and this time there is genuinely
+nothing else behind it: no private &lt;code&gt;step&lt;&#x2F;code&gt;, no helper, no state type. The
+export list has never been so nearly the whole file. &lt;code&gt;import Clash.Prelude&lt;&#x2F;code&gt; is the same prelude swap every earlier post dwelt on, the
+line that trades ordinary Haskell’s furniture for &lt;code&gt;Signal&lt;&#x2F;code&gt;, &lt;code&gt;Bit&lt;&#x2F;code&gt;, and
+the rest of the vocabulary that lowers to gates; I will not re-derive it
+a fifth time either.&lt;&#x2F;p&gt;
+&lt;p&gt;What &lt;em&gt;is&lt;&#x2F;em&gt; new sits just underneath it — three imports, the first the
+series has had cause to read:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;import&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt; Tamal.Uart.BaudGen&lt;&#x2F;span&gt;&lt;span&gt; (&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;oversampleTick&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;import&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt; Tamal.Uart.Rx&lt;&#x2F;span&gt;&lt;span&gt; (&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;uartRx&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;import&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt; Tamal.Uart.Tx&lt;&#x2F;span&gt;&lt;span&gt; (&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;uartTx&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Each pulls exactly one name across from a child module — the one name
+that module’s own export list let out. &lt;code&gt;oversampleTick&lt;&#x2F;code&gt; from the &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-uart-baudgen&#x2F;&quot;&gt;baud
+generator&lt;&#x2F;a&gt;, &lt;code&gt;uartRx&lt;&#x2F;code&gt; from the &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-uart-rx&#x2F;&quot;&gt;receiver&lt;&#x2F;a&gt;, &lt;code&gt;uartTx&lt;&#x2F;code&gt; from the
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-uart-tx&#x2F;&quot;&gt;transmitter&lt;&#x2F;a&gt;. These three imports are the top’s &lt;em&gt;material&lt;&#x2F;em&gt;: it has
+no primitives of its own to work with, only the three finished blocks the
+last three posts built, each sealed to a single public name and each
+imported by that name. And the parentheses on each import are the mirror
+of the parentheses on each &lt;code&gt;module&lt;&#x2F;code&gt; line we read one at a time. The
+export list said “only this leaves”; the import says “only this enters.”
+Set the four modules side by side and the doors line up exactly:
+&lt;code&gt;BaudGen&lt;&#x2F;code&gt; lets out &lt;code&gt;oversampleTick&lt;&#x2F;code&gt; and the top lets it in; &lt;code&gt;Rx&lt;&#x2F;code&gt; lets out
+&lt;code&gt;uartRx&lt;&#x2F;code&gt; and the top lets it in; &lt;code&gt;Tx&lt;&#x2F;code&gt; lets out &lt;code&gt;uartTx&lt;&#x2F;code&gt; and the top lets
+it in. The top is the room those three doors open into.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;the-type-the-numbers-come-home&quot;&gt;The type: the numbers come home&lt;&#x2F;h2&gt;
+&lt;p&gt;The signature is longer than the body, and every part of it is a
+reunion:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;uart&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; ::&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;  forall&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; baud&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; dom&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt;HiddenClockResetEnable&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; dom&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; KnownDomain&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; dom&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; KnownNat&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; baud&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&amp;gt;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;  SNat&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; baud&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;  Signal&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; dom&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Bit&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;  Signal&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; dom&lt;&#x2F;span&gt;&lt;span&gt; (&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt;Maybe&lt;&#x2F;span&gt;&lt;span&gt; (&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt;BitVector&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 8&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Signal&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; dom&lt;&#x2F;span&gt;&lt;span&gt; (&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt;Maybe&lt;&#x2F;span&gt;&lt;span&gt; (&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt;BitVector&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 8&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Signal&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; dom&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Bool&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Signal&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; dom&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Bit&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Signal&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; dom&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Bool&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  )&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Under the &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-haskell-primer&#x2F;&quot;&gt;primer&lt;&#x2F;a&gt;’s reading a signature is half the
+documentation&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-repetitive-1&quot;&gt;&lt;a href=&quot;#fn-repetitive&quot;&gt;1&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt;, and this one is visibly &lt;em&gt;assembled&lt;&#x2F;em&gt; out of
+the three signatures we already know. Begin with what the
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-uart-tx&#x2F;&quot;&gt;transmitter&lt;&#x2F;a&gt; and &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-uart-rx&#x2F;&quot;&gt;receiver&lt;&#x2F;a&gt; made a point of &lt;em&gt;not&lt;&#x2F;em&gt;
+having. Both of them, you will remember, shed every number from their
+types: one lone &lt;code&gt;HiddenClockResetEnable dom&lt;&#x2F;code&gt; constraint, no &lt;code&gt;forall&lt;&#x2F;code&gt;,
+no &lt;code&gt;SNat&lt;&#x2F;code&gt;, no &lt;code&gt;KnownNat&lt;&#x2F;code&gt;, because neither block names a baud rate —
+a bit is sixteen ticks and the ticks arrive from elsewhere. The &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-uart-baudgen&#x2F;&quot;&gt;baud
+generator&lt;&#x2F;a&gt; was the opposite: it carried the whole numeric
+burden — &lt;code&gt;forall baud dom&lt;&#x2F;code&gt;, the &lt;code&gt;KnownDomain&lt;&#x2F;code&gt;&#x2F;&lt;code&gt;KnownNat&lt;&#x2F;code&gt; pile, and
+the &lt;code&gt;SNat baud&lt;&#x2F;code&gt; argument — because it was the one block that turns a
+baud rate into a tick.&lt;&#x2F;p&gt;
+&lt;p&gt;Now look at the top’s constraints and first argument: &lt;code&gt;forall baud dom&lt;&#x2F;code&gt;,
+&lt;code&gt;(HiddenClockResetEnable dom, KnownDomain dom, KnownNat baud)&lt;&#x2F;code&gt;, &lt;code&gt;SNat baud -&amp;gt;&lt;&#x2F;code&gt;. They are the baud generator’s, character for character. &lt;strong&gt;The
+numbers come home.&lt;&#x2F;strong&gt; The top wears the &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-uart-baudgen&#x2F;&quot;&gt;baud generator’s&lt;&#x2F;a&gt; exact
+type obligations because it &lt;em&gt;owns&lt;&#x2F;em&gt; the baud generator: it is the block
+that will call &lt;code&gt;oversampleTick baud&lt;&#x2F;code&gt;, so it must be handed the &lt;code&gt;SNat baud&lt;&#x2F;code&gt; to pass along, and must carry the &lt;code&gt;KnownNat baud&lt;&#x2F;code&gt; and &lt;code&gt;KnownDomain dom&lt;&#x2F;code&gt; that &lt;code&gt;oversampleTick&lt;&#x2F;code&gt; needs to read the clock frequency out of the
+domain. The transmitter and receiver got to be numberless precisely
+because the top volunteered to hold the number for all three. Factoring
+the timing into one small block did not delete the &lt;code&gt;SNat&lt;&#x2F;code&gt;; it
+&lt;em&gt;concentrated&lt;&#x2F;em&gt; it — out of TX and RX, into BaudGen, and back out to
+whoever owns BaudGen, which is here.&lt;&#x2F;p&gt;
+&lt;p&gt;Then the ports, and they are just as plainly a concatenation. Two
+arguments go in:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;Signal dom Bit&lt;&#x2F;code&gt; — the RX line, the &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-uart-rx&#x2F;&quot;&gt;receiver’s&lt;&#x2F;a&gt; one input, the
+asynchronous wire from a pin.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;code&gt;Signal dom (Maybe (BitVector 8))&lt;&#x2F;code&gt; — the TX byte, the
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-uart-tx&#x2F;&quot;&gt;transmitter’s&lt;&#x2F;a&gt; one input, the &lt;code&gt;Just b&lt;&#x2F;code&gt; send request.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;And the four-tuple comes out as &lt;code&gt;(rxByte, rxErr, txLine, txReady)&lt;&#x2F;code&gt; —
+the receiver’s two outputs followed by the transmitter’s two:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;Signal dom (Maybe (BitVector 8))&lt;&#x2F;code&gt; and &lt;code&gt;Signal dom Bool&lt;&#x2F;code&gt; — &lt;code&gt;uartRx&lt;&#x2F;code&gt;’s
+byte strobe and framing-error strobe, unchanged.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;code&gt;Signal dom Bit&lt;&#x2F;code&gt; and &lt;code&gt;Signal dom Bool&lt;&#x2F;code&gt; — &lt;code&gt;uartTx&lt;&#x2F;code&gt;’s line and its
+&lt;code&gt;ready&lt;&#x2F;code&gt; flag, unchanged.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;So the top’s interface is exactly &lt;code&gt;uartRx&lt;&#x2F;code&gt;’s external ports set beside
+&lt;code&gt;uartTx&lt;&#x2F;code&gt;’s external ports, with the baud generator’s type obligations
+wrapped around the pair. And notice the one thing that is &lt;em&gt;absent&lt;&#x2F;em&gt;. The
+tick — &lt;code&gt;Signal dom Bool&lt;&#x2F;code&gt;, the &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-uart-baudgen&#x2F;&quot;&gt;baud generator’s&lt;&#x2F;a&gt; output and
+the first argument of &lt;em&gt;both&lt;&#x2F;em&gt; &lt;code&gt;uartRx&lt;&#x2F;code&gt; and &lt;code&gt;uartTx&lt;&#x2F;code&gt; — appears nowhere in
+&lt;code&gt;uart&lt;&#x2F;code&gt;’s type. It was an input to each machine when we read them alone;
+here it has gone &lt;strong&gt;internal.&lt;&#x2F;strong&gt; That is the signature telling you, before
+you read a line of the body, what composition did: it took the wire that
+ran &lt;em&gt;between&lt;&#x2F;em&gt; the blocks and tucked it inside, leaving only the wires
+that still face the world. The heartbeat is now a private matter.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;four-lines-no-state&quot;&gt;Four lines, no state&lt;&#x2F;h2&gt;
+&lt;p&gt;Here is the body, the only part of the file that is neither ceremony nor
+type:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;uart baud rxLine txByte &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;=&lt;&#x2F;span&gt;&lt;span&gt; (&lt;&#x2F;span&gt;&lt;span&gt;rxByte&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span&gt; rxErr&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span&gt; txLine&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span&gt; txReady&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt; where&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  tick &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;=&lt;&#x2F;span&gt;&lt;span&gt; oversampleTick baud&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;&#x2F;span&gt;&lt;span&gt;rxByte&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span&gt; rxErr&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; uartRx tick rxLine&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;&#x2F;span&gt;&lt;span&gt;txLine&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span&gt; txReady&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; uartTx tick txByte&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Read it as what it is: a wiring diagram written as equations. The head
+binds the three inputs — &lt;code&gt;baud&lt;&#x2F;code&gt;, &lt;code&gt;rxLine&lt;&#x2F;code&gt;, &lt;code&gt;txByte&lt;&#x2F;code&gt; — and returns the
+four-tuple. The &lt;code&gt;where&lt;&#x2F;code&gt; block defines the internal names the tuple is
+built from. And every one of those definitions is an &lt;em&gt;instantiation&lt;&#x2F;em&gt;, not
+a computation:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;tick = oversampleTick baud&lt;&#x2F;code&gt; — place one baud generator, hand it the
+baud, call its output &lt;code&gt;tick&lt;&#x2F;code&gt;.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;code&gt;(rxByte, rxErr) = uartRx tick rxLine&lt;&#x2F;code&gt; — place one receiver, feed it
+the tick and the line, name its two outputs.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;code&gt;(txLine, txReady) = uartTx tick txByte&lt;&#x2F;code&gt; — place one transmitter,
+feed it the tick and the byte, name its two outputs.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;There is no arithmetic, no &lt;code&gt;case&lt;&#x2F;code&gt;, no state threaded from cycle to cycle.
+Every earlier module’s &lt;code&gt;where&lt;&#x2F;code&gt; block hid &lt;em&gt;work&lt;&#x2F;em&gt; — the baud generator’s
+phase accumulator feeding back through a &lt;code&gt;register&lt;&#x2F;code&gt;, the transmitter’s
+&lt;code&gt;initTx&lt;&#x2F;code&gt; and the &lt;code&gt;mealy&lt;&#x2F;code&gt; lift over &lt;code&gt;txStep&lt;&#x2F;code&gt;, the receiver’s synchronizer
+and its &lt;code&gt;mealy&lt;&#x2F;code&gt; over &lt;code&gt;rxStep&lt;&#x2F;code&gt;. This &lt;code&gt;where&lt;&#x2F;code&gt; block hides nothing but
+&lt;em&gt;names for wires&lt;&#x2F;em&gt;. &lt;code&gt;tick&lt;&#x2F;code&gt; is not a value that gets computed and returned;
+it is a net, and &lt;code&gt;oversampleTick baud&lt;&#x2F;code&gt; is the sub-circuit driving it.
+&lt;code&gt;rxByte&lt;&#x2F;code&gt; is not a byte; it is the wire on which the receiver will present
+its strobes.&lt;&#x2F;p&gt;
+&lt;p&gt;The tell is the ordering — or the absence of it. In an imperative
+reading you would object that &lt;code&gt;tick&lt;&#x2F;code&gt; is &lt;em&gt;used&lt;&#x2F;em&gt; on the second and third
+lines but &lt;em&gt;defined&lt;&#x2F;em&gt; on the first, so the order is load-bearing: define
+before use. In Haskell’s &lt;code&gt;where&lt;&#x2F;code&gt;, and in the hardware it denotes, the
+order does not matter at all. I could write the three bindings in any
+sequence and the module would be identical, because they are not steps
+executed in time but nets that all exist at once. &lt;code&gt;tick&lt;&#x2F;code&gt; drives &lt;code&gt;uartRx&lt;&#x2F;code&gt;
+and &lt;code&gt;uartTx&lt;&#x2F;code&gt; the way a wire drives the pins soldered to it —
+simultaneously, continuously, with no notion of “first.” The &lt;code&gt;where&lt;&#x2F;code&gt;
+block is a net-list, and a net-list is a set, not a sequence.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-netlist-1&quot;&gt;&lt;a href=&quot;#fn-netlist&quot;&gt;2&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;This is what it looks like when a module’s job is purely structural. It
+adds no gate that computes anything and no flip-flop that remembers
+anything; it adds only &lt;em&gt;connections&lt;&#x2F;em&gt;. Put the four modules on a bench and
+this file is the wiring loom between them — and, like a loom, it is
+invisible in the behaviour and total in the structure. Nothing in the
+UART works without it, and it does nothing but let the rest work.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;one-heartbeat-two-machines&quot;&gt;One heartbeat, two machines&lt;&#x2F;h2&gt;
+&lt;p&gt;Four lines, and only one of them carries a design decision. The other
+three are forced: a receiver needs the line, a transmitter needs the
+byte, the outputs are what they are. But the first line, and the way the
+name it binds gets used &lt;em&gt;twice&lt;&#x2F;em&gt;, is a genuine choice:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  tick &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;=&lt;&#x2F;span&gt;&lt;span&gt; oversampleTick baud&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;&#x2F;span&gt;&lt;span&gt;rxByte&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span&gt; rxErr&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; uartRx tick rxLine&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;&#x2F;span&gt;&lt;span&gt;txLine&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span&gt; txReady&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; uartTx tick txByte&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;code&gt;tick&lt;&#x2F;code&gt; is generated &lt;strong&gt;once&lt;&#x2F;strong&gt; and fanned into &lt;strong&gt;both&lt;&#x2F;strong&gt; machines. This is
+decision 2 of the &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-uart-baudgen&#x2F;&quot;&gt;UART design&lt;&#x2F;a&gt; — build RX and TX together,
+sharing one oversample tick — and it is the whole reason the two halves
+live in one module instead of two.&lt;&#x2F;p&gt;
+&lt;p&gt;Nothing in the types forced it. Each machine takes its own &lt;code&gt;Signal dom Bool&lt;&#x2F;code&gt; tick, so I could have called &lt;code&gt;oversampleTick baud&lt;&#x2F;code&gt; twice, once
+for the receiver and once for the transmitter, and every signature
+would still typecheck. It would even &lt;em&gt;work&lt;&#x2F;em&gt; — two identical NCOs in
+the same domain, same increment, same modulus, are deterministic
+functions of the one clock and would count in perfect lock-step, bit
+for bit. But &lt;em&gt;identical&lt;&#x2F;em&gt; is the tell. You would be spending a second
+phase accumulator, adder, and comparator to build an exact copy of a
+signal you already have, and then leaning on the two staying exact —
+a property you now maintain in &lt;em&gt;two&lt;&#x2F;em&gt; places, where changing one
+generator’s width or modulus and forgetting the other silently splits
+the one clock into two that disagree&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-splitbaudgen-1&quot;&gt;&lt;a href=&quot;#fn-splitbaudgen&quot;&gt;3&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt;. And even kept in
+step, the duplication states a falsehood about the design: that the
+transmit clock and the receive clock are two things that happen to
+agree, when the whole point is that they are &lt;strong&gt;one thing.&lt;&#x2F;strong&gt; Sharing
+&lt;code&gt;tick&lt;&#x2F;code&gt; says the true thing in a single wire.&lt;&#x2F;p&gt;
+&lt;p&gt;And because they &lt;em&gt;are&lt;&#x2F;em&gt; one thing, the loopback the &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-uart-rx&#x2F;&quot;&gt;receiver&lt;&#x2F;a&gt; closed
+rests on something firmer than luck. In a real UART the two ends of the
+link are different chips with genuinely independent clocks, and the
+receiver’s whole apparatus — oversample sixteen times, sample at the
+center, majority-vote — exists precisely to &lt;em&gt;tolerate&lt;&#x2F;em&gt; the drift
+between them. Inside Tamal there is no drift to tolerate, because there
+are not two clocks: the transmitter holds each bit for sixteen ticks and
+the receiver centers its 7&#x2F;8&#x2F;9 window in the &lt;em&gt;same&lt;&#x2F;em&gt; sixteen ticks, off
+the &lt;em&gt;same&lt;&#x2F;em&gt; accumulator. The center-sampling margin the &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-uart-rx&#x2F;&quot;&gt;receiver&lt;&#x2F;a&gt;
+spent a whole post earning is, in loopback, slack it never has to spend
+— the sample lands dead-center by construction, because one counter is
+timing both ends. The &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-uart-baudgen&#x2F;&quot;&gt;baud generator&lt;&#x2F;a&gt; promised it was handing
+“the rest of the UART” an enable rather than a clock; this line is where
+“the rest of the UART” turns out to be precisely two consumers, wired in
+parallel across the one enable.&lt;&#x2F;p&gt;
+&lt;figure class=&quot;uarttop-fig&quot; style=&quot;margin:2rem 0&quot;&gt;
+&lt;svg class=&quot;uarttop&quot; viewBox=&quot;0 0 760 344&quot; role=&quot;img&quot; aria-labelledby=&quot;uarttop-t uarttop-d&quot; xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot;&gt;
+&lt;title id=&quot;uarttop-t&quot;&gt;The uart top module: one shared tick into a receiver and a transmitter&lt;&#x2F;title&gt;
+&lt;desc id=&quot;uarttop-d&quot;&gt;A dashed box labelled uart is the module boundary. Inside it sit three solid boxes: oversampleTick, the baud generator, at left centre; uartRx, the receiver, at upper right; and uartTx, the transmitter, at lower right. A compile-time baud parameter enters oversampleTick from the left as a dashed arrow. oversampleTick drives a single accent wire, the tick, which branches into both uartRx and uartTx — the shared heartbeat. Two runtime inputs cross the boundary from the left: rxLine into uartRx and txByte into uartTx. Four outputs cross the boundary to the right: rxByte and rxErr from uartRx, txLine and txReady from uartTx. The tick wire never crosses the boundary; it is internal to uart.&lt;&#x2F;desc&gt;
+&lt;style&gt;
+.uarttop{max-width:760px;width:100%;height:auto;display:block;margin:0 auto}
+.uarttop .box{fill:var(--bg-dim);stroke:var(--fg-main);stroke-width:2}
+.uarttop .mbox{fill:none;stroke:var(--fg-dim);stroke-width:1.5;stroke-dasharray:6 5}
+.uarttop .wire{stroke:var(--fg-main);stroke-width:2;fill:none}
+.uarttop .tickw{stroke:var(--accent);stroke-width:2.5;fill:none}
+.uarttop .parm{stroke:var(--fg-dim);stroke-width:1.5;fill:none;stroke-dasharray:5 4}
+.uarttop .node{fill:var(--accent)}
+.uarttop text{font-family:var(--sans)}
+.uarttop .name{fill:var(--fg-main);font-family:var(--mono);font-size:14px}
+.uarttop .dim{fill:var(--fg-dim);font-size:11.5px}
+.uarttop .sig{fill:var(--fg-dim);font-family:var(--mono);font-size:12px}
+.uarttop .sigA{fill:var(--accent);font-family:var(--mono);font-size:12.5px}
+.uarttop .mlab{fill:var(--fg-dim);font-family:var(--mono);font-size:12.5px}
+.uarttop .ah{fill:var(--fg-main)}
+.uarttop .aha{fill:var(--accent)}
+.uarttop .ahd{fill:var(--fg-dim)}
+&lt;&#x2F;style&gt;
+&lt;defs&gt;
+&lt;marker id=&quot;ut-a&quot; markerWidth=&quot;8&quot; markerHeight=&quot;6&quot; refX=&quot;6&quot; refY=&quot;3&quot; orient=&quot;auto&quot;&gt;&lt;path d=&quot;M0,0 L6,3 L0,6 Z&quot; class=&quot;ah&quot;&#x2F;&gt;&lt;&#x2F;marker&gt;
+&lt;marker id=&quot;ut-aa&quot; markerWidth=&quot;8&quot; markerHeight=&quot;6&quot; refX=&quot;6&quot; refY=&quot;3&quot; orient=&quot;auto&quot;&gt;&lt;path d=&quot;M0,0 L6,3 L0,6 Z&quot; class=&quot;aha&quot;&#x2F;&gt;&lt;&#x2F;marker&gt;
+&lt;marker id=&quot;ut-ad&quot; markerWidth=&quot;8&quot; markerHeight=&quot;6&quot; refX=&quot;6&quot; refY=&quot;3&quot; orient=&quot;auto&quot;&gt;&lt;path d=&quot;M0,0 L6,3 L0,6 Z&quot; class=&quot;ahd&quot;&#x2F;&gt;&lt;&#x2F;marker&gt;
+&lt;&#x2F;defs&gt;
+&lt;rect class=&quot;mbox&quot; x=&quot;150&quot; y=&quot;44&quot; width=&quot;470&quot; height=&quot;256&quot; rx=&quot;10&quot;&#x2F;&gt;
+&lt;text class=&quot;mlab&quot; x=&quot;160&quot; y=&quot;62&quot; text-anchor=&quot;start&quot;&gt;uart&lt;&#x2F;text&gt;
+&lt;rect class=&quot;box&quot; x=&quot;170&quot; y=&quot;150&quot; width=&quot;150&quot; height=&quot;52&quot; rx=&quot;6&quot;&#x2F;&gt;
+&lt;text class=&quot;name&quot; x=&quot;245&quot; y=&quot;173&quot; text-anchor=&quot;middle&quot;&gt;oversampleTick&lt;&#x2F;text&gt;
+&lt;text class=&quot;dim&quot; x=&quot;245&quot; y=&quot;190&quot; text-anchor=&quot;middle&quot;&gt;baud generator&lt;&#x2F;text&gt;
+&lt;rect class=&quot;box&quot; x=&quot;400&quot; y=&quot;70&quot; width=&quot;140&quot; height=&quot;56&quot; rx=&quot;6&quot;&#x2F;&gt;
+&lt;text class=&quot;name&quot; x=&quot;470&quot; y=&quot;96&quot; text-anchor=&quot;middle&quot;&gt;uartRx&lt;&#x2F;text&gt;
+&lt;text class=&quot;dim&quot; x=&quot;470&quot; y=&quot;113&quot; text-anchor=&quot;middle&quot;&gt;receiver&lt;&#x2F;text&gt;
+&lt;rect class=&quot;box&quot; x=&quot;400&quot; y=&quot;226&quot; width=&quot;140&quot; height=&quot;56&quot; rx=&quot;6&quot;&#x2F;&gt;
+&lt;text class=&quot;name&quot; x=&quot;470&quot; y=&quot;252&quot; text-anchor=&quot;middle&quot;&gt;uartTx&lt;&#x2F;text&gt;
+&lt;text class=&quot;dim&quot; x=&quot;470&quot; y=&quot;269&quot; text-anchor=&quot;middle&quot;&gt;transmitter&lt;&#x2F;text&gt;
+&lt;line class=&quot;parm&quot; x1=&quot;78&quot; y1=&quot;176&quot; x2=&quot;168&quot; y2=&quot;176&quot; marker-end=&quot;url(#ut-ad)&quot;&#x2F;&gt;
+&lt;text class=&quot;sig&quot; x=&quot;40&quot; y=&quot;172&quot; text-anchor=&quot;start&quot;&gt;baud&lt;&#x2F;text&gt;
+&lt;text class=&quot;dim&quot; x=&quot;40&quot; y=&quot;188&quot; text-anchor=&quot;start&quot;&gt;(SNat)&lt;&#x2F;text&gt;
+&lt;line class=&quot;wire&quot; x1=&quot;100&quot; y1=&quot;98&quot; x2=&quot;398&quot; y2=&quot;98&quot; marker-end=&quot;url(#ut-a)&quot;&#x2F;&gt;
+&lt;text class=&quot;sig&quot; x=&quot;40&quot; y=&quot;95&quot; text-anchor=&quot;start&quot;&gt;rxLine&lt;&#x2F;text&gt;
+&lt;text class=&quot;dim&quot; x=&quot;40&quot; y=&quot;110&quot; text-anchor=&quot;start&quot;&gt;Bit&lt;&#x2F;text&gt;
+&lt;line class=&quot;wire&quot; x1=&quot;100&quot; y1=&quot;254&quot; x2=&quot;398&quot; y2=&quot;254&quot; marker-end=&quot;url(#ut-a)&quot;&#x2F;&gt;
+&lt;text class=&quot;sig&quot; x=&quot;40&quot; y=&quot;251&quot; text-anchor=&quot;start&quot;&gt;txByte&lt;&#x2F;text&gt;
+&lt;text class=&quot;dim&quot; x=&quot;40&quot; y=&quot;267&quot; text-anchor=&quot;start&quot;&gt;Maybe byte&lt;&#x2F;text&gt;
+&lt;line class=&quot;tickw&quot; x1=&quot;320&quot; y1=&quot;176&quot; x2=&quot;376&quot; y2=&quot;176&quot;&#x2F;&gt;
+&lt;line class=&quot;tickw&quot; x1=&quot;376&quot; y1=&quot;112&quot; x2=&quot;376&quot; y2=&quot;268&quot;&#x2F;&gt;
+&lt;line class=&quot;tickw&quot; x1=&quot;376&quot; y1=&quot;112&quot; x2=&quot;398&quot; y2=&quot;112&quot; marker-end=&quot;url(#ut-aa)&quot;&#x2F;&gt;
+&lt;line class=&quot;tickw&quot; x1=&quot;376&quot; y1=&quot;268&quot; x2=&quot;398&quot; y2=&quot;268&quot; marker-end=&quot;url(#ut-aa)&quot;&#x2F;&gt;
+&lt;circle class=&quot;node&quot; cx=&quot;376&quot; cy=&quot;176&quot; r=&quot;3.5&quot;&#x2F;&gt;
+&lt;text class=&quot;sigA&quot; x=&quot;348&quot; y=&quot;168&quot; text-anchor=&quot;middle&quot;&gt;tick&lt;&#x2F;text&gt;
+&lt;line class=&quot;wire&quot; x1=&quot;540&quot; y1=&quot;86&quot; x2=&quot;688&quot; y2=&quot;86&quot; marker-end=&quot;url(#ut-a)&quot;&#x2F;&gt;
+&lt;text class=&quot;sig&quot; x=&quot;694&quot; y=&quot;90&quot; text-anchor=&quot;start&quot;&gt;rxByte&lt;&#x2F;text&gt;
+&lt;line class=&quot;wire&quot; x1=&quot;540&quot; y1=&quot;110&quot; x2=&quot;688&quot; y2=&quot;110&quot; marker-end=&quot;url(#ut-a)&quot;&#x2F;&gt;
+&lt;text class=&quot;sig&quot; x=&quot;694&quot; y=&quot;114&quot; text-anchor=&quot;start&quot;&gt;rxErr&lt;&#x2F;text&gt;
+&lt;line class=&quot;wire&quot; x1=&quot;540&quot; y1=&quot;242&quot; x2=&quot;688&quot; y2=&quot;242&quot; marker-end=&quot;url(#ut-a)&quot;&#x2F;&gt;
+&lt;text class=&quot;sig&quot; x=&quot;694&quot; y=&quot;246&quot; text-anchor=&quot;start&quot;&gt;txLine&lt;&#x2F;text&gt;
+&lt;line class=&quot;wire&quot; x1=&quot;540&quot; y1=&quot;266&quot; x2=&quot;688&quot; y2=&quot;266&quot; marker-end=&quot;url(#ut-a)&quot;&#x2F;&gt;
+&lt;text class=&quot;sig&quot; x=&quot;694&quot; y=&quot;270&quot; text-anchor=&quot;start&quot;&gt;txReady&lt;&#x2F;text&gt;
+&lt;&#x2F;svg&gt;
+&lt;figcaption style=&quot;text-align:center;color:var(--fg-dim);font-size:.9rem;margin-top:.85rem;font-family:var(--sans)&quot;&gt;The whole of &lt;code&gt;Tamal.Uart&lt;&#x2F;code&gt; as one picture. The dashed box is the module boundary; inside it a single &lt;code&gt;oversampleTick&lt;&#x2F;code&gt; — the &lt;a href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-uart-baudgen&#x2F;&quot;&gt;baud generator&lt;&#x2F;a&gt; — drives one accent wire, the &lt;code&gt;tick&lt;&#x2F;code&gt;, that fans into both &lt;code&gt;uartRx&lt;&#x2F;code&gt; — the &lt;a href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-uart-rx&#x2F;&quot;&gt;receiver&lt;&#x2F;a&gt; — and &lt;code&gt;uartTx&lt;&#x2F;code&gt; — the &lt;a href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-uart-tx&#x2F;&quot;&gt;transmitter&lt;&#x2F;a&gt;. The compile-time &lt;code&gt;baud&lt;&#x2F;code&gt; enters the generator as a dashed parameter, not a runtime wire. Six signals cross the boundary: &lt;code&gt;rxLine&lt;&#x2F;code&gt; and &lt;code&gt;txByte&lt;&#x2F;code&gt; in, and &lt;code&gt;rxByte&lt;&#x2F;code&gt;, &lt;code&gt;rxErr&lt;&#x2F;code&gt;, &lt;code&gt;txLine&lt;&#x2F;code&gt;, &lt;code&gt;txReady&lt;&#x2F;code&gt; out — the receiver&#x27;s two ports beside the transmitter&#x27;s two, which is precisely what &lt;code&gt;uart&lt;&#x2F;code&gt;&#x27;s type says. The one wire that never crosses the boundary is the &lt;code&gt;tick&lt;&#x2F;code&gt;: generated once, shared by both machines, internal to the module. Composition in a single figure — three blocks that each own an idea, joined by a seam that owns none.&lt;&#x2F;figcaption&gt;
+&lt;&#x2F;figure&gt;
+&lt;h2 id=&quot;where-the-four-wires-go&quot;&gt;Where the four wires go&lt;&#x2F;h2&gt;
+&lt;p&gt;Inside &lt;code&gt;uart&lt;&#x2F;code&gt; the story is over and self-contained: the loopback proved
+the four wires carry what they claim. The interesting question is where
+that four-tuple &lt;em&gt;goes&lt;&#x2F;em&gt; when the UART stops being read as a closed unit
+and starts being used. That happens one level up, in the board shell’s
+&lt;code&gt;system&lt;&#x2F;code&gt;, and the seam is worth seeing even though the shell is a later
+post’s subject:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;rxByte&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span&gt; _rxErr&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span&gt; txLine&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span&gt; txReady&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; uart &lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;SNat&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; @&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;2_000_000&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt; rxLine txByteL&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Three things to read here. First, the baud finally gets a &lt;em&gt;number&lt;&#x2F;em&gt;: &lt;code&gt;SNat @2_000_000&lt;&#x2F;code&gt;, two megabaud, the &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-uart-baudgen&#x2F;&quot;&gt;baud generator’s&lt;&#x2F;a&gt; &lt;code&gt;2_000_000&lt;&#x2F;code&gt;
+chosen at the one call site that has to choose it. &lt;code&gt;uart&lt;&#x2F;code&gt; itself stayed
+baud-generic to the end — the &lt;code&gt;SNat baud&lt;&#x2F;code&gt; in its type — exactly as
+decision 3 of the &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-uart-baudgen&#x2F;&quot;&gt;design&lt;&#x2F;a&gt; intended; the shell is where the knob
+is finally turned. Everything below &lt;code&gt;uart&lt;&#x2F;code&gt; inherited its freedom from a
+number by never naming one, and the shell names it once, here, and the
+whole tree specialises.&lt;&#x2F;p&gt;
+&lt;p&gt;Second, follow the wires into the rig. &lt;code&gt;rxByte&lt;&#x2F;code&gt; feeds a loader FSM that
+fills the instruction BRAM byte by byte — the RX-to-load path.
+&lt;code&gt;txReady&lt;&#x2F;code&gt;, paired with the loader’s own &lt;code&gt;txByteL&lt;&#x2F;code&gt;, drains trace words
+back out — the TX side of the same FSM. &lt;code&gt;txLine&lt;&#x2F;code&gt; goes to the USB-UART
+pin. These are the four terminals the boring diagram in the
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-introducing&#x2F;&quot;&gt;introduction&lt;&#x2F;a&gt; drew as a single &lt;code&gt;UART&lt;&#x2F;code&gt; box between the host and
+the loader; this is that box’s actual boundary, four wires wide.&lt;&#x2F;p&gt;
+&lt;p&gt;Third, and most honestly: &lt;code&gt;_rxErr&lt;&#x2F;code&gt;. The framing-error strobe — the
+output the &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-uart-rx&#x2F;&quot;&gt;receiver&lt;&#x2F;a&gt; worked hardest for, the one with no transmitter
+analogue, the flag it raises when a stop bit comes back low — is bound
+to &lt;code&gt;_rxErr&lt;&#x2F;code&gt; and &lt;strong&gt;dropped.&lt;&#x2F;strong&gt; Today’s shell does not consume it. Section 9
+of the &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-uart-baudgen&#x2F;&quot;&gt;design&lt;&#x2F;a&gt; reserved it for “abort or flag a corrupt load,”
+and that consumer is not built yet, so the wire is generated, typed,
+tested, and — for now — left hanging under the underscore that tells
+GHC we meant to ignore it. It is a small, true window into how a design
+grows: the receiver produces the honest signal before the shell is ready
+to act on it, and the top faithfully carries it to a boundary where it
+currently goes nowhere. The wire is ready for its consumer the way the
+whole interface is ready for the loader that plugs in next — built to
+the right shape, waiting.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-we-read&quot;&gt;What we read&lt;&#x2F;h2&gt;
+&lt;p&gt;The shortest module in the UART, read at last. Five lines — one
+exported name, four wires — and no state at all. The type was longer
+than the code and told most of the story before the code did: the baud
+generator’s numeric obligations &lt;strong&gt;come home&lt;&#x2F;strong&gt; to the top, because owning
+the generator means owning its &lt;code&gt;SNat baud&lt;&#x2F;code&gt; and its &lt;code&gt;KnownNat&lt;&#x2F;code&gt;, and the
+transmitter’s and receiver’s numberless freedom was bought by
+concentrating every number here. The interface is the receiver’s ports
+and the transmitter’s ports set side by side, with the one wire that ran
+&lt;em&gt;between&lt;&#x2F;em&gt; them — the tick — gone internal, so the type itself shows
+what composition tucks away and what it leaves facing the world.&lt;&#x2F;p&gt;
+&lt;p&gt;The body was a net-list wearing the syntax of equations: not computations
+run in order but wires existing at once, three sub-blocks &lt;em&gt;placed&lt;&#x2F;em&gt; and
+connected, a &lt;code&gt;where&lt;&#x2F;code&gt; that hides names rather than work. Its one decision
+was to generate the heartbeat &lt;strong&gt;once&lt;&#x2F;strong&gt; and fan it into both machines —
+decision 2 — which is what makes the loopback a structural certainty
+rather than a coincidence of two clocks, one time base counting the one
+“sixteen” that is both the bit the transmitter holds and the center the
+receiver samples. And its four output wires are the seam: one level up,
+&lt;code&gt;rxByte&lt;&#x2F;code&gt; and &lt;code&gt;txReady&lt;&#x2F;code&gt; and &lt;code&gt;txLine&lt;&#x2F;code&gt; join a loader FSM and a pin, while
+&lt;code&gt;rxErr&lt;&#x2F;code&gt; waits, dropped for now, for a consumer the design has promised
+but not yet built.&lt;&#x2F;p&gt;
+&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-uart-rx&#x2F;&quot;&gt;receiver&lt;&#x2F;a&gt; told you the UART was behind us, and it was right
+about the behaviour — we had watched the byte survive the round trip.
+Now it is behind us as &lt;em&gt;text&lt;&#x2F;em&gt;, too: every file of the transport read,
+down to the five-line seam that lets us say “the UART” as a single word.
+And those four wires reach, for now, exactly one block — the one
+pressed flush against the UART. Not the Engine but the &lt;strong&gt;loader&lt;&#x2F;strong&gt;: the
+FSM that catches &lt;code&gt;rxByte&lt;&#x2F;code&gt; strobes and writes them into instruction
+memory, and feeds bytes back out while &lt;code&gt;txReady&lt;&#x2F;code&gt; is high, the very four
+terminals we traced into &lt;code&gt;system&lt;&#x2F;code&gt; a moment ago. Most of it we will read
+quickly, because it wears the silhouette we have now read four times —
+&lt;code&gt;mealy&lt;&#x2F;code&gt; over a pure &lt;code&gt;loaderStep&lt;&#x2F;code&gt;, a sum for the phase (&lt;code&gt;RxControl | Run | Drain&lt;&#x2F;code&gt;, with a finer one for draining) and a record for the rest. What is
+&lt;em&gt;new&lt;&#x2F;em&gt; is the wire it speaks. A UART hands you a bare stream of bytes, and
+a bare stream is not yet a &lt;em&gt;message&lt;&#x2F;em&gt;: where does one frame end and the
+next begin? The loader’s answer is &lt;strong&gt;COBS&lt;&#x2F;strong&gt; — Consistent Overhead Byte
+Stuffing — which stuffs every payload so the byte &lt;code&gt;0x00&lt;&#x2F;code&gt; never appears
+inside it, freeing that one value to mean &lt;em&gt;frame boundary&lt;&#x2F;em&gt;; the loader
+decodes the stream on the way in and encodes the drain on the way out. It
+is where the byte &lt;em&gt;pipe&lt;&#x2F;em&gt; we finished today becomes a byte &lt;em&gt;protocol&lt;&#x2F;em&gt;.&lt;&#x2F;p&gt;
+&lt;p&gt;The &lt;strong&gt;Engine&lt;&#x2F;strong&gt; the &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-introducing&#x2F;&quot;&gt;introduction&lt;&#x2F;a&gt; promised — the stateful
+difficulty spike the &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-uart-baudgen&#x2F;&quot;&gt;design&lt;&#x2F;a&gt; kept deferring — still waits its
+turn beyond the loader. But it waits. The heartbeat is generated, the
+machines are wired, the bytes cross whole. Next we read the little
+machine that frames them: the loader, and its COBS.&lt;&#x2F;p&gt;
+&lt;section class=&quot;footnotes&quot;&gt;
+&lt;ol class=&quot;footnotes-list&quot;&gt;
+&lt;li id=&quot;fn-repetitive&quot;&gt;
+&lt;p&gt;Yes, the refrain is deliberate. The &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-haskell-primer&#x2F;&quot;&gt;primer&lt;&#x2F;a&gt; made the
+point and every block since has leaned on it, because a claim repeated
+across a series is a claim that sticks: in Haskell, and doubly in Clash,
+the type signature &lt;strong&gt;is&lt;&#x2F;strong&gt; half the documentation. Read the type before
+the body and the body holds few surprises. I will keep saying it until
+it needs no saying. &lt;a href=&quot;#fr-repetitive-1&quot;&gt;↩&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;li id=&quot;fn-netlist&quot;&gt;
+&lt;p&gt;This is the difference between &lt;em&gt;composition&lt;&#x2F;em&gt; in software and
+in hardware, and &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;clash-lang.org&quot;&gt;Clash&lt;&#x2F;a&gt; sits exactly on the seam. In an ordinary Haskell
+program, &lt;code&gt;uart baud rxLine txByte&lt;&#x2F;code&gt; would &lt;em&gt;call&lt;&#x2F;em&gt; &lt;code&gt;oversampleTick&lt;&#x2F;code&gt;,
+&lt;code&gt;uartRx&lt;&#x2F;code&gt;, and &lt;code&gt;uartTx&lt;&#x2F;code&gt; — run them, wait for their results, thread values
+through. Clash does not run them; it &lt;strong&gt;elaborates&lt;&#x2F;strong&gt; them. Each call site
+becomes an &lt;em&gt;instance&lt;&#x2F;em&gt; of that sub-circuit stamped into the net-list, and
+each &lt;code&gt;where&lt;&#x2F;code&gt;-bound name becomes a &lt;em&gt;net&lt;&#x2F;em&gt; joining the instances — &lt;code&gt;tick&lt;&#x2F;code&gt; a
+single wire with a fan-out of two, driving the enable input of the
+receiver instance and the transmitter instance at once. That is why
+naming &lt;code&gt;tick&lt;&#x2F;code&gt; once and using it twice costs one oscillator and not two:
+it is one net, not two evaluations. It is also why the binding order is
+immaterial — a net-list is a graph, and a graph has no first line. The
+top adds no register and no gate that computes; it is a pure structural
+node, transparent to behaviour and total to structure, which is the
+precise hardware meaning of “this module is only wiring.” &lt;a href=&quot;#fr-netlist-1&quot;&gt;↩&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;li id=&quot;fn-splitbaudgen&quot;&gt;
+&lt;p&gt;In fairness, there is a version of two generators that
+is not mere duplication. Run one at wire speed and one at 16× wire speed
+— the slow one for the &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-uart-tx&#x2F;&quot;&gt;transmitter&lt;&#x2F;a&gt;, the fast one for the
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-uart-rx&#x2F;&quot;&gt;receiver&lt;&#x2F;a&gt; — and the transmitter genuinely simplifies: handed a
+tick already at one-per-bit, it sheds its &lt;code&gt;Index 16&lt;&#x2F;code&gt; and advances a bit
+per tick, leaving oversampling to the receiver, the only half that needs
+it. But weigh it. The split spends a second oscillator — another
+accumulator, adder, and comparator — to save a four-bit counter: more
+logic, not less, though at this scale the difference vanishes into the
+noise. So the choice was never cost; it is which story is cleaner, and
+&lt;em&gt;one heartbeat, divided where it is needed&lt;&#x2F;em&gt; reads better than &lt;em&gt;two
+heartbeats that must be kept in tune&lt;&#x2F;em&gt;. Here, reading better and
+maintaining better are the same thing. &lt;a href=&quot;#fr-splitbaudgen-1&quot;&gt;↩&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;&#x2F;section&gt;
+</content:encoded>
+    </item>
+    
+  </channel>
+</rss>

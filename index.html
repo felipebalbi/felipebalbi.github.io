@@ -1,0 +1,57 @@
+<!doctype html><html lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><script>(function () {
+      var stored;
+      try { stored = sessionStorage.getItem('theme'); } catch (_) {}
+      var theme;
+      if (stored === 'light' || stored === 'dark') {
+        theme = stored;
+      } else {
+        theme = (window.matchMedia &&
+                 window.matchMedia('(prefers-color-scheme: dark)').matches)
+                 ? 'dark' : 'light';
+      }
+      document.documentElement.setAttribute('data-theme', theme);
+    })();</script><title>Felipe Balbi</title><meta content="Notes on embedded systems, Rust, and the craft of writing software." name=description><meta content="Felipe Balbi" name=author><link as=font crossorigin href=/fonts/aporetic-serif-regular.woff2 rel=preload type=font/woff2><link as=font crossorigin href=/fonts/aporetic-sans-regular.woff2 rel=preload type=font/woff2><link href="https://balbi.sh/style.css?h=e10f93dc6e268bcde812" rel=stylesheet><link href=https://balbi.sh/giallo-light.css id=hl-light rel=stylesheet><link disabled href=https://balbi.sh/giallo-dark.css id=hl-dark rel=stylesheet><link title="Felipe Balbi (Atom)" href=https://balbi.sh/atom.xml rel=alternate type=application/atom+xml><link title="Felipe Balbi (RSS)" href=https://balbi.sh/rss.xml rel=alternate type=application/rss+xml><link href=https://balbi.sh/ rel=canonical><link href=https://balbi.sh/favicon.svg rel=icon type=image/svg+xml><meta content="Felipe Balbi" property=og:title><meta content="Notes on embedded systems, Rust, and the craft of writing software." property=og:description><meta content=website property=og:type><meta content=https://balbi.sh/ property=og:url><meta content=summary name=twitter:card><body><div class=wrap><header class=site-header><a class=site-name href=https://balbi.sh>Felipe Balbi</a><nav aria-label=Primary class=site-nav><a href=/posts/>Posts</a><a href=/pico-de-gallo/>Pico de Gallo Book</a><button aria-label="Toggle color theme" title="Toggle color theme" class=theme-toggle id=theme-toggle type=button><svg viewbox="0 0 24 24" aria-hidden=true class=icon-sun fill=none stroke=currentColor stroke-linecap=round stroke-linejoin=round stroke-width=2><circle cx=12 cy=12 r=4 /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg> <svg viewbox="0 0 24 24" aria-hidden=true class=icon-moon fill=none stroke=currentColor stroke-linecap=round stroke-linejoin=round stroke-width=2><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button></nav></header><main><section class=intro><h1>Hello, I'm Felipe Balbi.</h1><p><p>I build firmware and tools for embedded systems. I work mostly in Rust and C, with detours through Python and shell when the job calls for it. This site is where I keep notes that might be useful to someone other than me.<p class=tagline>Embedded systems · Rust · the craft of writing software</section><section><h2 class=section-title>Recent posts</h2><ul class=post-list><li><time datetime=2026-07-24T09:00:00>2026-07-24</time> <div class=post-entry><a class=post-title href=https://balbi.sh/posts/tamal-uart-top/>Tamal: Wiring Uart Through Composition</a><p class=post-excerpt>The receiver we read yesterday closed the keystone. It wired the transmitter’s line into its own, shared one tick between them, fed a random byte in one end and got the same byte, bit-for-bit, out the other — first with an always-true tick, then with the real fractional-3.125 heartbeat the baud gene…</p><a class=post-more href=https://balbi.sh/posts/tamal-uart-top/>Read more →</a></div><li><time datetime=2026-07-23T09:00:00>2026-07-23</time> <div class=post-entry><a class=post-title href=https://balbi.sh/posts/tamal-uart-rx/>Tamal: The receiver</a><p class=post-excerpt>The transmitter we read yesterday drove a wire. It owned the line: it held each level for sixteen ticks, and it made every output a pure function of its own state, so the serial output sat rock-steady between bit boundaries and never once twitched. That was a luxury, and we spent most of the post ad…</p><a class=post-more href=https://balbi.sh/posts/tamal-uart-rx/>Read more →</a></div><li><time datetime=2026-07-22T09:00:00>2026-07-22</time> <div class=post-entry><a class=post-title href=https://balbi.sh/posts/tamal-uart-tx/>Tamal: The transmitter</a><p class=post-excerpt>The baud generator we read last time produces a heartbeat — a Bool that says now sixteen times a bit — and nothing else. It had no state machine at all, just a phase accumulator counting against a modulus. That was the point: the smallest possible clocked block, a register fed back through some arit…</p><a class=post-more href=https://balbi.sh/posts/tamal-uart-tx/>Read more →</a></div><li><time datetime=2026-07-21T09:00:00>2026-07-21</time> <div class=post-entry><a class=post-title href=https://balbi.sh/posts/tamal-uart-baudgen/>Tamal: The baud generator</a><p class=post-excerpt>The CRC unit we read last time was pure combinational logic — a truth table wearing a Haskell type, the same output for the same input, no memory, no clock. It was the gentlest possible first block precisely because time never entered into it. The primer closed by promising that the next rung up was…</p><a class=post-more href=https://balbi.sh/posts/tamal-uart-baudgen/>Read more →</a></div><li><time datetime=2026-07-20T09:00:00>2026-07-20</time> <div class=post-entry><a class=post-title href=https://balbi.sh/posts/tamal-crc/>Tamal: The CRC block</a><p class=post-excerpt>As mentioned before Tamal is an FPGA eSPI exerciser with its gateware written in Haskell and compiled to verilog with Clash. In a previous post we presented a very short introduction on Haskell, just enough such that the code blocks below don’t look too foreign. Today we start looking at one of the …</p><a class=post-more href=https://balbi.sh/posts/tamal-crc/>Read more →</a></div><li><time datetime=2026-07-19T09:00:00>2026-07-19</time> <div class=post-entry><a class=post-title href=https://balbi.sh/posts/tamal-haskell-primer/>Enough Haskell to Read Tamal</a><p class=post-excerpt>Tamal is an FPGA eSPI exerciser, and its gateware — the UART, the cycle engine, the ALU, the CRC unit, the loader, the trace ring — is written in Haskell and compiled straight to hardware by Clash. This is the first post in a series that opens up that gateware one block at a time and reads each one …</p><a class=post-more href=https://balbi.sh/posts/tamal-haskell-primer/>Read more →</a></div><li><time datetime=2026-07-13T09:00:00>2026-07-13</time> <div class=post-entry><a class=post-title href=https://balbi.sh/posts/tamal-introducing/>Tamal: an eSPI exerciser</a><p class=post-excerpt>mole is an FPGA bit-cycle engine for exercising I²C and I³C — you write a little program, it drives the bus edge by edge, legal or illegal, and hands you back a structured trace of what happened. Tamal is that same idea aimed at a different, meaner bus: Intel’s Enhanced Serial Peripheral Interface (…</p><a class=post-more href=https://balbi.sh/posts/tamal-introducing/>Read more →</a></div><li><time datetime=2026-06-28T09:00:00>2026-06-28</time> <div class=post-entry><a class=post-title href=https://balbi.sh/posts/flexspi-mcxa-hardening/>From 'it works' to 'I trust it': two torture loops on a NOR driver</a><p class=post-excerpt>The FlexSPI NOR driver for the NXP MCXA5xx already worked. The blocking self-test was green, the examples ran, I could erase a sector, program a page, read it back, and watch the same bytes come out of the memory-mapped window. By the usual bar for “the driver works,” it worked. That bar is too low.…</p><a class=post-more href=https://balbi.sh/posts/flexspi-mcxa-hardening/>Read more →</a></div><li><time datetime=2026-06-22T09:00:00>2026-06-22</time> <div class=post-entry><a class=post-title href=https://balbi.sh/posts/pico-de-gallo-reliability-release/>Pico de Gallo: Release Announcement</a><p class=post-excerpt>Pico de Gallo turns an RP2350 into a USB-attached bridge that lets a host program drive real I²C, SPI, GPIO, PWM, ADC, UART, and 1-Wire from std Rust, C, or Python — so you can write and test device drivers on your laptop instead of cross-compiling for an MCU every time. Today’s release moves the wh…</p><a class=post-more href=https://balbi.sh/posts/pico-de-gallo-reliability-release/>Read more →</a></div><li><time datetime=2026-06-20T09:00:00>2026-06-20</time> <div class=post-entry><a class=post-title href=https://balbi.sh/posts/i3c-target-mcxa-bring-up-gotchas/>I3C target mode on MCXA: three things the datasheet didn't warn me about</a><p class=post-excerpt>I spent the last several weeks bringing up an I3C target driver for the NXP MCXA family (MCXA2xx and MCXA5xx share the same I3C IP) inside the embassy HAL. “Target” is what I3C calls the role I²C calls “slave”: the device that sits on the bus, responds to a controller, and can also raise an in-band …</p><a class=post-more href=https://balbi.sh/posts/i3c-target-mcxa-bring-up-gotchas/>Read more →</a></div></ul><p style=margin-top:1.5rem><a href=/posts/>All posts →</a></section></main><footer class=site-footer><div>© 2026 Felipe Balbi</div><div><a href=https://github.com/felipebalbi rel=me>GitHub</a> · <a href=/atom.xml>Atom</a> · <a href=/rss.xml>RSS</a></div></footer></div><script>(function () {
+      var root = document.documentElement;
+      var btn  = document.getElementById('theme-toggle');
+      var hlL  = document.getElementById('hl-light');
+      var hlD  = document.getElementById('hl-dark');
+      var mql  = window.matchMedia('(prefers-color-scheme: dark)');
+
+      function userChose() {
+        try {
+          var v = sessionStorage.getItem('theme');
+          return v === 'light' || v === 'dark';
+        } catch (_) { return false; }
+      }
+
+      function applyHighlight() {
+        var t = root.getAttribute('data-theme');
+        if (hlL) hlL.disabled = (t !== 'light');
+        if (hlD) hlD.disabled = (t !== 'dark');
+      }
+
+      function setTheme(t, persist) {
+        root.setAttribute('data-theme', t);
+        if (persist) {
+          try { sessionStorage.setItem('theme', t); } catch (_) {}
+        }
+        applyHighlight();
+      }
+
+      // Initial sync.
+      applyHighlight();
+
+      if (btn) {
+        btn.addEventListener('click', function () {
+          var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+          setTheme(next, true);
+        });
+      }
+
+      // Follow OS until the user makes a manual choice.
+      if (mql.addEventListener) {
+        mql.addEventListener('change', function (e) {
+          if (!userChose()) setTheme(e.matches ? 'dark' : 'light', false);
+        });
+      }
+    })();</script>

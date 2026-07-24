@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+  <title>Felipe Balbi</title>
+  <subtitle>Notes on embedded systems, Rust, and the craft of writing software.</subtitle>
+  <link href="https://balbi.sh/tags/rambo/atom.xml" rel="self" type="application/atom+xml"/>
+  <link href="https://balbi.sh"/>
+  <generator uri="https://www.getzola.org/">Zola</generator>
+  <updated>2026-06-11T09:00:00+00:00</updated>
+  <id>https://balbi.sh/tags/rambo/atom.xml</id>
+  
+  <entry xml:lang="en">
+    <title>What did the boot ROM just do to my RAM?</title>
+    <published>2026-06-11T09:00:00+00:00</published>
+    <updated>2026-06-11T09:00:00+00:00</updated>
+    <author><name>Felipe Balbi</name></author>
+    <link rel="alternate" href="https://balbi.sh/posts/rambo-rom-collateral-damage/" type="text/html"/>
+    <id>https://balbi.sh/posts/rambo-rom-collateral-damage/</id>
+    <summary type="html">&lt;p&gt;A while back I was trying to get &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;embassy-rs&#x2F;teleprobe&quot;&gt;teleprobe&lt;&#x2F;a&gt;
+to run a test suite on an RT685-EVK. Teleprobe’s trick is that it takes
+your test, compiled as a standalone firmware binary linked to execute
+directly from SRAM, loads it into the target’s RAM over the probe, and
+runs it from there — flash never gets touched. On every board I’d used
+it with before, it just worked. On the RT685, every run ended in a
+HardFault before the first test got a chance to do anything.&lt;&#x2F;p&gt;</summary>
+    
+    <content type="html">&lt;p&gt;A while back I was trying to get &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;embassy-rs&#x2F;teleprobe&quot;&gt;teleprobe&lt;&#x2F;a&gt;
+to run a test suite on an RT685-EVK. Teleprobe’s trick is that it takes
+your test, compiled as a standalone firmware binary linked to execute
+directly from SRAM, loads it into the target’s RAM over the probe, and
+runs it from there — flash never gets touched. On every board I’d used
+it with before, it just worked. On the RT685, every run ended in a
+HardFault before the first test got a chance to do anything.&lt;&#x2F;p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;&#x2F;span&gt;
+&lt;p&gt;The diagnosis took longer than the bug deserved. The RT685’s boot ROM
+was power-cycling almost every SRAM partition on the way to user code —
+including the one the test binary was linked into. The instructions
+were being scribbled over between the load and the first fetch, so the
+core would dutifully jump to what &lt;em&gt;had been&lt;&#x2F;em&gt; code, hit garbage, and
+fault. Nothing in the reference manual said which partitions the ROM
+touches at startup, and the HardFault itself only told me where
+execution died, not why the instructions there were no longer the ones
+I’d loaded. I worked it out by reading whatever I could find, writing a
+few throwaway scripts, and squinting at probe dumps.&lt;&#x2F;p&gt;
+&lt;p&gt;That experience is why I wrote &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;felipebalbi&#x2F;rambo&quot;&gt;&lt;code&gt;rambo&lt;&#x2F;code&gt;&lt;&#x2F;a&gt;.
+It’s a small CLI whose only job is to answer the question I should have
+been able to look up: &lt;em&gt;which parts of this chip’s RAM does the boot ROM
+clobber before my first instruction runs?&lt;&#x2F;em&gt;&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-rambo-actually-does&quot;&gt;What rambo actually does&lt;&#x2F;h2&gt;
+&lt;p&gt;The core loop is short enough to describe in a paragraph. For every RAM
+region probe-rs knows about for a given chip, rambo writes a deterministic
+pattern across the whole region — each 32-bit word stores its own
+address. Then it issues a reset and halts the core on the vector catch,
+&lt;em&gt;before&lt;&#x2F;em&gt; any user firmware runs. It reads the region back and classifies
+every block as one of four things: SAFE (the pattern survived), ZERO
+(filled with &lt;code&gt;0x00000000&lt;&#x2F;code&gt;), ONES (filled with &lt;code&gt;0xFFFFFFFF&lt;&#x2F;code&gt;), or CHANGED
+(rewritten with something else — ROM scratch, stack, or working data,
+and sometimes just garbage from a partition the ROM power-cycled).
+Output is a colored heatmap, a run-length-encoded summary of contiguous
+regions sharing a class, and per-region totals.&lt;&#x2F;p&gt;
+&lt;p&gt;It is deliberately a plain stdout program with ANSI colors. Not a TUI.
+Not a simulator. Not a fancy GUI. It’s something you can read in your
+terminal, pipe to a file, or paste into a bug report when you ask a
+vendor why their ROM is doing what it’s doing. The only thing it depends
+on at runtime is a debug probe and a chip that probe-rs supports — which,
+in practice, is most of the Cortex-M world.&lt;&#x2F;p&gt;
+&lt;p&gt;It does not flash anything. It does not modify your firmware. It writes
+a pattern, resets, reads back. That’s it.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;why-writing-the-address-as-data-matters&quot;&gt;Why writing the address as data matters&lt;&#x2F;h2&gt;
+&lt;p&gt;The “each word stores its own address” pattern is the kind of thing that
+looks arbitrary until you’ve tried the alternatives. A solid bit pattern
+like &lt;code&gt;0xDEADBEEF&lt;&#x2F;code&gt; repeated everywhere will tell you whether RAM was
+clobbered, but it won’t tell you whether the readback came from the
+address you think it did — if the chip aliases memory or has unmapped
+windows in a reserved range, you can read the same &lt;code&gt;0xDEADBEEF&lt;&#x2F;code&gt; back
+from two different addresses and not notice. With &lt;code&gt;addr-as-data&lt;&#x2F;code&gt;, every
+location is uniquely identifiable. A SAFE word is unambiguous. A ZERO
+or ONES word is unambiguous. A CHANGED word that &lt;em&gt;also&lt;&#x2F;em&gt; happens to
+equal some &lt;em&gt;other&lt;&#x2F;em&gt; valid address is a strong hint that something is
+aliased. The pattern is essentially free to generate, and it carries
+its own coordinate system.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;a-small-tour-of-the-optional-modes&quot;&gt;A small tour of the optional modes&lt;&#x2F;h2&gt;
+&lt;p&gt;The default survey answers the headline question. The optional modes are
+there for when the answer to “what is the ROM doing here?” is more
+interesting than “nothing” or “everything.”&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;&lt;code&gt;--fingerprint&lt;&#x2F;code&gt;&lt;&#x2F;strong&gt; classifies the &lt;em&gt;kind&lt;&#x2F;em&gt; of clobber inside CHANGED
+blocks. Is the block mostly zeros with a few non-zero words at the top?
+That looks like a stack frame. Is every word the same non-zero value?
+That’s a constant fill. Is it an ascending counter, a repeating motif,
+or an address-plus-offset pattern? Each of those points at a different
+ROM behavior — a memset, a struct initialization, a copy with a fixed
+offset, an uninitialized scratch buffer the ROM forgot to clear. None
+of these tell you exactly what the ROM is doing, but they let you skip
+straight past “is this even structured data” and into “this looks like
+a 16-byte header followed by a counter.”&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;&lt;code&gt;--dual-pattern&lt;&#x2F;code&gt;&lt;&#x2F;strong&gt; writes &lt;code&gt;addr&lt;&#x2F;code&gt; in one reset cycle and &lt;code&gt;~addr&lt;&#x2F;code&gt; in a
+second. Both passes get classified independently and compared. If a
+block came back SAFE in both passes — pattern survived both times —
+then the ROM genuinely didn’t touch it. If a block came back CHANGED
+in both passes but with &lt;em&gt;the same&lt;&#x2F;em&gt; value, the ROM is actively writing
+there regardless of what was already in memory. This disambiguates two
+flavors of “the ROM didn’t touch this” that single-pass surveys can’t
+tell apart: &lt;em&gt;undriven&lt;&#x2F;em&gt; (the ROM left it alone) versus &lt;em&gt;coincidentally
+the same as my pattern&lt;&#x2F;em&gt; (extraordinarily unlikely with addr-as-data,
+but possible in pathological cases).&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;&lt;code&gt;--write-readback&lt;&#x2F;code&gt;&lt;&#x2F;strong&gt; is the opposite trick: skip the reset entirely.
+Write the pattern, immediately read it back, classify what comes out.
+On normal RAM, this is boring — everything classifies as SAFE. On
+reserved address ranges, on code-bus aliases of system RAM, on
+peripheral windows that look like memory in the chip description but
+aren’t, this is where you find out. Aliasing shows up as the same
+content at two addresses. Unmapped windows show up as bus faults or
+all-ones reads. It’s worth running once on any new chip just to see
+what its memory map actually does, as opposed to what the documentation
+claims.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;&lt;code&gt;--reset-cycles N&lt;&#x2F;code&gt;&lt;&#x2F;strong&gt; re-runs the read after each of N resets without
+re-writing the pattern in between. If the ROM is deterministic — same
+chip, same reset, same post-ROM RAM contents every time — the
+classification is identical across cycles. If anything drifts, you’ve
+got nondeterminism worth investigating: timing-sensitive scratch,
+uninitialized stack frames bleeding in from whatever was happening
+microseconds before the reset, or RAM that hasn’t fully settled.
+This one is mostly useful when something &lt;em&gt;should&lt;&#x2F;em&gt; be the same every
+boot but isn’t, and you need evidence before you can start arguing
+about it.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;the-ci-bit&quot;&gt;The CI bit&lt;&#x2F;h2&gt;
+&lt;p&gt;The mode I’m most happy with isn’t in the survey — it’s in the two flags
+that turn rambo into a regression gate.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;code&gt;--json &amp;lt;path&amp;gt;&lt;&#x2F;code&gt; writes a stable, schema-versioned JSON report of the
+entire run. Use it as a CI artifact, archive it across firmware
+versions, diff it when something changes.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;code&gt;--expectations &amp;lt;path&amp;gt;&lt;&#x2F;code&gt; takes a small declarative file — a “RAM
+contract” — and evaluates each clause against the survey. Each entry
+names a range and one of three claims:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;json&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;{&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-support z-type&quot;&gt;  &amp;quot;&lt;&#x2F;span&gt;&lt;span class=&quot;z-support z-type&quot;&gt;name&lt;&#x2F;span&gt;&lt;span class=&quot;z-support z-type&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; &amp;quot;&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;main_sram_crash_dump_area&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-support z-type&quot;&gt;  &amp;quot;&lt;&#x2F;span&gt;&lt;span class=&quot;z-support z-type&quot;&gt;range&lt;&#x2F;span&gt;&lt;span class=&quot;z-support z-type&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;:&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;span class=&quot;z-support z-type&quot;&gt; &amp;quot;&lt;&#x2F;span&gt;&lt;span class=&quot;z-support z-type&quot;&gt;start&lt;&#x2F;span&gt;&lt;span class=&quot;z-support z-type&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; &amp;quot;&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;0x20030000&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-support z-type&quot;&gt; &amp;quot;&lt;&#x2F;span&gt;&lt;span class=&quot;z-support z-type&quot;&gt;end&lt;&#x2F;span&gt;&lt;span class=&quot;z-support z-type&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; &amp;quot;&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;0x20031000&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt; }&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-support z-type&quot;&gt;  &amp;quot;&lt;&#x2F;span&gt;&lt;span class=&quot;z-support z-type&quot;&gt;expect&lt;&#x2F;span&gt;&lt;span class=&quot;z-support z-type&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; &amp;quot;&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;safe&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-support z-type&quot;&gt;  &amp;quot;&lt;&#x2F;span&gt;&lt;span class=&quot;z-support z-type&quot;&gt;rationale&lt;&#x2F;span&gt;&lt;span class=&quot;z-support z-type&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; &amp;quot;&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;Reserved for crash-dump recovery after watchdog reset.&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;The clauses are &lt;code&gt;expect: &amp;lt;class&amp;gt;&lt;&#x2F;code&gt; (every block must be that class),
+&lt;code&gt;expect_any_of: [&amp;lt;class&amp;gt;, ...]&lt;&#x2F;code&gt; (every block must be one of these), and
+&lt;code&gt;expect_not: &amp;lt;class&amp;gt;&lt;&#x2F;code&gt; (no block may be that class). Exit code is 0 if
+every expectation holds, 1 if any fails. Ranges are checked for
+alignment and bounds &lt;em&gt;before&lt;&#x2F;em&gt; any probe I&#x2F;O happens, so a typo can’t
+brick a run.&lt;&#x2F;p&gt;
+&lt;p&gt;What this gets you is a small, version-controlled answer to “the
+bootloader assumes these regions survive the ROM” that runs on every
+PR and on every new silicon rev. The next time a chip vendor patches
+their ROM and quietly starts touching memory they didn’t touch before,
+your CI tells you. It’s a tiny, boring thing. It’s also the kind of
+thing that would have saved me a few days on the RT685.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-rambo-isn-t&quot;&gt;What rambo isn’t&lt;&#x2F;h2&gt;
+&lt;p&gt;A few honest limits before you reach for it.&lt;&#x2F;p&gt;
+&lt;p&gt;It’s only as accurate as probe-rs’s chip database. If a chip’s
+&lt;code&gt;memory_map&lt;&#x2F;code&gt; omits a region, rambo can’t survey it. Most of the time
+this is fine; occasionally a vendor leaves a peripheral-attached SRAM
+out of the description and you’ll need to add it yourself (or
+&lt;code&gt;--chip-description-path&lt;&#x2F;code&gt; your own).&lt;&#x2F;p&gt;
+&lt;p&gt;Some CMSIS-Pack descriptions list code-bus &lt;em&gt;aliases&lt;&#x2F;em&gt; of system-bus
+RAM as separate regions. Rambo treats every region in the map as
+independent, so you’ll see the same physical RAM surveyed twice under
+different addresses. That’s almost always what you want — the
+aliases sometimes behave differently — but it can look surprising the
+first time.&lt;&#x2F;p&gt;
+&lt;p&gt;And “SAFE” only means “the ROM didn’t write here on &lt;em&gt;this&lt;&#x2F;em&gt; chip rev,
+with &lt;em&gt;this&lt;&#x2F;em&gt; fuse configuration, on &lt;em&gt;this&lt;&#x2F;em&gt; boot mode.” It does not
+mean the ROM will never write there. That gap is exactly why the
+contract file and CI gate exist.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;try-it&quot;&gt;Try it&lt;&#x2F;h2&gt;
+&lt;p&gt;&lt;code&gt;cargo install rambo&lt;&#x2F;code&gt;, or grab a pre-built binary from the
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;felipebalbi&#x2F;rambo&#x2F;releases&quot;&gt;releases page&lt;&#x2F;a&gt; for
+Linux, macOS (Intel + Apple Silicon), or Windows. Source is on
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;felipebalbi&#x2F;rambo&quot;&gt;GitHub&lt;&#x2F;a&gt;.&lt;&#x2F;p&gt;
+&lt;p&gt;If you run it on a chip I haven’t tested with — so far that’s
+RT685, RT633, MCXA266, MCXA276, and MCXA577 — I’d genuinely like
+to hear what came back. Especially if it surprises you.&lt;&#x2F;p&gt;
+</content>
+  </entry>
+  
+</feed>

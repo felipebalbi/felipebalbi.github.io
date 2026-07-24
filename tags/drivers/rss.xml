@@ -1,0 +1,1105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"
+     xmlns:atom="http://www.w3.org/2005/Atom"
+     xmlns:content="http://purl.org/rss/1.0/modules/content/"
+     xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Felipe Balbi</title>
+    <link>https://balbi.sh</link>
+    <description>Notes on embedded systems, Rust, and the craft of writing software.</description>
+    <generator>Zola</generator>
+    <language>en</language>
+    <lastBuildDate>Sun, 28 Jun 2026 09:00:00 +0000</lastBuildDate>
+    <atom:link href="https://balbi.sh/tags/drivers/rss.xml" rel="self" type="application/rss+xml"/>
+    
+    <item>
+      <title>From &#x27;it works&#x27; to &#x27;I trust it&#x27;: two torture loops on a NOR driver</title>
+      <link>https://balbi.sh/posts/flexspi-mcxa-hardening/</link>
+      <guid isPermaLink="true">https://balbi.sh/posts/flexspi-mcxa-hardening/</guid>
+      <pubDate>Sun, 28 Jun 2026 09:00:00 +0000</pubDate>
+      <dc:creator>Felipe Balbi</dc:creator>
+      <description>&lt;p&gt;The FlexSPI NOR driver for the NXP MCXA5xx already worked. The
+blocking self-test was green, the examples ran, I could erase a
+sector, program a page, read it back, and watch the same bytes come
+out of the memory-mapped window. By the usual bar for “the driver
+works,” it worked.&lt;&#x2F;p&gt;
+&lt;p&gt;That bar is too low. A driver that passes its own happy-path
+self-test has demonstrated exactly one thing: that it can succeed when
+nothing goes wrong. It has said nothing about what happens when an
+async operation gets cancelled half a microsecond into a command
+shift, or when a caller does a partial-page write at an address the
+controller quietly dislikes. The distance between “it works” and “I
+trust it” is made entirely of those questions, and you don’t answer
+them by running the happy path again.&lt;&#x2F;p&gt;</description>
+      
+      <content:encoded>&lt;p&gt;The FlexSPI NOR driver for the NXP MCXA5xx already worked. The
+blocking self-test was green, the examples ran, I could erase a
+sector, program a page, read it back, and watch the same bytes come
+out of the memory-mapped window. By the usual bar for “the driver
+works,” it worked.&lt;&#x2F;p&gt;
+&lt;p&gt;That bar is too low. A driver that passes its own happy-path
+self-test has demonstrated exactly one thing: that it can succeed when
+nothing goes wrong. It has said nothing about what happens when an
+async operation gets cancelled half a microsecond into a command
+shift, or when a caller does a partial-page write at an address the
+controller quietly dislikes. The distance between “it works” and “I
+trust it” is made entirely of those questions, and you don’t answer
+them by running the happy path again.&lt;&#x2F;p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;&#x2F;span&gt;
+&lt;p&gt;You answer them by building something whose only job is to be nasty to
+the driver and to notice when the driver flinches. This post is about
+two such things — a pair of self-checking soak rigs for the
+&lt;code&gt;embassy-mcxa&lt;&#x2F;code&gt; FlexSPI driver — and the two bugs they caught on the
+way. The work landed in &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;embassy-rs&#x2F;embassy&#x2F;pull&#x2F;6389&quot;&gt;embassy-rs&#x2F;embassy#6389&lt;&#x2F;a&gt;, validated on an
+FRDM-MCXA577 with its on-board Winbond W25Q64 (8 MiB), and it builds on
+the register-level fixes (&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;embassy-rs&#x2F;embassy&#x2F;pull&#x2F;6386&quot;&gt;AHBCR&lt;&#x2F;a&gt;, &lt;code&gt;DLLCR&lt;&#x2F;code&gt;, &lt;code&gt;FLSHCR2&lt;&#x2F;code&gt;) from
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;embassy-rs&#x2F;embassy&#x2F;pull&#x2F;6386&quot;&gt;#6386&lt;&#x2F;a&gt; — more on how &lt;em&gt;those&lt;&#x2F;em&gt; got found in a moment, because it
+was the same rig.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-a-torture-loop-has-to-be&quot;&gt;What a torture loop has to be&lt;&#x2F;h2&gt;
+&lt;p&gt;A soak test that only loops the happy path faster is not a soak test;
+it’s a slow way to confirm what you already believed. To actually buy
+trust, the loop has to have a few properties, and getting those
+properties right was most of the work.&lt;&#x2F;p&gt;
+&lt;p&gt;It has to be &lt;strong&gt;adversarial&lt;&#x2F;strong&gt;: every round erases a fresh window,
+programs it with randomly-sized, randomly-placed sub-page writes and
+full pages, and then reads it back through &lt;em&gt;two independent paths&lt;&#x2F;em&gt; —
+the IP command path and the memory-mapped AHB window — asserting they
+agree with each other and with the pattern it wrote. A bug that lives
+in only one path can’t hide when the other path is watching.&lt;&#x2F;p&gt;
+&lt;p&gt;It has to be &lt;strong&gt;reproducible&lt;&#x2F;strong&gt;: every round is driven by a logged
+xorshift seed, so a failure three hours in isn’t a ghost — it’s a seed
+I can replay from a clean boot.&lt;&#x2F;p&gt;
+&lt;p&gt;It has to &lt;strong&gt;protect itself from itself&lt;&#x2F;strong&gt;: a torture loop that programs
+random addresses is one off-by-one away from scribbling on the sector
+it’s verifying, or wearing a single sector to death. So the window
+rotates by a prime stride to spread wear, a per-sector erase budget
+caps the damage, a wall-clock limit ends the run, and a &lt;strong&gt;never-erased
+canary sector&lt;&#x2F;strong&gt; sits off to the side. If a wild write ever lands in
+the canary, the canary stops matching, and I learn that the driver
+wrote somewhere it was never told to.&lt;&#x2F;p&gt;
+&lt;p&gt;Stripped of the bookkeeping, each round looks like this:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;loop&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;    let&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; seed&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; rng&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;next&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt;          &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; logged, so any failure replays&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;    let&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; window&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; next_window&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;seed&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; prime-stride rotation, wear-spread&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;    erase&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;window&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;?&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;    verify_erased&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;window&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;?&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;    for&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; write&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; in&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; random_writes&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;seed&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; window&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;        program&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;write&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;addr&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; write&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;bytes&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;?&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; The load-bearing assertion: two independent read paths must&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; agree with each other and with what we wrote.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;    assert_eq!&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;read_ip&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;window&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;   expected&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;seed&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;    assert_eq!&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;read_mmap&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;window&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; expected&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;seed&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;    assert_canary_intact&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;?&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt;        &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; nobody wrote where they shouldn&amp;#39;t&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;    if&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; elapsed&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt; &amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; LIMIT&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; break&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;span&gt; }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;The first time I pointed this at the driver, it didn’t get to a clean
+round. The IP path and the memory-mapped path disagreed, which is how
+the &lt;code&gt;AHBCR.AFLASHBASE&lt;&#x2F;code&gt; addressing bug surfaced — I fixed that
+separately in &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;embassy-rs&#x2F;embassy&#x2F;pull&#x2F;6386&quot;&gt;#6386&lt;&#x2F;a&gt; before any of the rest of this made
+sense. With that fixed, the rig got much further, and then found
+something stranger.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-it-found-first-the-byte-before-the-write-keeps-going-to-zero&quot;&gt;What it found first: the byte before the write keeps going to zero&lt;&#x2F;h2&gt;
+&lt;p&gt;The failure was small and specific, which is the worst kind. Most
+rounds were clean. But on rounds where the random writes happened to
+place one sub-page write starting at an address with &lt;code&gt;addr % 8&lt;&#x2F;code&gt; of 5 or
+7, and &lt;em&gt;another&lt;&#x2F;em&gt; write followed in the same page, the byte immediately
+&lt;em&gt;before&lt;&#x2F;em&gt; the second write’s start address came back as &lt;code&gt;0x00&lt;&#x2F;code&gt;. Not the
+bytes I wrote — those were fine. The byte &lt;em&gt;before&lt;&#x2F;em&gt; them, which I hadn’t
+touched in that operation at all.&lt;&#x2F;p&gt;
+&lt;p&gt;My first assumption was that I had a bug in the FIFO-fill loop: an
+off-by-one in how the driver packs the caller’s buffer into the
+controller’s TX FIFO. I went and read that loop very carefully, then
+did the thing I should have done first and diffed it, byte for byte,
+against NXP’s &lt;code&gt;FLEXSPI_WriteBlocking&lt;&#x2F;code&gt; in their SDK. It was identical.
+The driver was filling the FIFO exactly the way the vendor does.&lt;&#x2F;p&gt;
+&lt;p&gt;That reframed the whole problem. If the loop is byte-identical to the
+reference and the reference is trusted, the corruption isn’t in the
+loop — it’s in the controller’s handling of an unaligned write boundary
+between two consecutive writes in a page. A single write of any length,
+at any alignment, is fine. It’s specifically the seam between two
+sub-page writes when the second one starts unaligned that the IP
+mangles. This is a controller alignment quirk, and no amount of
+re-reading my code was going to fix a property of the silicon.&lt;&#x2F;p&gt;
+&lt;p&gt;So the fix isn’t to make the unaligned write work — it’s to make the
+unaligned write &lt;em&gt;impossible to ask for&lt;&#x2F;em&gt;, loudly, instead of letting it
+silently corrupt an adjacent byte. &lt;code&gt;page_program&lt;&#x2F;code&gt; now enforces a
+write-size contract: the start address and the length must both be
+8-byte aligned, and the write must stay within a single page. Anything
+else returns an error before a single byte reaches the flash.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; The 8 is a property of the FlexSPI IP&#x2F;DMA FIFO window,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; not of the flash chip. Name it so nobody &amp;quot;optimizes&amp;quot; it away.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;const&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; WRITE_GRANULARITY&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; usize&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 8&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;fn&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; check_program&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;addr&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; u32&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; len&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; usize&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; flash_size&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; u32&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Result&lt;&#x2F;span&gt;&lt;span&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; IoError&lt;&#x2F;span&gt;&lt;span&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;    if&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; addr&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; as&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; usize&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; %&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; WRITE_GRANULARITY&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; !=&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 0&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; |&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;|&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; len&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; %&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; WRITE_GRANULARITY&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; !=&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 0&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;        return&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Err&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;IoError&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;Misaligned&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;    match&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; addr&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;checked_add&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;len&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; as&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; u32&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;        Some&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;end&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; if&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; end&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; &amp;lt;=&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; flash_size&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;span&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;        _&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; return&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Err&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;IoError&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;OutOfBounds&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; ...plus the single-page check...&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;    Ok&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Two things made this an easy call rather than a regression. First, it’s
+the exact granularity the DMA write path already required (&lt;code&gt;len % 8 == 0&lt;&#x2F;code&gt;), so the async&#x2F;DMA side of the driver had always lived under this
+contract — I was only making the blocking side honest about it. Second,
+it maps cleanly onto &lt;code&gt;embedded-storage&lt;&#x2F;code&gt;’s &lt;code&gt;WRITE_SIZE&lt;&#x2F;code&gt; model, so a
+future trait impl falls out naturally rather than fighting the
+contract. The same pass also bounds-checks &lt;code&gt;read&lt;&#x2F;code&gt;, &lt;code&gt;erase_sector&lt;&#x2F;code&gt;, and
+&lt;code&gt;program&lt;&#x2F;code&gt; against the configured flash size, returning
+&lt;code&gt;IoError::OutOfBounds&lt;&#x2F;code&gt; instead of wrapping around. Both new variants
+went onto an already &lt;code&gt;#[non_exhaustive]&lt;&#x2F;code&gt; &lt;code&gt;IoError&lt;&#x2F;code&gt;, so none of this
+breaks callers — the only behavioural change is that a sub-page write
+now has to align to 8 bytes, where before it would silently eat the
+byte next door.&lt;&#x2F;p&gt;
+&lt;p&gt;Partial-page writes still work. They just work at 8-byte granularity,
+the way the hardware can actually deliver them. I updated the bundled
+examples to match (a &lt;code&gt;100&lt;&#x2F;code&gt;-byte partial write became &lt;code&gt;96&lt;&#x2F;code&gt;; the stress
+example’s program sizes got rounded to multiples of 8), which was a
+nice forcing function for confirming the contract was livable and not
+just defensible.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;pushing-the-same-idea-at-the-async-path&quot;&gt;Pushing the same idea at the async path&lt;&#x2F;h2&gt;
+&lt;p&gt;The blocking driver was now hardened and soaked. But the interesting
+half of an Embassy driver is the async half, and async brings a failure
+mode that blocking code simply doesn’t have: &lt;strong&gt;cancellation&lt;&#x2F;strong&gt;.&lt;&#x2F;p&gt;
+&lt;p&gt;In async Rust, the idiomatic way to bound an operation is to wrap it in
+&lt;code&gt;with_timeout&lt;&#x2F;code&gt;, or race it in a &lt;code&gt;select!&lt;&#x2F;code&gt;, or cancel the task it runs
+in. All three do the same thing under the hood: they &lt;em&gt;drop the future
+mid-flight&lt;&#x2F;em&gt;. The operation was in progress, and now it isn’t, and it
+never got to run whatever cleanup it might have wanted to run. Any
+async driver that can’t survive that is a driver with a landmine in it,
+waiting for the first caller who puts a timeout around a flash write.&lt;&#x2F;p&gt;
+&lt;p&gt;So the second rig, &lt;code&gt;flexspi-cancel-soak&lt;&#x2F;code&gt;, does that on purpose,
+thousands of times. It runs the same erase&#x2F;program&#x2F;verify integrity
+checks over the async + DMA path, and then it does something deliberately
+hostile: it takes a real operation, wraps it in &lt;code&gt;with_timeout&lt;&#x2F;code&gt; with a
+delay swept across a wide range — from about a microsecond (mid
+command-shift, the operation has barely started) out to a couple of
+milliseconds (mid write-in-progress, the flash is busy) — so the future
+gets dropped at every interesting phase of the transaction. Then it
+issues a &lt;em&gt;fresh&lt;&#x2F;em&gt; operation and asserts that one returns correct data.&lt;&#x2F;p&gt;
+&lt;p&gt;The elegant part of testing cancel-safety is that you barely need an
+assertion. A driver that isn’t cancel-safe doesn’t return wrong data
+after a botched cancellation — it &lt;em&gt;hangs the next operation forever&lt;&#x2F;em&gt;. So
+the test simply &lt;em&gt;reaching the next round&lt;&#x2F;em&gt;, across thousands of
+in-flight cancellations, is itself the pass signal. If the rig is still
+counting rounds, the driver is recovering. If it stops, it wedged.&lt;&#x2F;p&gt;
+&lt;p&gt;It stopped.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-it-found-second-a-dropped-future-wedges-the-controller&quot;&gt;What it found second: a dropped future wedges the controller&lt;&#x2F;h2&gt;
+&lt;p&gt;The symptom was a hang, deep in &lt;code&gt;prepare_ip_transfer&lt;&#x2F;code&gt;, spinning in
+&lt;code&gt;wait_idle()&lt;&#x2F;code&gt; waiting for a sequence engine that was never going to
+become idle. The diagnosis, once I dumped the controller state at the
+hang, was clear: the cancelled operation had left the FlexSPI sequence
+engine non-idle — chip-select still asserted, the TX FIFO in underrun —
+and the driver had no notion that it should clean any of that up. The
+&lt;em&gt;next&lt;&#x2F;em&gt; operation walked in, asked the engine to be idle, and waited for
+a condition that the &lt;em&gt;previous, cancelled&lt;&#x2F;em&gt; operation had made
+permanently false. One cancelled future, and the controller was bricked
+until reset.&lt;&#x2F;p&gt;
+&lt;p&gt;The fix is to stop trusting that the engine is idle just because the
+last operation “finished,” and instead make &lt;code&gt;prepare_ip_transfer&lt;&#x2F;code&gt;
+self-healing. On entry, if the engine isn’t idle — the fingerprint of a
+previously cancelled op — force it idle with a software reset before
+doing anything else:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;fn&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; prepare_ip_transfer&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;&amp;amp;&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt;mut&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-language&quot;&gt; self&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Result&lt;&#x2F;span&gt;&lt;span&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; IoError&lt;&#x2F;span&gt;&lt;span&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; A cancelled op leaves the sequence engine non-idle: CS still&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; asserted, TX FIFO underrun. Detect that fingerprint and recover.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; One SEQIDLE sample is authoritative here: SEQIDLE only deasserts&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; on a fresh IPCMD trigger, and none is pending at this point.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;    if&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; !&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-language&quot;&gt;self&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;seq_idle&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;        &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; Force idle, de-assert CS, reset the instruction pointer,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;        &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; flush the FIFOs. The LUT and controller config survive a&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;        &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; software reset -- the init path already relies on that.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-language&quot;&gt;        self&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;software_reset&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-language&quot;&gt;    self&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;wait_idle&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; ...load the IP command, trigger IPCMD...&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;    Ok&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;There’s a deliberate design decision hiding in what this fix &lt;em&gt;doesn’t&lt;&#x2F;em&gt;
+do. It does not add a timeout. The driver imposes no timeout of its own
+and keeps &lt;code&gt;embassy-time&lt;&#x2F;code&gt; out of its hot path entirely. Timeout &lt;em&gt;policy&lt;&#x2F;em&gt;
+— how long is too long, and whether to give up — belongs to the
+application, which already has &lt;code&gt;with_timeout&lt;&#x2F;code&gt; for exactly that. The
+driver’s job isn’t to decide the policy; it’s to make the policy
+&lt;em&gt;safe&lt;&#x2F;em&gt;. The self-healing recovery is precisely what lets a caller wrap
+any operation in &lt;code&gt;with_timeout&lt;&#x2F;code&gt; without fear: when their timeout
+elapses and drops the future, the driver un-wedges itself on the next
+call instead of staying broken. The cancellation that used to be a
+landmine is now just a thing that happens.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;the-payoff&quot;&gt;The payoff&lt;&#x2F;h2&gt;
+&lt;p&gt;With both fixes in, the two rigs ran clean:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;flexspi-soak&lt;&#x2F;code&gt;&lt;&#x2F;strong&gt; (blocking IP + memory-mapped): 384 rounds, zero
+mismatches between the IP and AHB paths, and every out-of-contract
+call — misaligned, page-crossing, out-of-range — returning the error
+it should.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;flexspi-cancel-soak&lt;&#x2F;code&gt;&lt;&#x2F;strong&gt; (async + DMA): 388 rounds, &lt;strong&gt;5,044
+in-flight cancellations&lt;&#x2F;strong&gt;, 3,880 clean recoveries, zero wedges, zero
+data corruption.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;Those 5,044 cancellations are the number I care about most, because
+every one of them is a &lt;code&gt;with_timeout&lt;&#x2F;code&gt; firing at a moment that, a week
+earlier, would have bricked the controller until the next reset.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-i-d-carry-to-the-next-driver&quot;&gt;What I’d carry to the next driver&lt;&#x2F;h2&gt;
+&lt;p&gt;A few things generalize past this one chip:&lt;&#x2F;p&gt;
+&lt;p&gt;A happy-path self-test proves a driver &lt;em&gt;can&lt;&#x2F;em&gt; work. It says nothing
+about whether you can trust it. Those are different claims, and only the
+second one matters once real callers show up.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;Cancel-safety is a first-class property of an async driver&lt;&#x2F;strong&gt;, not an
+edge case. If dropping an in-flight future can leave your peripheral in
+a state the next operation can’t recover from, you don’t have a working
+async driver yet — you have one that works until someone uses a timeout.
+And in Embassy, &lt;em&gt;someone always uses a timeout.&lt;&#x2F;em&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;Make illegal states loud.&lt;&#x2F;strong&gt; The unaligned write didn’t fail — it
+succeeded and corrupted a neighbour. A contract that turns “silently
+wrong” into “loudly refused” is worth more than it costs, every time.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;Seed your randomness.&lt;&#x2F;strong&gt; A fuzzing soak loop that can’t replay its own
+failures is a slot machine. The xorshift seed turned “it broke
+somewhere in three hours” into “it broke on this seed, here’s the
+repro.”&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;a-note-on-trusting-it&quot;&gt;A note on trusting it&lt;&#x2F;h2&gt;
+&lt;p&gt;I trust this driver today — on this board, with this flash part,
+against everything the two rigs throw at it. That’s a real and specific
+claim, and it’s also a smaller one than “it’s correct.” Both bugs in
+this post were invisible until the moment a rig was nasty enough to
+provoke them, and the honest conclusion to draw from that is &lt;em&gt;not&lt;&#x2F;em&gt; that
+I’ve now found the last one. It’s that the next rig, or the next caller
+with a workload I didn’t imagine, may well surface something these two
+didn’t. Soak tests buy confidence proportional to how mean they are, and
+no finite amount of meanness reaches a proof. If you run this driver and
+it does something neither rig caught, I’d genuinely like to know — that’s
+the rig I haven’t built yet.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-this-doesn-t-cover&quot;&gt;What this doesn’t cover&lt;&#x2F;h2&gt;
+&lt;p&gt;The usual caveats, and they’re real ones. This is one board, one flash
+part, one controller IP. The unaligned-write corruption is a quirk of
+&lt;em&gt;this&lt;&#x2F;em&gt; FlexSPI block, and I’d be unsurprised if it looked nothing like
+that on other silicon — the &lt;em&gt;shape&lt;&#x2F;em&gt; of the lesson (diff against the
+vendor reference; if your loop is identical, suspect the controller)
+transfers better than the specifics. The driver also doesn’t implement
+the &lt;code&gt;embedded-storage&lt;&#x2F;code&gt; traits yet, though the write-size contract was
+designed so it maps straight onto &lt;code&gt;WRITE_SIZE = 8&lt;&#x2F;code&gt; &#x2F; &lt;code&gt;ERASE_SIZE = 4096&lt;&#x2F;code&gt; when it does.&lt;&#x2F;p&gt;
+&lt;p&gt;The full set of fixes, the two soak rigs, and the hardware run logs are
+in &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;embassy-rs&#x2F;embassy&#x2F;pull&#x2F;6389&quot;&gt;embassy-rs&#x2F;embassy#6389&lt;&#x2F;a&gt;. If you’re bringing up FlexSPI on
+MCXA, I hope the rigs save you the half-week. If you’re doing it on
+something else and one of these patterns rhymes with what you’re seeing,
+I’d like to hear about it.&lt;&#x2F;p&gt;
+</content:encoded>
+    </item>
+    
+    <item>
+      <title>I3C target mode on MCXA: three things the datasheet didn&#x27;t warn me about</title>
+      <link>https://balbi.sh/posts/i3c-target-mcxa-bring-up-gotchas/</link>
+      <guid isPermaLink="true">https://balbi.sh/posts/i3c-target-mcxa-bring-up-gotchas/</guid>
+      <pubDate>Sat, 20 Jun 2026 09:00:00 +0000</pubDate>
+      <dc:creator>Felipe Balbi</dc:creator>
+      <description>&lt;p&gt;I spent the last several weeks bringing up an I3C &lt;em&gt;target&lt;&#x2F;em&gt; driver for
+the NXP MCXA family (MCXA2xx and MCXA5xx share the same I3C IP) inside
+the embassy HAL. “Target” is what I3C calls the role I²C calls
+“&lt;em&gt;slave&lt;&#x2F;em&gt;”: the device that sits on the bus, responds to a controller,
+and can also raise an in-band interrupt (IBI) and service a directed
+read without anyone toggling a sideband pin.  The use case was the
+boring one: a Rust target talking to a Rust controller, raising IBIs
+and returning responses for a few million iterations without
+panicking.&lt;&#x2F;p&gt;
+&lt;p&gt;The driver landed in &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;embassy-rs&#x2F;embassy&#x2F;pull&#x2F;6160&quot;&gt;embassy-rs&#x2F;embassy#6160&lt;&#x2F;a&gt; and the soak rig
+has now ticked past 50 million IBI-then-directed-read iterations at
+16-byte payloads, bus at 1.5 MHz SDR, against an NXP SDK controller
+on the other end. It got there by way of three corner cases that
+each took longer to diagnose than to fix, and that each looked
+nothing like what I’d assumed they were when I started chasing them.
+This post is those three.&lt;&#x2F;p&gt;</description>
+      
+      <content:encoded>&lt;p&gt;I spent the last several weeks bringing up an I3C &lt;em&gt;target&lt;&#x2F;em&gt; driver for
+the NXP MCXA family (MCXA2xx and MCXA5xx share the same I3C IP) inside
+the embassy HAL. “Target” is what I3C calls the role I²C calls
+“&lt;em&gt;slave&lt;&#x2F;em&gt;”: the device that sits on the bus, responds to a controller,
+and can also raise an in-band interrupt (IBI) and service a directed
+read without anyone toggling a sideband pin.  The use case was the
+boring one: a Rust target talking to a Rust controller, raising IBIs
+and returning responses for a few million iterations without
+panicking.&lt;&#x2F;p&gt;
+&lt;p&gt;The driver landed in &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;embassy-rs&#x2F;embassy&#x2F;pull&#x2F;6160&quot;&gt;embassy-rs&#x2F;embassy#6160&lt;&#x2F;a&gt; and the soak rig
+has now ticked past 50 million IBI-then-directed-read iterations at
+16-byte payloads, bus at 1.5 MHz SDR, against an NXP SDK controller
+on the other end. It got there by way of three corner cases that
+each took longer to diagnose than to fix, and that each looked
+nothing like what I’d assumed they were when I started chasing them.
+This post is those three.&lt;&#x2F;p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;&#x2F;span&gt;
+&lt;p&gt;One caveat up front: this is one vendor, one HAL crate, one
+bring-up. I have no idea whether these gotchas generalize to other
+I3C silicon. The shape of &lt;em&gt;how the bugs hid&lt;&#x2F;em&gt; probably transfers;
+the specific register names and timing numbers don’t.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;the-setup&quot;&gt;The setup&lt;&#x2F;h2&gt;
+&lt;p&gt;The hardware is two MCXA boards wired together over their I3C0
+peripherals: one running the Rust controller, one running the Rust
+target, both on top of the &lt;code&gt;embassy-mcxa&lt;&#x2F;code&gt; HAL. The bus runs SDR at
+1.5 MHz push-pull &#x2F; 750 kHz open-drain. The exchange under test is the
+obvious one: controller writes a few bytes, target raises an IBI,
+controller responds with a directed read, target returns a pre-loaded
+payload, repeat. The target’s RX path is DMA-fed into a bbqueue ring
+so the IRQ can drain &lt;code&gt;SRDATAB&lt;&#x2F;code&gt; at line rate while the consuming task
+takes its time — that ring is what makes the soak loop possible at
+all, but it isn’t where any of these three gotchas live.&lt;&#x2F;p&gt;
+&lt;p&gt;For the first few days everything worked. Then the rig started
+panicking after twenty thousand to a few hundred thousand
+iterations with &lt;code&gt;InvalidStart&lt;&#x2F;code&gt; or &lt;code&gt;SdrParity&lt;&#x2F;code&gt; on the target side,
+and I’d go back to staring at register dumps.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;gotcha-1-the-target-clock-was-4x-too-slow-and-the-symptom-was-on-the-controller&quot;&gt;Gotcha 1: the target clock was 4× too slow, and the symptom was on the controller&lt;&#x2F;h2&gt;
+&lt;p&gt;The first failure mode looked like SDA contention around the IBI
+handshake — once every few hundred thousand iterations, the
+controller would see a frame with bad parity, or the target would
+surface &lt;code&gt;SERRWARN.INVSTART&lt;&#x2F;code&gt; on what should have been a clean
+repeated-Start. Not every IBI; not even most IBIs. Just enough to
+be unmissable in soak and unreproducible at the bench.&lt;&#x2F;p&gt;
+&lt;p&gt;I lost a day re-reading the IBI sequencing code for a race that
+wasn’t there before I gave up and added a &lt;code&gt;dump_registers()&lt;&#x2F;code&gt;
+method on both sides — one defmt line each, every &lt;code&gt;M*&lt;&#x2F;code&gt; &#x2F; &lt;code&gt;S*&lt;&#x2F;code&gt;
+register as a raw &lt;code&gt;u32&lt;&#x2F;code&gt;. Diffed against the NXP SDK’s target on
+the same wires, every register matched byte-for-byte except
+&lt;code&gt;SCONFIG&lt;&#x2F;code&gt;. I had &lt;code&gt;BAMATCH=1&lt;&#x2F;code&gt; on the mcxa5xx example and
+&lt;code&gt;BAMATCH=2&lt;&#x2F;code&gt; on mcxa2xx; the SDK had &lt;code&gt;BAMATCH=11&lt;&#x2F;code&gt;.&lt;&#x2F;p&gt;
+&lt;p&gt;BAMATCH is the count, in I3C functional-clock cycles, the target
+waits after seeing bus-idle before declaring the bus “available.”
+The HAL computes it as &lt;code&gt;fclk_MHz - 1&lt;&#x2F;code&gt; — correct, but only if
+&lt;code&gt;fclk&lt;&#x2F;code&gt; is in the range the I3C spec assumes. The MCXA examples
+were feeding I3C0 at roughly 3 MHz (mcxa5xx) and 2.8 MHz
+(mcxa2xx), giving bus-available times of 0.36 µs and 0.67 µs; the
+spec puts the minimum at 1 µs and the SDK runs at 12 MHz
+(0.92 µs). With BAMATCH expiring sub-microsecond, the target was
+declaring the bus available before the controller had finished
+releasing SDA, and very occasionally both ends would drive the
+line at the same time. That was the parity error and the
+&lt;code&gt;INVSTART&lt;&#x2F;code&gt;: SDA contention manifesting one full transaction
+downstream of the actual race.&lt;&#x2F;p&gt;
+&lt;p&gt;The fix is one line in the example clock-tree setup: route
+I3C0_FCLK from FRO_LF (12 MHz exact) with a &#x2F;1 divider, and the
+HAL’s math produces &lt;code&gt;BAMATCH=11&lt;&#x2F;code&gt;. &lt;code&gt;SCONFIG&lt;&#x2F;code&gt; becomes &lt;code&gt;0x140b0019&lt;&#x2F;code&gt;
+exactly, matching the SDK. The soak loop went from failing inside
+half a million iterations to running indefinitely clean.&lt;&#x2F;p&gt;
+&lt;p&gt;The lesson: when a vendor’s reference and yours run on the same
+wires and only one is reliable, dump every register on both sides
+post-init and diff them — the difference is almost never where
+you’re looking. And if a peripheral’s clock contributes to a
+&lt;em&gt;bus-timing&lt;&#x2F;em&gt; parameter rather than just a baud rate, check that
+field’s spec minimum before you trust the formula the HAL uses to
+compute it.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;gotcha-2-raising-the-ibi-before-the-fifo-was-loaded&quot;&gt;Gotcha 2: raising the IBI before the FIFO was loaded&lt;&#x2F;h2&gt;
+&lt;p&gt;With the clocks corrected, the soak rig hit a different failure:
+&lt;code&gt;SERRWARN.INVSTART&lt;&#x2F;code&gt; on the target, during the IBI-payload phase
+itself this time. The trace was unambiguous — the controller ACK’d
+the IBI, issued a repeated-Start with the target’s dynamic address
+and the read bit, started clocking SCL — and the target’s TX FIFO
+was empty when the first byte was demanded. The cause was an
+ordering bug in &lt;code&gt;dma_respond_to_read_with_ibi&lt;&#x2F;code&gt;: arm TX DMA, set
+&lt;code&gt;SCTRL.EVENT = Ibi&lt;&#x2F;code&gt;, then wait for DMA to drain into the FIFO.
+The IBI arbitration plus the controller’s auto-IBI ACK plus the
+repeated-Start plus the read bit takes about 640 ns at 1.5 MHz —
+on a quiet executor DMA setup wins that race; under realistic
+Embassy load it doesn’t.&lt;&#x2F;p&gt;
+&lt;p&gt;The intuitive fix is to invert the order — drain DMA synchronously,
+push the end-marker via &lt;code&gt;SWDATABE&lt;&#x2F;code&gt;, &lt;em&gt;then&lt;&#x2F;em&gt; raise &lt;code&gt;EVENT = Ibi&lt;&#x2F;code&gt;.
+This works perfectly up to the TX FIFO depth, which on this IP is
+8 bytes. The moment you try a 9-byte payload it deadlocks: DMA
+blocks waiting for FIFO space; the FIFO won’t drain because the
+controller hasn’t been told there’s anything to read; the
+controller hasn’t been told because the IBI hasn’t gone out. The
+shape the fix has to take is the one the NXP SDK uses, and isn’t
+the one I’d have guessed: arm DMA, raise the IBI &lt;em&gt;immediately&lt;&#x2F;em&gt;,
+then await DMA completion while the controller drains the FIFO at
+the same rate DMA fills it.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; Arm DMA first so the first transfer is in flight.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-language&quot;&gt;self&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;dma_arm_tx&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;buf&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; end_marker&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;await&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;?&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; Raise IBI immediately. Controller starts clocking; FIFO drains&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; concurrently with DMA filling it.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-language&quot;&gt;self&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;regs&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;sctrl&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;modify&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;|&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;w&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;|&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; w&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;set_event&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt;Event&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;Ibi&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; Now wait for DMA. The FIFO is active throughout.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-language&quot;&gt;self&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;dma_wait_complete&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;await&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;?&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;The lesson I keep relearning: when “obviously correct order” and
+“actually correct order” disagree, the hardware is usually right.
+If a peripheral’s FIFO is meant to be filled concurrently with
+being drained, you can’t fill it sequentially before signalling
+the drain, however much safer that feels.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;gotcha-3-the-post-ibi-stop-turned-my-repeated-start-into-a-fresh-frame&quot;&gt;Gotcha 3: the post-IBI Stop turned my repeated-Start into a fresh frame&lt;&#x2F;h2&gt;
+&lt;p&gt;The third one took longer to believe than it did to find. With
+clocks correct and the IBI ordering fixed, Rust↔Rust soak still
+failed — much later — and the failure mode was that the target’s
+directed-read response was misaligned by a byte, or surfaced as
+&lt;code&gt;InvalidStart&lt;&#x2F;code&gt; immediately after a successful IBI.&lt;&#x2F;p&gt;
+&lt;p&gt;The IBI itself was clean. The handshake worked. The TX FIFO was
+loaded correctly. The problem was that the controller side, in
+&lt;code&gt;async_wait_for_ibi&lt;&#x2F;code&gt;, was emitting an &lt;code&gt;async_stop&lt;&#x2F;code&gt; once the IBI
+completed. That turned the next &lt;code&gt;async_read&lt;&#x2F;code&gt; the caller issued
+into a fresh Start at the dynamic address, rather than the
+repeated-Start the target’s pre-loaded response was sitting there
+expecting. The target was set up for Sr→addr→R; the controller
+handed it Stop→Start→addr→R; the framing went sideways.&lt;&#x2F;p&gt;
+&lt;p&gt;The fix is to delete the &lt;code&gt;async_stop&lt;&#x2F;code&gt;. After a successful IBI the
+bus is already in &lt;code&gt;NORMACT&lt;&#x2F;code&gt; and the controller can issue a
+repeated-Start directly into the directed-read. The function’s doc
+comment now spells out at some length why putting the Stop back
+would be wrong, because the temptation to “clean up after yourself”
+by trailing every transaction with a Stop is real.&lt;&#x2F;p&gt;
+&lt;p&gt;The lesson is shorter than the bug: I3C, like I²C, distinguishes
+Start, repeated-Start, and Stop, and the &lt;em&gt;target’s&lt;&#x2F;em&gt; response state
+machine cares which one comes next. Pre-load a response for a
+repeated-Start, hand the target a fresh Start instead, and you
+don’t get a parity error — you get a perfectly framed read that
+returns the wrong bytes. That’s the worst kind of bug to have in
+soak: the symptom looks like data corruption, not a protocol
+violation.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-i-d-do-first-next-time&quot;&gt;What I’d do first next time&lt;&#x2F;h2&gt;
+&lt;p&gt;If I were starting an I3C target bring-up on this family of silicon
+tomorrow, in this order:&lt;&#x2F;p&gt;
+&lt;p&gt;First, &lt;strong&gt;set the I3C functional clock to 12 MHz exactly&lt;&#x2F;strong&gt; and
+verify &lt;code&gt;SCONFIG.BAMATCH&lt;&#x2F;code&gt; post-init against the spec’s 1 µs
+bus-available minimum. The HAL’s formula is correct; whether the
+input clock makes it produce a legal value is on you. FRO_LF &#x2F;1
+gives you 12 MHz exact and matches the SDK.&lt;&#x2F;p&gt;
+&lt;p&gt;Second, &lt;strong&gt;add a &lt;code&gt;dump_registers()&lt;&#x2F;code&gt; method to both controller and
+target from day one&lt;&#x2F;strong&gt; and call it after init in the examples. One
+defmt line each, every &lt;code&gt;M*&lt;&#x2F;code&gt; &#x2F; &lt;code&gt;S*&lt;&#x2F;code&gt; register as a raw &lt;code&gt;u32&lt;&#x2F;code&gt;. The cost
+is trivial; the diagnostic value the first time something goes weird
+against a known-good reference is disproportionate. Of course,
+remember to remove that method prior to producing a PR. That method is
+easy to write and only useful when things go awry. In general, we
+don’t need it.&lt;&#x2F;p&gt;
+&lt;p&gt;Third, &lt;strong&gt;mirror the vendor SDK’s ordering on anything that combines
+DMA, FIFO, and bus signalling&lt;&#x2F;strong&gt; even if it looks wrong: arm DMA,
+signal the bus, &lt;em&gt;then&lt;&#x2F;em&gt; wait for completion. Don’t drain the FIFO
+before raising the IBI. Don’t emit a Stop after an IBI if the next
+thing you expect is a directed read.&lt;&#x2F;p&gt;
+&lt;p&gt;Those three would have saved me the bulk of the bring-up time.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-this-doesn-t-cover&quot;&gt;What this doesn’t cover&lt;&#x2F;h2&gt;
+&lt;p&gt;One developer, one family of silicon, two boards on a bench. I have no
+idea how I3C target mode looks on other vendors’ IP, and I’d be
+surprised if specific register names, FIFO depths, or clock-tree
+dependencies transferred. The PR also contains a handful of smaller
+fixes I didn’t write up — a stale &lt;code&gt;MERRWARN&lt;&#x2F;code&gt; warning leaking across
+frames, a racy &lt;code&gt;state == Slvreq&lt;&#x2F;code&gt; guard in the IBI wake path, a
+controller-side ODHPP-vs-baud-rate calculation race — each of which
+fixed a real failure but wasn’t structurally interesting enough to
+earn a section. Read the PR if you want the full list.&lt;&#x2F;p&gt;
+&lt;p&gt;If you’re bringing up I3C target mode on MCXA, I hope this saves you
+the half-week. If you’re doing it on something else and one of these
+patterns rhymes with what you’re seeing, I’d genuinely like to hear
+about it.&lt;&#x2F;p&gt;
+</content:encoded>
+    </item>
+    
+    <item>
+      <title>Examples that run</title>
+      <link>https://balbi.sh/posts/examples-that-run/</link>
+      <guid isPermaLink="true">https://balbi.sh/posts/examples-that-run/</guid>
+      <pubDate>Mon, 15 Jun 2026 15:58:00 +0000</pubDate>
+      <dc:creator>Felipe Balbi</dc:creator>
+      <description>&lt;p&gt;Most driver crates I reach for ship an &lt;code&gt;examples&#x2F;&lt;&#x2F;code&gt; directory that I
+have to &lt;em&gt;port&lt;&#x2F;em&gt; before I can read it. Wrong PAC for my dev board,
+wrong linker script, a &lt;code&gt;#[entry]&lt;&#x2F;code&gt; macro from a runtime I don’t have
+checked out, a &lt;code&gt;loop { wfi() }&lt;&#x2F;code&gt; at the end I need to delete because
+I’m hosting the binary myself. By the time I’ve matched the example
+to my hardware, I’ve spent an hour and I haven’t learned anything
+about the chip — I’ve learned about the crate author’s bring-up
+preferences for the board they happened to own.&lt;&#x2F;p&gt;
+&lt;p&gt;A &lt;a href=&quot;&#x2F;posts&#x2F;writing-embedded-drivers-without-an-mcu&#x2F;&quot;&gt;previous post&lt;&#x2F;a&gt;
+made the case for moving the bus host-side: a Pi Pico 2 acting as a
+USB-attached I²C&#x2F;SPI&#x2F;GPIO adapter, so the driver crate itself stays
+unchanged and runs from a &lt;code&gt;std&lt;&#x2F;code&gt; binary on your laptop. This post is
+the other half. Once the bus moved, the &lt;em&gt;driver crate’s&lt;&#x2F;em&gt; &lt;code&gt;examples&#x2F;&lt;&#x2F;code&gt;
+directory changed shape too, and the conventions that fell out are
+worth writing down. The worked example is
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;OpenDevicePartnership&#x2F;tmp108&quot;&gt;&lt;code&gt;tmp108&lt;&#x2F;code&gt;&lt;&#x2F;a&gt; — at the
+time of writing, the only crate on crates.io that lists
+&lt;code&gt;pico-de-gallo-hal&lt;&#x2F;code&gt; as a (dev-)dependency at all. Five example files,
+five distinct chip behaviors, every one of them runs on a normal dev
+machine as soon as you have the chip on a breadboard.&lt;&#x2F;p&gt;</description>
+      
+      <content:encoded>&lt;p&gt;Most driver crates I reach for ship an &lt;code&gt;examples&#x2F;&lt;&#x2F;code&gt; directory that I
+have to &lt;em&gt;port&lt;&#x2F;em&gt; before I can read it. Wrong PAC for my dev board,
+wrong linker script, a &lt;code&gt;#[entry]&lt;&#x2F;code&gt; macro from a runtime I don’t have
+checked out, a &lt;code&gt;loop { wfi() }&lt;&#x2F;code&gt; at the end I need to delete because
+I’m hosting the binary myself. By the time I’ve matched the example
+to my hardware, I’ve spent an hour and I haven’t learned anything
+about the chip — I’ve learned about the crate author’s bring-up
+preferences for the board they happened to own.&lt;&#x2F;p&gt;
+&lt;p&gt;A &lt;a href=&quot;&#x2F;posts&#x2F;writing-embedded-drivers-without-an-mcu&#x2F;&quot;&gt;previous post&lt;&#x2F;a&gt;
+made the case for moving the bus host-side: a Pi Pico 2 acting as a
+USB-attached I²C&#x2F;SPI&#x2F;GPIO adapter, so the driver crate itself stays
+unchanged and runs from a &lt;code&gt;std&lt;&#x2F;code&gt; binary on your laptop. This post is
+the other half. Once the bus moved, the &lt;em&gt;driver crate’s&lt;&#x2F;em&gt; &lt;code&gt;examples&#x2F;&lt;&#x2F;code&gt;
+directory changed shape too, and the conventions that fell out are
+worth writing down. The worked example is
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;OpenDevicePartnership&#x2F;tmp108&quot;&gt;&lt;code&gt;tmp108&lt;&#x2F;code&gt;&lt;&#x2F;a&gt; — at the
+time of writing, the only crate on crates.io that lists
+&lt;code&gt;pico-de-gallo-hal&lt;&#x2F;code&gt; as a (dev-)dependency at all. Five example files,
+five distinct chip behaviors, every one of them runs on a normal dev
+machine as soon as you have the chip on a breadboard.&lt;&#x2F;p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;&#x2F;span&gt;
+&lt;p&gt;What follows is what I do, and why. None of it is novel; most of it
+is the kind of thing that becomes obvious once the constraint
+“every example must be runnable, by anyone, on the actual chip”
+stops being aspirational.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;the-opening-line-is-the-chip-s-pinout&quot;&gt;The opening line is the chip’s pinout&lt;&#x2F;h2&gt;
+&lt;p&gt;Every example in &lt;code&gt;tmp108&#x2F;examples&#x2F;&lt;&#x2F;code&gt; opens with the same shape. The
+&lt;code&gt;oneshot.rs&lt;&#x2F;code&gt; body, in full:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;let&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; hal&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Hal&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;new&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;let&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; i2c&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; hal&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;i2c&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;let&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; mut&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; tmp&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Tmp108&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;new_with_a0_gnd&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;i2c&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;let&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; temperature&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; tmp&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;temperature&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;map_err&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;|&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;_&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;|&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; anyhow!&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;Failed to read temperature&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;?&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;println!&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;Temperature: &lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;{&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;temperature:.2&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;}&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; C&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;The first two lines are the entire host-side preamble. They’re
+contract: ignore me, the rest of this file is only about the chip.
+After a few examples, the reader’s eye learns to skip past them and
+read the rest as if it were library prose. There’s no clock-tree
+setup, no peripheral init, no &lt;code&gt;#[entry]&lt;&#x2F;code&gt; decorator, no panic handler.
+The bus is just &lt;em&gt;there&lt;&#x2F;em&gt;, the way &lt;code&gt;std::fs::File::open&lt;&#x2F;code&gt; is just there
+in a Linux program.&lt;&#x2F;p&gt;
+&lt;p&gt;The third line is the one that does the work. &lt;code&gt;Tmp108::new_with_a0_gnd(i2c)&lt;&#x2F;code&gt;:
+the constructor name &lt;em&gt;is&lt;&#x2F;em&gt; the pinout. A0 tied to GND means I²C
+address &lt;code&gt;0x48&lt;&#x2F;code&gt;. The TMP108 takes one of four addresses depending on
+the state of its A0 pin, and the driver exposes one constructor per
+choice — &lt;code&gt;new_with_a0_gnd&lt;&#x2F;code&gt;, &lt;code&gt;new_with_a0_vplus&lt;&#x2F;code&gt;, &lt;code&gt;new_with_a0_sda&lt;&#x2F;code&gt;,
+&lt;code&gt;new_with_a0_scl&lt;&#x2F;code&gt;. There is no &lt;code&gt;new(addr: u8)&lt;&#x2F;code&gt;. There is no way to
+construct a &lt;code&gt;Tmp108&lt;&#x2F;code&gt; whose address doesn’t correspond to a real
+wiring choice on the part.&lt;&#x2F;p&gt;
+&lt;p&gt;The example file tells you which jumper you’re looking at by
+&lt;em&gt;naming it in the constructor&lt;&#x2F;em&gt;. A reader who has the chip strapped
+to V+ can see, without consulting the README, that this particular
+example assumes A0 is grounded — and that swapping &lt;code&gt;_a0_gnd&lt;&#x2F;code&gt; for
+&lt;code&gt;_a0_vplus&lt;&#x2F;code&gt; is the only change they need to make. The constructor
+name is doing documentation work that would otherwise have lived in
+a code comment, where I would have forgotten to update it the next
+time I edited the file.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;one-file-per-chip-behavior-not-per-method&quot;&gt;One file per chip behavior, not per method&lt;&#x2F;h2&gt;
+&lt;p&gt;There are five files in &lt;code&gt;tmp108&#x2F;examples&#x2F;&lt;&#x2F;code&gt;: &lt;code&gt;oneshot.rs&lt;&#x2F;code&gt;,
+&lt;code&gt;continuous.rs&lt;&#x2F;code&gt;, &lt;code&gt;alert_comparator.rs&lt;&#x2F;code&gt;, &lt;code&gt;alert_interrupt.rs&lt;&#x2F;code&gt;, and
+&lt;code&gt;sensor_trait.rs&lt;&#x2F;code&gt;. Each one demonstrates a thing the TMP108 &lt;em&gt;does&lt;&#x2F;em&gt;
+— a single-shot conversion, a continuous-conversion loop, the
+ALERT pin in comparator mode, the ALERT pin in interrupt mode, and
+the cross-crate &lt;code&gt;embedded-sensors-hal&lt;&#x2F;code&gt; trait integration. Not
+&lt;code&gt;new_with_a0_gnd.rs&lt;&#x2F;code&gt;, &lt;code&gt;new_with_a0_vplus.rs&lt;&#x2F;code&gt;, &lt;code&gt;new_with_a0_sda.rs&lt;&#x2F;code&gt;
+— that would be per-constructor, which is per-API, which is
+library-shaped. Per-behavior is chip-shaped, which is the grain the
+reader is here for.&lt;&#x2F;p&gt;
+&lt;p&gt;The grain of the directory matches the grain of the datasheet’s “Modes
+of operation” chapter, not the grain of the Rust struct’s &lt;code&gt;impl&lt;&#x2F;code&gt;
+block. A reader who wants to know “how do I use the ALERT pin in
+interrupt mode” goes to &lt;code&gt;alert_interrupt.rs&lt;&#x2F;code&gt;; a reader who wants to
+know “what does the public API look like” can read the
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;docs.rs&#x2F;tmp108&quot;&gt;docs.rs&lt;&#x2F;a&gt; page. Two different audiences, two
+different artifacts, and they don’t have to compete for space in the
+same file.&lt;&#x2F;p&gt;
+&lt;p&gt;The two ALERT examples are a good test of whether “chip behavior”
+is genuinely the right axis. The TMP108’s ALERT pin has two
+operating modes that the &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;OpenDevicePartnership&#x2F;tmp108#gotchas&quot;&gt;README’s Gotchas
+section&lt;&#x2F;a&gt;
+spells out: in comparator mode the pin stays asserted until the
+temperature returns inside the hysteresis band; in interrupt mode
+the pin clears as soon as the configuration register is read. Two
+modes, two examples — not because the trait has two methods (it
+doesn’t; it has one &lt;code&gt;wait_for_temperature_threshold&lt;&#x2F;code&gt;), but because
+the &lt;em&gt;chip&lt;&#x2F;em&gt; genuinely behaves differently in the two configurations.
+The split exists because the reader who’s debugging “why doesn’t
+my ALERT line release” needs to know which mode they configured,
+and the example that demonstrates each mode is the most economical
+place to learn it.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;same-file-both-flavors&quot;&gt;Same file, both flavors&lt;&#x2F;h2&gt;
+&lt;p&gt;The TMP108 driver ships both a blocking &lt;code&gt;Tmp108&lt;&#x2F;code&gt; and an async
+&lt;code&gt;AsyncTmp108&lt;&#x2F;code&gt;, gated on the &lt;code&gt;async&lt;&#x2F;code&gt; Cargo feature. The straightforward
+thing to do would have been &lt;code&gt;oneshot_blocking.rs&lt;&#x2F;code&gt; and
+&lt;code&gt;oneshot_async.rs&lt;&#x2F;code&gt;, two files, one per build configuration – one can
+certainly follow that model too. That isn’t what I did. The
+&lt;code&gt;oneshot.rs&lt;&#x2F;code&gt; file has &lt;em&gt;two&lt;&#x2F;em&gt; &lt;code&gt;main()&lt;&#x2F;code&gt; functions in it, picked between
+by &lt;code&gt;cfg&lt;&#x2F;code&gt;:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;#&lt;&#x2F;span&gt;&lt;span&gt;[&lt;&#x2F;span&gt;&lt;span&gt;cfg&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;not&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;feature &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;=&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; &amp;quot;&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;async&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;]&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;fn&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; main&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Result&lt;&#x2F;span&gt;&lt;span&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; ... blocking body&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;#&lt;&#x2F;span&gt;&lt;span&gt;[&lt;&#x2F;span&gt;&lt;span&gt;cfg&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;feature &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;=&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; &amp;quot;&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;async&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;]&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;#&lt;&#x2F;span&gt;&lt;span&gt;[&lt;&#x2F;span&gt;&lt;span&gt;tokio&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;main&lt;&#x2F;span&gt;&lt;span&gt;]&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;async&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; fn&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; main&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Result&lt;&#x2F;span&gt;&lt;span&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; ... async body&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Why one file? Because a reader who wants to learn &lt;em&gt;what changes
+when you flip to async&lt;&#x2F;em&gt; would, with two files, have to diff them in
+their head. With one file, the diff is &lt;em&gt;in the file&lt;&#x2F;em&gt;, visible to the
+eye, enforced by the compiler. The two preambles at the top are
+identical. The chip operations are nearly identical. The only things
+that change are the &lt;code&gt;.await&lt;&#x2F;code&gt;, the &lt;code&gt;#[tokio::main]&lt;&#x2F;code&gt; macro, and the
+import that picks &lt;code&gt;AsyncTmp108&lt;&#x2F;code&gt; instead of &lt;code&gt;Tmp108&lt;&#x2F;code&gt;. The reader sees
+it, side by side, in the smallest unit of code that demonstrates the
+difference.&lt;&#x2F;p&gt;
+&lt;p&gt;The trade-off is honest: the file is busier — every example that
+supports both flavors carries two &lt;code&gt;main&lt;&#x2F;code&gt; functions and at least one
+pair of &lt;code&gt;#[cfg]&lt;&#x2F;code&gt; arms. The payoff is that blocking&#x2F;async parity is
+&lt;em&gt;observable in the source&lt;&#x2F;em&gt;, not just claimed in the README. Building
+with default features picks the blocking &lt;code&gt;main&lt;&#x2F;code&gt;; building with
+&lt;code&gt;--features async&lt;&#x2F;code&gt; picks the async one. (&lt;code&gt;continuous.rs&lt;&#x2F;code&gt;,
+&lt;code&gt;alert_comparator.rs&lt;&#x2F;code&gt;, and &lt;code&gt;alert_interrupt.rs&lt;&#x2F;code&gt; are async-only,
+because the underlying API is; their blocking &lt;code&gt;main&lt;&#x2F;code&gt; stub prints
+the required feature flags and exits, which is itself a form of
+documentation — the file refuses to build silently into nothing.)&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;a-four-line-header-that-tells-you-what-you-need&quot;&gt;A four-line header that tells you what you need&lt;&#x2F;h2&gt;
+&lt;p&gt;Every example opens with a doc-comment header that says, in the same
+shape every time, who the example is for and what it requires.
+&lt;code&gt;oneshot.rs&lt;&#x2F;code&gt;’s header in full:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt;! TMP108 one-shot conversion example.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt;!&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt;! # Hardware&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt;!&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt;! - Pico de Gallo USB-attached host adapter&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt;! - TMP108 on the default I2C bus, A0 → GND (address `0x48`)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt;!&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt;! # Cargo features&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt;!&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt;! Works with default features (blocking). Building with `--features async`&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt;! produces the async variant.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt;!&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt;! # Register interactions&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt;!&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt;! Single read of the temperature register at address `0x00`.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;code&gt;# Hardware&lt;&#x2F;code&gt; says what pico de gallo connections the example needs:
+USB-attached host adapter, TMP108 on the default I²C bus, A0
+strapped to GND. &lt;code&gt;# Cargo features&lt;&#x2F;code&gt; says how to flip blocking&#x2F;async
+— default features for blocking, &lt;code&gt;--features async&lt;&#x2F;code&gt; for async.
+&lt;code&gt;# Register interactions&lt;&#x2F;code&gt; names exactly which TMP108 register the
+example touches, so the reader who is following along with the
+datasheet open can find the relevant chapter without guessing. For
+&lt;code&gt;oneshot.rs&lt;&#x2F;code&gt;, that’s a single read of the temperature register at
+address &lt;code&gt;0x00&lt;&#x2F;code&gt;. For &lt;code&gt;continuous.rs&lt;&#x2F;code&gt;, it’s a five-step sequence
+(read config, write config with M=Continuous, read config, loop on
+temperature reads, restore M=Shutdown on exit). The header for each
+example calls out the register interactions specific to that
+example, in the order they happen.&lt;&#x2F;p&gt;
+&lt;p&gt;This is the section the reader skims first to decide “is this the
+example I want?” — a six-line table of contents per file, in the
+place a Rust reader expects documentation to be. It costs nothing
+to write and removes the most common pre-run question, which is
+some flavor of “wait, what do I need to have plugged in for this
+one?” The reader doesn’t have to chase the answer through the body
+of the file or the README; the answer is already at the top.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-this-doesn-t-cover&quot;&gt;What this doesn’t cover&lt;&#x2F;h2&gt;
+&lt;p&gt;A few honest limits before I oversell any of this.&lt;&#x2F;p&gt;
+&lt;p&gt;The pattern works because pico de gallo can host an I²C bus, an SPI
+bus, and a handful of GPIOs from a laptop. Drivers that need a real
+MCU peripheral — USB device, Ethernet MAC, anything DMA-bound,
+anything where the chip itself drives timing the host can’t
+sustain — can’t run this way. The conventions in this post are
+opinionated &lt;em&gt;about&lt;&#x2F;em&gt; I²C&#x2F;SPI&#x2F;GPIO sensor and peripheral drivers; I
+have not tried any of this on a driver that needs more than those
+buses, and I would not assume any of it generalizes.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;code&gt;tmp108&lt;&#x2F;code&gt; is also one crate. At the time of writing it is the &lt;em&gt;only&lt;&#x2F;em&gt;
+crate on crates.io that depends on &lt;code&gt;pico-de-gallo-hal&lt;&#x2F;code&gt; — &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;crates.io&#x2F;crates&#x2F;pico-de-gallo-hal&#x2F;reverse_dependencies&quot;&gt;the
+reverse-deps
+page&lt;&#x2F;a&gt;
+lists exactly one, and it’s a dev-dependency at that. These
+conventions are battle-tested on one chip&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-mcxa-1&quot;&gt;&lt;a href=&quot;#fn-mcxa&quot;&gt;1&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt;, with one set of bus
+requirements, by one author. Take them as one person’s house style,
+not as a recommendation that has survived contact with a population of
+users and other crates.&lt;&#x2F;p&gt;
+&lt;p&gt;What I do think holds up, on the evidence of this one crate, is the
+shape: the constraint “every example must run on a normal dev
+machine against real silicon, with no porting step in between”
+forces an &lt;code&gt;examples&#x2F;&lt;&#x2F;code&gt; directory that reads like the chip’s
+datasheet, not like the library’s &lt;code&gt;impl&lt;&#x2F;code&gt; block — and the
+datasheet’s grain is the right grain for the audience the examples
+are written for.&lt;&#x2F;p&gt;
+&lt;section class=&quot;footnotes&quot;&gt;
+&lt;ol class=&quot;footnotes-list&quot;&gt;
+&lt;li id=&quot;fn-mcxa&quot;&gt;
+&lt;p&gt;That statement is not exactly true as I have used Pico de
+Gallo to run weekend long soak tests on MCXA I²C controller and target
+drivers. &lt;a href=&quot;#fr-mcxa-1&quot;&gt;↩&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;&#x2F;section&gt;
+</content:encoded>
+    </item>
+    
+    <item>
+      <title>Writing embedded drivers without an MCU</title>
+      <link>https://balbi.sh/posts/writing-embedded-drivers-without-an-mcu/</link>
+      <guid isPermaLink="true">https://balbi.sh/posts/writing-embedded-drivers-without-an-mcu/</guid>
+      <pubDate>Wed, 10 Jun 2026 16:00:00 +0000</pubDate>
+      <dc:creator>Felipe Balbi</dc:creator>
+      <description>&lt;p&gt;Let me clarify the title up front: there &lt;em&gt;is&lt;&#x2F;em&gt; an MCU. There’s a
+Raspberry Pi Pico 2 sitting on my desk. What I mean is that the MCU
+isn’t in my dev loop. I don’t flash it. I don’t reset it. I don’t
+attach a probe to it. I treat it like a USB peripheral that happens
+to speak the buses I need — I²C, SPI, UART, GPIOs, ADC, and 1-Wire
+— and I write all of my driver code as a normal &lt;code&gt;cargo run&lt;&#x2F;code&gt; binary
+that runs on my laptop, against the real sensor, over a real bus.&lt;&#x2F;p&gt;
+&lt;p&gt;This post is about how that works, why it’s nice, and what you can do
+once your “embedded” driver is just a Rust program with &lt;code&gt;std&lt;&#x2F;code&gt;.&lt;&#x2F;p&gt;</description>
+      
+      <content:encoded>&lt;p&gt;Let me clarify the title up front: there &lt;em&gt;is&lt;&#x2F;em&gt; an MCU. There’s a
+Raspberry Pi Pico 2 sitting on my desk. What I mean is that the MCU
+isn’t in my dev loop. I don’t flash it. I don’t reset it. I don’t
+attach a probe to it. I treat it like a USB peripheral that happens
+to speak the buses I need — I²C, SPI, UART, GPIOs, ADC, and 1-Wire
+— and I write all of my driver code as a normal &lt;code&gt;cargo run&lt;&#x2F;code&gt; binary
+that runs on my laptop, against the real sensor, over a real bus.&lt;&#x2F;p&gt;
+&lt;p&gt;This post is about how that works, why it’s nice, and what you can do
+once your “embedded” driver is just a Rust program with &lt;code&gt;std&lt;&#x2F;code&gt;.&lt;&#x2F;p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;&#x2F;span&gt;&lt;h2 id=&quot;the-loop-i-m-trying-to-escape&quot;&gt;The loop I’m trying to escape&lt;&#x2F;h2&gt;
+&lt;p&gt;The traditional embedded dev loop looks something like this:&lt;&#x2F;p&gt;
+&lt;ol&gt;
+&lt;li&gt;Edit a line of code.&lt;&#x2F;li&gt;
+&lt;li&gt;Wait for &lt;code&gt;cargo build --target=thumbv8m.main-none-eabihf&lt;&#x2F;code&gt; to
+finish.&lt;&#x2F;li&gt;
+&lt;li&gt;Reflash the chip (a few seconds with a probe, longer over the
+bootloader).&lt;&#x2F;li&gt;
+&lt;li&gt;Either power-cycle the board or punch the reset button.&lt;&#x2F;li&gt;
+&lt;li&gt;Squint at &lt;code&gt;defmt&lt;&#x2F;code&gt; output through a probe.&lt;&#x2F;li&gt;
+&lt;li&gt;If you need to reproduce a bug, also: physically interact with the
+board (push a button, breathe on the sensor, jiggle a wire).&lt;&#x2F;li&gt;
+&lt;li&gt;Goto 1.&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;p&gt;On a good day with a fast build and a good probe, that’s two minutes
+per iteration. On a bad day — a stale build cache, a probe that
+disconnects, a chip in some weird stuck state — it’s five or ten.&lt;&#x2F;p&gt;
+&lt;p&gt;The frustrating part isn’t the time. The frustrating part is that
+&lt;strong&gt;none of it is about the driver I’m writing&lt;&#x2F;strong&gt;. The driver is just
+some byte-level logic that talks to a chip over I²C. The chip
+doesn’t care which CPU is initiating the transactions. The chip
+certainly doesn’t care that I had to write a linker script and a
+clock-tree configuration to get there.&lt;&#x2F;p&gt;
+&lt;p&gt;So: why not skip all of that, and write the protocol logic somewhere
+where iteration is free?&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;enter-pico-de-gallo&quot;&gt;Enter Pico de Gallo&lt;&#x2F;h2&gt;
+&lt;p&gt;&lt;a href=&quot;&#x2F;pico-de-gallo&#x2F;&quot;&gt;&lt;em&gt;Pico de Gallo&lt;&#x2F;em&gt;&lt;&#x2F;a&gt; is a project I’ve been building
+for exactly this. It’s a small landing board that turns a Pi Pico 2
+into a USB-attached protocol bridge. Plug it into your laptop, and
+your laptop now has an I²C bus, a SPI bus, a UART, a handful of
+GPIOs, two PWM channels, an ADC, and a 1-Wire master — addressable
+from any host-side program.&lt;&#x2F;p&gt;
+&lt;p&gt;A few things it &lt;em&gt;isn’t&lt;&#x2F;em&gt;, because it gets confused with each of these:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;It’s not a logic analyzer. It drives the bus; it doesn’t sniff
+somebody else’s.&lt;&#x2F;li&gt;
+&lt;li&gt;It’s not a USB-to-I²C dongle in the FTDI sense. The chip
+underneath is a Pi Pico 2, the firmware speaks
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;docs.rs&#x2F;postcard-rpc&#x2F;&quot;&gt;&lt;code&gt;postcard-rpc&lt;&#x2F;code&gt;&lt;&#x2F;a&gt;, and the host side
+is a real Rust crate with proper types and async support.&lt;&#x2F;li&gt;
+&lt;li&gt;It’s not a debug probe. There’s no SWD on the other end of the
+cable. There’s only the device you wired up.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;What it actually does is let you write this:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;use&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt; pico_de_gallo_hal&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;Hal&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;use&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt; embedded_hal&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt;i2c&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;I2c&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;let&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; hal&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Hal&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;new&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;let&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; mut&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; i2c&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; hal&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;i2c&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;let&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; mut&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; buf&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; [&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;0&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;u8&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 2&lt;&#x2F;span&gt;&lt;span&gt;]&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;i2c&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;write_read&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;0x48&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; &amp;amp;&lt;&#x2F;span&gt;&lt;span&gt;[&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;0x00&lt;&#x2F;span&gt;&lt;span&gt;]&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; &amp;amp;&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt;mut&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; buf&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;unwrap&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;…on your laptop, and have the bytes appear on a real I²C wire,
+addressed to a real chip, with the reply coming back into &lt;code&gt;buf&lt;&#x2F;code&gt;.&lt;&#x2F;p&gt;
+&lt;p&gt;The Pico de Gallo book has &lt;a href=&quot;&#x2F;pico-de-gallo&#x2F;&quot;&gt;the full setup&lt;&#x2F;a&gt; — what
+to assemble, how to flash the firmware, the pinout, and a tour of
+each interface. I won’t repeat any of that here. From this point I
+assume you have a Pico de Gallo plugged in, a TMP108 wired to the
+I²C connector, and the &lt;code&gt;gallo&lt;&#x2F;code&gt; CLI installed.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;feeling-the-bus-before-writing-a-line-of-code&quot;&gt;Feeling the bus before writing a line of code&lt;&#x2F;h2&gt;
+&lt;p&gt;The first thing I do with any new chip is poke at it through the CLI.
+This is the equivalent of the “wiggle a probe at it” step from the
+hardware world, except it’s three commands.&lt;&#x2F;p&gt;
+&lt;p&gt;Did the chip enumerate at the address I think it did?&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;shellscript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;$&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; gallo&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; i2c&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; scan&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;╭────┬────┬────┬────┬────┬────┬────┬────┬────┬────┬────┬────┬────┬────┬────┬────┬────╮&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;│&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;    │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;  0&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;  1&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;  2&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;  3&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;  4&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;  5&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;  6&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;  7&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;  8&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;  9&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;  a&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;  b&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;  c&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;  d&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;  e&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;  f&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;├────┼────┼────┼────┼────┼────┼────┼────┼────┼────┼────┼────┼────┼────┼────┼────┼────┤&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;│&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 0&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;  │&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; RR&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; RR&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; RR&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; RR&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; RR&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; RR&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; RR&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; RR&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;│&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 1&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;  │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;│&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 2&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;  │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;│&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 3&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;  │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;│&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 4&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;  │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 48&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;│&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 5&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;  │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;│&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 6&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;  │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;│&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 7&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;  │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; RR&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; RR&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; RR&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; RR&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; RR&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; RR&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; RR&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; RR&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; │&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;╰────┴────┴────┴────┴────┴────┴────┴────┴────┴────┴────┴────┴────┴────┴────┴────┴────╯&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Yes. The TMP108 with its A0 pin to ground sits at 0x48, and there it
+is. If this had come back empty, I’d know it was wiring, not
+software, and I’d know it before I’d touched a Rust file.&lt;&#x2F;p&gt;
+&lt;p&gt;Can I read its temperature register?&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;shellscript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;$&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; gallo&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; i2c&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; write-read&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-address&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 0x48&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-bytes&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 0x00&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;-count&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 2&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;0x18&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 0x40&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Two bytes, just as the datasheet promised. Register 0x00 is the
+temperature register; the top 12 bits of the returned 16 are the
+signed reading in 0.0625 °C&#x2F;LSB. So 0x1840 → 0x184 → 388 → 388 ×
+0.0625 → &lt;strong&gt;24.25 °C&lt;&#x2F;strong&gt;. The room I’m in is about 24 °C.&lt;&#x2F;p&gt;
+&lt;p&gt;Three commands, no Rust, and I know:&lt;&#x2F;p&gt;
+&lt;ol&gt;
+&lt;li&gt;My wiring works.&lt;&#x2F;li&gt;
+&lt;li&gt;The address I expected is the address the chip enumerated at.&lt;&#x2F;li&gt;
+&lt;li&gt;The data format matches the datasheet.&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;p&gt;Those three facts cost me about a minute of reading effort each on a
+real MCU, every time something goes wrong, because they’re all
+entangled with everything else. Here they’re isolated and free.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;reading-it-from-rust&quot;&gt;Reading it from Rust&lt;&#x2F;h2&gt;
+&lt;p&gt;Now for the actual program. The &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;crates.io&#x2F;crates&#x2F;tmp108&quot;&gt;&lt;code&gt;tmp108&lt;&#x2F;code&gt;
+crate&lt;&#x2F;a&gt; on crates.io already exists
+— it’s a regular &lt;code&gt;embedded-hal&lt;&#x2F;code&gt; driver, &lt;code&gt;#[no_std]&lt;&#x2F;code&gt;, written for
+anything that implements &lt;code&gt;embedded_hal::i2c::I2c&lt;&#x2F;code&gt;. Normally you’d
+pull it into a firmware project, build for a Cortex-M target, and
+flash. We’re going to pull it into a &lt;code&gt;std&lt;&#x2F;code&gt; binary instead.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;toml&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;[&lt;&#x2F;span&gt;&lt;span&gt;dependencies&lt;&#x2F;span&gt;&lt;span&gt;]&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;pico-de-gallo-hal&lt;&#x2F;span&gt;&lt;span&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; &amp;quot;&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;0.5&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;tmp108&lt;&#x2F;span&gt;&lt;span&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; &amp;quot;&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;0.5&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;use&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt; pico_de_gallo_hal&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;Hal&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;use&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt; tmp108&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;Tmp108&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;fn&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; main&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt; anyhow&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;Result&lt;&#x2F;span&gt;&lt;span&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;    let&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; hal&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Hal&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;new&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;    let&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; i2c&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; hal&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;i2c&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;    let&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; mut&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; tmp&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Tmp108&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;new_with_a0_gnd&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;i2c&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;    let&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; temperature&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; tmp&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;temperature&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;?&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;    println!&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;Temperature: &lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;{&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;temperature:.2&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;}&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; °C&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;    Ok&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;That’s the whole program. &lt;code&gt;cargo run&lt;&#x2F;code&gt;, and the bytes go out, the
+reply comes back, and a number prints.&lt;&#x2F;p&gt;
+&lt;p&gt;The interesting thing to notice is what isn’t there. The &lt;code&gt;tmp108&lt;&#x2F;code&gt;
+crate doesn’t know that &lt;code&gt;pico-de-gallo&lt;&#x2F;code&gt; exists. It has no
+conditional compilation for “host” or “USB.” Its only requirement is
+“give me something that implements &lt;code&gt;embedded_hal::i2c::I2c&lt;&#x2F;code&gt;,” and
+&lt;code&gt;pico-de-gallo-hal&lt;&#x2F;code&gt; does. The exact same &lt;code&gt;Tmp108::new_with_a0_gnd&lt;&#x2F;code&gt;
+call, with the exact same crate, the exact same version, will run
+unmodified on an RP2350, an STM32, an nRF52, or any other chip that
+has an &lt;code&gt;embedded-hal&lt;&#x2F;code&gt; I²C implementation.&lt;&#x2F;p&gt;
+&lt;p&gt;This is not emulation. It’s not mocking. It’s not simulation. The
+bus is real. The chip is real. The driver is real. The only thing
+that’s different is what’s underneath the &lt;code&gt;I2c&lt;&#x2F;code&gt; trait — and that’s
+the whole point of the trait existing in the first place.&lt;&#x2F;p&gt;
+&lt;p&gt;One honest caveat on that portability claim: of the interfaces
+Pico de Gallo exposes, only &lt;strong&gt;I²C, SPI, GPIO, and &lt;code&gt;Delay&lt;&#x2F;code&gt;&lt;&#x2F;strong&gt; have
+stable, widely-adopted &lt;code&gt;embedded-hal&lt;&#x2F;code&gt; traits today. The TMP108
+example above sails through because it’s I²C, and the alert
+examples in &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;OpenDevicePartnership&#x2F;tmp108&#x2F;tree&#x2F;main&#x2F;examples&quot;&gt;tmp108’s &lt;code&gt;examples&#x2F;&lt;&#x2F;code&gt;
+folder&lt;&#x2F;a&gt;
+sail through because they only also need GPIO. A driver for, say,
+a 1-Wire temperature sensor or a UART-attached GPS module won’t be
+quite as plug-and-play — &lt;code&gt;embedded-hal&lt;&#x2F;code&gt; doesn’t have stable
+abstractions for those yet, so each crate tends to invent its own.
+The “unmodified upstream driver” story is strongest for parts
+whose driver only needs I²C, SPI, GPIO, and timing. For everything
+else, the host-side loop still works; you just may have to do a
+bit of shimming.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;the-dev-loop-side-by-side&quot;&gt;The dev loop, side by side&lt;&#x2F;h2&gt;
+&lt;p&gt;Here’s the same edit-and-test cycle from above, redrawn against this
+program:&lt;&#x2F;p&gt;
+&lt;ol&gt;
+&lt;li&gt;Edit a line of code.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;code&gt;cargo run&lt;&#x2F;code&gt;.&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;p&gt;That’s it. A debug build of this program takes under a second to
+recompile and start. There’s no flash step, no reset, no probe to
+attach. If the program panics, the stack trace points at the line
+that panicked, in source, with debug symbols, in the same terminal I
+just ran it from.&lt;&#x2F;p&gt;
+&lt;p&gt;Other things that just work, because it’s &lt;code&gt;std&lt;&#x2F;code&gt;:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;cargo test&lt;&#x2F;code&gt; runs against the real chip.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;code&gt;cargo bench&lt;&#x2F;code&gt; measures real round-trip latency over USB.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;code&gt;cargo flamegraph&lt;&#x2F;code&gt; and &lt;code&gt;perf&lt;&#x2F;code&gt; and &lt;code&gt;dtrace&lt;&#x2F;code&gt; and Instruments all
+work, because it’s a normal native process.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;code&gt;println!&lt;&#x2F;code&gt;, &lt;code&gt;dbg!&lt;&#x2F;code&gt;, &lt;code&gt;eprintln!&lt;&#x2F;code&gt;, &lt;code&gt;tracing&lt;&#x2F;code&gt;, &lt;code&gt;env_logger&lt;&#x2F;code&gt; — any
+of them. Whatever you’d use in a normal Rust program.&lt;&#x2F;li&gt;
+&lt;li&gt;The debugger you actually like — &lt;code&gt;rust-lldb&lt;&#x2F;code&gt;, &lt;code&gt;rust-gdb&lt;&#x2F;code&gt;, the
+one built into your editor — attaches the way it always does.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;The obvious question at this point is what the catch is. We’ll
+get there.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-having-std-actually-unlocks&quot;&gt;What having &lt;code&gt;std&lt;&#x2F;code&gt; actually unlocks&lt;&#x2F;h2&gt;
+&lt;p&gt;The temperature-printing program is the warm-up. The thing that
+makes this approach worth talking about is what becomes easy &lt;em&gt;next&lt;&#x2F;em&gt;.&lt;&#x2F;p&gt;
+&lt;p&gt;Here is a small &lt;code&gt;ratatui&lt;&#x2F;code&gt; dashboard that reads the TMP108 four times
+a second and plots a live sparkline of the last 60 samples
+alongside running min &#x2F; avg &#x2F; max:&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;writing-embedded-drivers-without-an-mcu&#x2F;dashboard.png&quot; alt=&quot;Live TMP108 dashboard rendered in the terminal: the top row shows current temperature, minimum, average, and maximum across the window; the bottom panel is a sparkline of the last 60 samples, making short-term drift and the warm-up curve visible at a glance.&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;The whole program is about 150 lines and uses three dependencies:
+&lt;code&gt;pico-de-gallo-hal&lt;&#x2F;code&gt;, &lt;code&gt;tmp108&lt;&#x2F;code&gt;, and &lt;code&gt;ratatui&lt;&#x2F;code&gt;. The interesting bits
+look like this:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;const&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; HISTORY&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; usize&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 60&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;const&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; SAMPLE_INTERVAL&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Duration&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Duration&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;from_millis&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;250&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;let&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; hal&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Hal&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;new&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;let&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; i2c&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; hal&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;i2c&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;let&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; mut&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; tmp&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Tmp108&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;new_with_a0_gnd&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;i2c&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;let&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; mut&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; samples&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; VecDeque&lt;&#x2F;span&gt;&lt;span&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;f32&lt;&#x2F;span&gt;&lt;span&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; VecDeque&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;with_capacity&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;HISTORY&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;let&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; mut&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; next_sample&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Instant&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;now&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;loop&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;    if&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Instant&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;now&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; &amp;gt;=&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; next_sample&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;        let&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; t&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; tmp&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;temperature&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;?&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;        if&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; samples&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;len&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; ==&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; HISTORY&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;            samples&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;pop_front&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;        samples&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;push_back&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;t&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;        next_sample&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; +=&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; SAMPLE_INTERVAL&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;    terminal&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;draw&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;|&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;frame&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;|&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; draw&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;frame&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; &amp;amp;&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;samples&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;?&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; ...event handling: quit on &amp;#39;q&amp;#39; or Esc&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;The &lt;code&gt;draw&lt;&#x2F;code&gt; function splits the screen vertically into a stats row
+and a sparkline:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;fn&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; draw&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;frame&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; &amp;amp;&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt;mut&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Frame&lt;&#x2F;span&gt;&lt;span&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span&gt;&amp;#39;&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;_&lt;&#x2F;span&gt;&lt;span&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; samples&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; &amp;amp;&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;VecDeque&lt;&#x2F;span&gt;&lt;span&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;f32&lt;&#x2F;span&gt;&lt;span&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;    let&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; chunks&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Layout&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;default&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;        .&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;direction&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt;Direction&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;Vertical&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;        .&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;constraints&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;[&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt;Constraint&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;Length&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;3&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt; Constraint&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;Min&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;0&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;]&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;        .&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;split&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;frame&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;area&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;    frame&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;render_widget&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;stats&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;samples&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; chunks&lt;&#x2F;span&gt;&lt;span&gt;[&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;0&lt;&#x2F;span&gt;&lt;span&gt;]&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;    frame&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;render_widget&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;sparkline&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;samples&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; chunks&lt;&#x2F;span&gt;&lt;span&gt;[&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;1&lt;&#x2F;span&gt;&lt;span&gt;]&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;…and &lt;code&gt;sparkline&lt;&#x2F;code&gt; rescales the float window into the integer bars
+that &lt;code&gt;ratatui::Sparkline&lt;&#x2F;code&gt; wants, so even tiny drifts are visible:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;fn&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; sparkline&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;samples&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; &amp;amp;&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;VecDeque&lt;&#x2F;span&gt;&lt;span&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;f32&lt;&#x2F;span&gt;&lt;span&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Sparkline&lt;&#x2F;span&gt;&lt;span&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span&gt;&amp;#39;&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;_&lt;&#x2F;span&gt;&lt;span&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;    let&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; bars&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Vec&lt;&#x2F;span&gt;&lt;span&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;u64&lt;&#x2F;span&gt;&lt;span&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; if&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; samples&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;is_empty&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;        Vec&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;new&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; else&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;        let&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; min&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; samples&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;iter&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;copied&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;fold&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt;f32&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;INFINITY&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt; f32&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;min&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;        let&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; max&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; samples&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;iter&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;copied&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;fold&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt;f32&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt;NEG_INFINITY&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt; f32&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;max&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;        let&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; span&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; (&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;max&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; min&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;max&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;0&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;1&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;        samples&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;            .&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;iter&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;            .&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;map&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;|&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;t&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;|&lt;&#x2F;span&gt;&lt;span&gt; (&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;t&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; min&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; &#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; span&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; *&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 1000&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;0&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;round&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; as&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; u64&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;            .&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;collect&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;    Sparkline&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;default&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;        .&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;data&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;bars&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;        .&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;max&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;1000&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;        .&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;style&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt;Style&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;default&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;fg&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt;Color&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;Yellow&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;        .&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;block&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt;Block&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;bordered&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;title&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; last 60 samples  (q to quit) &lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;That’s it. Read in a loop, push into a ring buffer, redraw. The
+total code is shorter than the LCD-init sequence I’d have written
+the first time I tried to do this on an MCU. And because it’s a
+normal terminal program, &lt;code&gt;Ctrl-C&lt;&#x2F;code&gt; cleans up and exits.&lt;&#x2F;p&gt;
+&lt;p&gt;Once you’re in this world, a lot of other things become “just write
+the program”:&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;Data logging.&lt;&#x2F;strong&gt; A few lines of &lt;code&gt;serde&lt;&#x2F;code&gt; + &lt;code&gt;csv&lt;&#x2F;code&gt; and every sample
+gets a wall-clock timestamp on disk. Post-process with whatever you
+like — &lt;code&gt;polars&lt;&#x2F;code&gt;, &lt;code&gt;pandas&lt;&#x2F;code&gt;, &lt;code&gt;jq&lt;&#x2F;code&gt;, a quick shell pipeline:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;let&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; mut&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; wtr&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt; csv&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;Writer&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;from_path&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;temps.csv&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;?&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;wtr&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;write_record&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;[&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;timestamp_ms&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; &amp;quot;&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;temperature_c&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;]&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;?&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; inside the loop:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;wtr&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;write_record&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;&amp;amp;&lt;&#x2F;span&gt;&lt;span&gt;[&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt;    chrono&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt;Utc&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;now&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;timestamp_millis&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;to_string&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;    format!&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;{&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;t:.4&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;}&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;]&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;?&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;strong&gt;Bus tracing.&lt;&#x2F;strong&gt; Wrap the driver in a &lt;code&gt;tracing&lt;&#x2F;code&gt; span and you get
+structured records of every transaction, every reading, every error,
+with timestamps and process metadata. Pipe it into
+&lt;code&gt;tracing-subscriber&lt;&#x2F;code&gt;, &lt;code&gt;tokio-console&lt;&#x2F;code&gt;, OpenTelemetry — pick your
+poison.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;Stress testing.&lt;&#x2F;strong&gt; Spin up a &lt;code&gt;tokio&lt;&#x2F;code&gt; runtime, share the bus through
+a &lt;code&gt;Mutex&amp;lt;Bus&amp;gt;&lt;&#x2F;code&gt;, and have a dozen tasks all reading and configuring
+the chip concurrently. See what falls over. This is something you
+&lt;em&gt;could&lt;&#x2F;em&gt; do on the MCU, but it’s the kind of thing you’d never set up
+just to find out.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;A&#x2F;B testing.&lt;&#x2F;strong&gt; Run two versions of the driver against the same
+chip back-to-back, diff their outputs sample-for-sample. Catch a
+regression in the new version before it makes it anywhere near a
+production board.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;Real CI.&lt;&#x2F;strong&gt; This is the one I’m most excited about. &lt;code&gt;cargo test&lt;&#x2F;code&gt;
+runs on a CI runner that has a Pico de Gallo plugged into it, with
+real chips wired up. Every PR exercises the driver against real
+silicon. No simulation. No “we’ll catch it in hardware testing
+later.” (More on CI in the &lt;a href=&quot;&#x2F;pico-de-gallo&#x2F;driver&#x2F;testing.html&quot;&gt;testing
+chapter&lt;&#x2F;a&gt; of the book.)&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;Runnable examples in your crate.&lt;&#x2F;strong&gt; This one flips the framing.
+So far we’ve talked about Pico de Gallo as something &lt;em&gt;consumers&lt;&#x2F;em&gt; of
+a driver crate use. But it works just as well for the &lt;em&gt;author&lt;&#x2F;em&gt; of
+the crate. Cargo lets you put a &lt;code&gt;examples&#x2F;&lt;&#x2F;code&gt; folder in your library
+and have each file be a binary; if those binaries can target a
+real, running version of your chip without anyone reaching for a
+soldering iron, they stop being “snippets you’d have to port to
+your board” and start being “things a reader can &lt;code&gt;cargo run&lt;&#x2F;code&gt; after
+plugging in two cables.”&lt;&#x2F;p&gt;
+&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;OpenDevicePartnership&#x2F;tmp108&#x2F;tree&#x2F;main&#x2F;examples&quot;&gt;&lt;code&gt;tmp108&lt;&#x2F;code&gt; crate’s
+examples&lt;&#x2F;a&gt;
+are exactly this. There are five of them — one-shot read,
+continuous read, comparator-mode ALERT, interrupt-mode ALERT, and
+a &lt;code&gt;embedded-sensors-hal&lt;&#x2F;code&gt; trait demo — and every single one starts
+with &lt;code&gt;let hal = Hal::new(); let i2c = hal.i2c();&lt;&#x2F;code&gt; (the ALERT ones
+also grab a GPIO for the interrupt line). A reader who wants to
+understand any of the modes runs &lt;code&gt;cargo run --example oneshot&lt;&#x2F;code&gt; and
+gets a real temperature back from a real chip. No board-bringup
+chapter. No “you’ll need to adapt this for your target.” The
+documentation &lt;em&gt;is&lt;&#x2F;em&gt; the running program.&lt;&#x2F;p&gt;
+&lt;p&gt;Each of these was technically possible before. Each one required
+setting up its own bespoke pipeline, often with a custom MCU build,
+a custom log format, and a custom analysis layer on top. With a real
+bus available to a real &lt;code&gt;std&lt;&#x2F;code&gt; program, they all collapse into “use
+the crate that already exists.”&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;the-catch&quot;&gt;The catch&lt;&#x2F;h2&gt;
+&lt;p&gt;One might ask, what’s the catch? Here is the honest list.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;USB latency.&lt;&#x2F;strong&gt; Every transaction is a USB round-trip. In practice
+that’s about a millisecond. For polling a temperature sensor every
+250 ms, that’s invisible. For a tight register-poll loop at 100 kHz
+trying to catch a hardware event in software — no, that does not
+work, and pretending it does would be a lie. Use the chip’s &lt;code&gt;ALERT&lt;&#x2F;code&gt;
+pin and an interrupt-driven path for that, which Pico de Gallo also
+supports via the GPIO &lt;code&gt;Wait&lt;&#x2F;code&gt; impl.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;Timing is host-mediated.&lt;&#x2F;strong&gt; You cannot reproduce sub-millisecond
+interrupt-to-handler timing on a host. You can validate the protocol
+your interrupt handler implements, but not the latency of getting
+&lt;em&gt;to&lt;&#x2F;em&gt; the handler. For that you eventually need the real MCU.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;Single master, single bus.&lt;&#x2F;strong&gt; The Pico de Gallo is the only master
+on the bus. You can’t reproduce a scenario where two different MCUs
+are arbitrating for the same wires.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;The driver still has to be &lt;code&gt;no_std&lt;&#x2F;code&gt;.&lt;&#x2F;strong&gt; Pico de Gallo lets you
+exercise the &lt;em&gt;logic&lt;&#x2F;em&gt; of the driver in a comfortable environment. It
+does not validate that the driver compiles for your real target.
+You still need a one-line “build for &lt;code&gt;thumbv8m.main-none-eabihf&lt;&#x2F;code&gt;”
+step in CI to catch accidentally pulling in &lt;code&gt;std&lt;&#x2F;code&gt;. The &lt;code&gt;tmp108&lt;&#x2F;code&gt;
+crate has &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;OpenDevicePartnership&#x2F;tmp108&#x2F;actions&#x2F;workflows&#x2F;nostd.yml&quot;&gt;exactly that
+job&lt;&#x2F;a&gt;
+running on every push for this reason.&lt;&#x2F;p&gt;
+&lt;p&gt;None of these are surprises. They’re the natural consequence of
+moving the dev environment off the target. The point is that for the
+work that &lt;em&gt;is&lt;&#x2F;em&gt; portable — and a sensor driver is essentially all
+portable work — you don’t have to pay the cost of the target during
+development.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;wrapping-up&quot;&gt;Wrapping up&lt;&#x2F;h2&gt;
+&lt;p&gt;A device driver is protocol logic. Protocol logic doesn’t care what
+CPU is initiating the transactions. So write it where iteration is
+cheap, where you have a debugger and a test runner and a profiler,
+where you can wrap it in any visualization or analysis tool you
+want, and where adding “log every sample to a CSV” is two lines of
+code instead of two weeks of integration work.&lt;&#x2F;p&gt;
+&lt;p&gt;Pico de Gallo is one way to do that. It happens to be the one I
+built, because nothing else existed that gave me exactly this. If
+you want to read more, the &lt;a href=&quot;&#x2F;pico-de-gallo&#x2F;&quot;&gt;book&lt;&#x2F;a&gt; covers the
+hardware, the firmware, the wire protocol, and a full chapter on
+writing a driver from scratch against a different temperature chip
+(TMP102). The &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;crates.io&#x2F;crates&#x2F;tmp108&quot;&gt;&lt;code&gt;tmp108&lt;&#x2F;code&gt; crate&lt;&#x2F;a&gt; used
+in this post is on crates.io, and its
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;OpenDevicePartnership&#x2F;tmp108&#x2F;tree&#x2F;main&#x2F;examples&quot;&gt;&lt;code&gt;examples&#x2F;&lt;&#x2F;code&gt;&lt;&#x2F;a&gt;
+directory is full of &lt;code&gt;cargo run --example&lt;&#x2F;code&gt;-able programs that all
+target a real chip through Pico de Gallo. The full ratatui dashboard
+code lives in a tiny standalone project that you can copy and adapt.&lt;&#x2F;p&gt;
+&lt;p&gt;If you build something with it — a driver, a logger, a CI rig, a
+dashboard for a chip you’ve been wanting to characterize — I’d love
+to hear about it.&lt;&#x2F;p&gt;
+</content:encoded>
+    </item>
+    
+  </channel>
+</rss>

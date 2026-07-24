@@ -1,0 +1,572 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+  <title>Felipe Balbi</title>
+  <subtitle>Notes on embedded systems, Rust, and the craft of writing software.</subtitle>
+  <link href="https://balbi.sh/tags/crc/atom.xml" rel="self" type="application/atom+xml"/>
+  <link href="https://balbi.sh"/>
+  <generator uri="https://www.getzola.org/">Zola</generator>
+  <updated>2026-07-20T09:00:00+00:00</updated>
+  <id>https://balbi.sh/tags/crc/atom.xml</id>
+  
+  <entry xml:lang="en">
+    <title>Tamal: The CRC block</title>
+    <published>2026-07-20T09:00:00+00:00</published>
+    <updated>2026-07-20T09:00:00+00:00</updated>
+    <author><name>Felipe Balbi</name></author>
+    <link rel="alternate" href="https://balbi.sh/posts/tamal-crc/" type="text/html"/>
+    <id>https://balbi.sh/posts/tamal-crc/</id>
+    <summary type="html">&lt;p&gt;As mentioned before &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;felipebalbi&#x2F;tamal&quot;&gt;Tamal&lt;&#x2F;a&gt; is an FPGA eSPI exerciser with its
+gateware written in &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;www.haskell.org&#x2F;&quot;&gt;Haskell&lt;&#x2F;a&gt; and compiled to verilog with &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;clash-lang.org&quot;&gt;Clash&lt;&#x2F;a&gt;.&lt;&#x2F;p&gt;
+&lt;p&gt;In a &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-haskell-primer&#x2F;&quot;&gt;previous&lt;&#x2F;a&gt; post we presented a very short introduction on
+Haskell, just enough such that the code blocks below don’t look too
+foreign. Today we start looking at one of the simplest blocks within
+Tamal: its CRC8 engine.&lt;&#x2F;p&gt;
+&lt;p&gt;The code is so small that it fits easily in less than one screenfull
+of content on a regular smartphone screen, but as we will see, it
+hides a good amount of interesting operations due to Haskell’s
+expressiveness.&lt;&#x2F;p&gt;</summary>
+    
+    <content type="html">&lt;p&gt;As mentioned before &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;felipebalbi&#x2F;tamal&quot;&gt;Tamal&lt;&#x2F;a&gt; is an FPGA eSPI exerciser with its
+gateware written in &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;www.haskell.org&#x2F;&quot;&gt;Haskell&lt;&#x2F;a&gt; and compiled to verilog with &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;clash-lang.org&quot;&gt;Clash&lt;&#x2F;a&gt;.&lt;&#x2F;p&gt;
+&lt;p&gt;In a &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-haskell-primer&#x2F;&quot;&gt;previous&lt;&#x2F;a&gt; post we presented a very short introduction on
+Haskell, just enough such that the code blocks below don’t look too
+foreign. Today we start looking at one of the simplest blocks within
+Tamal: its CRC8 engine.&lt;&#x2F;p&gt;
+&lt;p&gt;The code is so small that it fits easily in less than one screenfull
+of content on a regular smartphone screen, but as we will see, it
+hides a good amount of interesting operations due to Haskell’s
+expressiveness.&lt;&#x2F;p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;&#x2F;span&gt;&lt;h2 id=&quot;the-entire-source&quot;&gt;The entire source&lt;&#x2F;h2&gt;
+&lt;p&gt;As promised, the entire source fits in a screenfull:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;module&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt; Tamal.Crc&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; crc8Update&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  )&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; where&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;import&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt; Clash.Prelude&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;crc8Update&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; ::&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; BitVector&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 8&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; BitVector&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 8&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; BitVector&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 8&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;crc8Update crc byte &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;=&lt;&#x2F;span&gt;&lt;span&gt; foldl step crc &lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;unpack byte &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Vec&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 8&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Bit&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt; where&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;  step&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; ::&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; BitVector&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 8&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Bit&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; BitVector&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 8&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  step c inBit&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;    |&lt;&#x2F;span&gt;&lt;span&gt; feedbackBit &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;==&lt;&#x2F;span&gt;&lt;span&gt; high &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;=&lt;&#x2F;span&gt;&lt;span&gt; shifted &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;`&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;xor&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;`&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 0x07&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;    |&lt;&#x2F;span&gt;&lt;span&gt; otherwise &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;=&lt;&#x2F;span&gt;&lt;span&gt; shifted&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;   where&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    feedbackBit &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;=&lt;&#x2F;span&gt;&lt;span&gt; msb c &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;`&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;xor&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;`&lt;&#x2F;span&gt;&lt;span&gt; inBit&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    shifted &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;=&lt;&#x2F;span&gt;&lt;span&gt; c &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;`&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;shiftL&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;`&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 1&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;The first thing we notice are the top three lines:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;module&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt; Tamal.Crc&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; crc8Update&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  )&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; where&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;A Haskell file opens by naming itself. &lt;code&gt;module Tamal.Crc&lt;&#x2F;code&gt;
+declares this module’s name, and the name is not free-form: it
+mirrors the path on disk. &lt;code&gt;Tamal.Crc&lt;&#x2F;code&gt; lives in
+&lt;code&gt;src&#x2F;Tamal&#x2F;Crc.hs&lt;&#x2F;code&gt;, a dot for each directory separator, the same
+way a Rust &lt;code&gt;crate::module&lt;&#x2F;code&gt; path or a Java package tracks its
+folder. The compiler leans on that correspondence to find
+modules, so the name and the location can never quietly drift
+apart.&lt;&#x2F;p&gt;
+&lt;p&gt;The parentheses are the more interesting part. They are the
+module’s &lt;strong&gt;export list&lt;&#x2F;strong&gt; — the complete, deliberate enumeration of
+what the outside world is allowed to see:&lt;&#x2F;p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;A module is a wall with a door in it, and the export list is
+the door.&lt;&#x2F;p&gt;
+&lt;&#x2F;blockquote&gt;
+&lt;p&gt;Only &lt;code&gt;crc8Update&lt;&#x2F;code&gt; is on that list, so only &lt;code&gt;crc8Update&lt;&#x2F;code&gt; leaves
+the file. Everything else — and in a moment we will meet &lt;code&gt;step&lt;&#x2F;code&gt;,
+the helper that does the actual bit-twiddling — stays private,
+sealed behind the wall. Had the author written
+&lt;code&gt;module Tamal.Crc where&lt;&#x2F;code&gt; with no list at all, Haskell would
+export &lt;em&gt;everything&lt;&#x2F;em&gt; by default, &lt;code&gt;step&lt;&#x2F;code&gt; included, and the module’s
+public surface would sprawl to match its implementation. The
+explicit list is a choice to expose one name and hide the rest.&lt;&#x2F;p&gt;
+&lt;p&gt;That choice buys more than tidiness. &lt;code&gt;step&lt;&#x2F;code&gt; is an internal detail
+of how &lt;em&gt;this&lt;&#x2F;em&gt; CRC happens to be computed; nothing outside should
+depend on it, name it, or test it directly. Keeping it off the
+export list reserves the author’s right to rewrite it —
+table-driven, byte-parallel, whatever comes later — without
+breaking a single caller. The public contract is exactly one
+function wide. (It is also why the tests we read at the end
+exercise the byte-level &lt;code&gt;crc8Update&lt;&#x2F;code&gt; and never reach for &lt;code&gt;step&lt;&#x2F;code&gt;:
+&lt;code&gt;step&lt;&#x2F;code&gt; is not theirs to reach.)&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;the-prelude-swap&quot;&gt;The prelude swap&lt;&#x2F;h2&gt;
+&lt;p&gt;The line under the module header looks like ceremony and is
+anything but:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;import&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt; Clash.Prelude&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Every Haskell file begins in a world someone else furnished. That
+furniture is the &lt;em&gt;prelude&lt;&#x2F;em&gt;: the batch of names, types, and
+functions that are simply &lt;em&gt;there&lt;&#x2F;em&gt; before you import anything.
+Ordinary Haskell hands you the standard &lt;code&gt;Prelude&lt;&#x2F;code&gt; — &lt;code&gt;Int&lt;&#x2F;code&gt;,
+&lt;code&gt;Bool&lt;&#x2F;code&gt;, lists, &lt;code&gt;foldl&lt;&#x2F;code&gt;, &lt;code&gt;map&lt;&#x2F;code&gt;, the familiar fittings.
+&lt;code&gt;import Clash.Prelude&lt;&#x2F;code&gt; throws that set out and moves a different
+one in.&lt;&#x2F;p&gt;
+&lt;p&gt;What arrives instead is a hardware vocabulary: the &lt;code&gt;Bit&lt;&#x2F;code&gt;,
+&lt;code&gt;BitVector&lt;&#x2F;code&gt;, &lt;code&gt;Vec&lt;&#x2F;code&gt;, and &lt;code&gt;Signal&lt;&#x2F;code&gt; types from the &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-haskell-primer&#x2F;&quot;&gt;primer&lt;&#x2F;a&gt;, the
+&lt;code&gt;high&lt;&#x2F;code&gt; and &lt;code&gt;low&lt;&#x2F;code&gt; bit literals, &lt;code&gt;msb&lt;&#x2F;code&gt;, &lt;code&gt;shiftL&lt;&#x2F;code&gt;, &lt;code&gt;xor&lt;&#x2F;code&gt;, &lt;code&gt;unpack&lt;&#x2F;code&gt; —
+and versions of the everyday functions, &lt;code&gt;foldl&lt;&#x2F;code&gt; among them, that
+operate on &lt;code&gt;Vec&lt;&#x2F;code&gt;s and lower to gates. This one line is the
+difference between a program that computes and a description that
+becomes a circuit:&lt;&#x2F;p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Swapping the prelude is what turns a Haskell file into a
+hardware description.&lt;&#x2F;p&gt;
+&lt;&#x2F;blockquote&gt;
+&lt;p&gt;Clash leans on the swap so hard that it &lt;em&gt;shadows&lt;&#x2F;em&gt; the list
+versions of common names. That has a visible consequence we will
+run into in the test file: there, &lt;code&gt;map&lt;&#x2F;code&gt; and &lt;code&gt;++&lt;&#x2F;code&gt; would mean the
+&lt;code&gt;Vec&lt;&#x2F;code&gt; versions, so gluing plain lists together has to reach for a
+list comprehension and &lt;code&gt;&amp;lt;&amp;gt;&lt;&#x2F;code&gt; instead. File that away; for now the
+thing to see is that the lone &lt;code&gt;foldl&lt;&#x2F;code&gt; two lines down is one of
+these swapped names. It is the &lt;code&gt;Vec&lt;&#x2F;code&gt; fold, and it will unroll into
+wiring rather than spin a runtime loop. Nothing in the module
+works without this import; it is the line that says &lt;em&gt;compile me to
+hardware&lt;&#x2F;em&gt;.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;the-type-and-why-it-has-to-be-this-one&quot;&gt;The type, and why it has to be this one&lt;&#x2F;h2&gt;
+&lt;p&gt;Now the signature, which under the primer’s reading is already
+half the documentation:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;crc8Update&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; ::&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; BitVector&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 8&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; BitVector&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 8&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; BitVector&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 8&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Two arrows, so — remembering that &lt;code&gt;-&amp;gt;&lt;&#x2F;code&gt; associates to the right and
+every function takes one argument — this is “give me a
+&lt;code&gt;BitVector 8&lt;&#x2F;code&gt;, then another &lt;code&gt;BitVector 8&lt;&#x2F;code&gt;, and I hand back a
+&lt;code&gt;BitVector 8&lt;&#x2F;code&gt;.” Name the three roles and the intent appears: the
+first argument is the &lt;strong&gt;running CRC&lt;&#x2F;strong&gt;, the second is the
+&lt;strong&gt;incoming byte&lt;&#x2F;strong&gt;, and the result is the &lt;strong&gt;new running CRC&lt;&#x2F;strong&gt;. It
+is an accumulator update, one byte at a time.&lt;&#x2F;p&gt;
+&lt;p&gt;The type could have been written other ways, and the two decisions
+behind it are both load-bearing.&lt;&#x2F;p&gt;
+&lt;p&gt;The first is &lt;code&gt;BitVector 8&lt;&#x2F;code&gt; rather than &lt;code&gt;Unsigned 8&lt;&#x2F;code&gt; or a &lt;code&gt;Word&lt;&#x2F;code&gt;.
+A &lt;code&gt;BitVector 8&lt;&#x2F;code&gt; is eight wires with &lt;em&gt;no&lt;&#x2F;em&gt; arithmetic meaning
+attached — the type of a thing you &lt;code&gt;xor&lt;&#x2F;code&gt;, shift, and index into,
+not a thing you add. &lt;code&gt;Unsigned 8&lt;&#x2F;code&gt; would have invited &lt;code&gt;+&lt;&#x2F;code&gt;, &lt;code&gt;*&lt;&#x2F;code&gt;, and
+carry, arithmetic this function never performs. Choosing
+&lt;code&gt;BitVector&lt;&#x2F;code&gt; states plainly that a CRC is bit-manipulation, not
+counting, and the type system then holds the code to that promise:
+reach for &lt;code&gt;+&lt;&#x2F;code&gt; on a &lt;code&gt;BitVector&lt;&#x2F;code&gt; by accident and the compiler
+objects. It is the primer’s “wire-width checker,” applied one
+level up — the &lt;em&gt;kind&lt;&#x2F;em&gt; of value, not just its width, is part of the
+contract.&lt;&#x2F;p&gt;
+&lt;p&gt;The second decision is the argument order: running CRC first, byte
+second. That order is chosen so the function is &lt;strong&gt;fold-shaped&lt;&#x2F;strong&gt;.
+Recall currying — &lt;code&gt;crc8Update crc&lt;&#x2F;code&gt; is a legal value on its own, a
+function still waiting for a byte, meaning “advance &lt;em&gt;this&lt;&#x2F;em&gt; running
+CRC by one more byte.” That is precisely the shape a left fold
+wants for its combining step, and it is exactly how the tests will
+run the CRC across a whole message: &lt;code&gt;foldl crc8Update 0 bytes&lt;&#x2F;code&gt;
+reads left to right as “start at zero, fold in each byte.” Swap
+the arguments and that reading falls apart. The signature is
+written to make the fold obvious.&lt;&#x2F;p&gt;
+&lt;p&gt;One last thing the type says by saying nothing. Every &lt;code&gt;BitVector 8&lt;&#x2F;code&gt;
+in, produces a definite &lt;code&gt;BitVector 8&lt;&#x2F;code&gt; out — no missing cases, no
+error, no &lt;code&gt;Maybe&lt;&#x2F;code&gt;. That totality &lt;em&gt;is&lt;&#x2F;em&gt; a truth table, $f : (\text{crc},
+\text{byte}) \to \text{crc}$, same inputs giving the same output every
+time, which is the primer’s definition of combinational logic
+verbatim. &lt;code&gt;crc8Update&lt;&#x2F;code&gt; is a block of gates wearing a Haskell type. But
+the body only makes sense once we have the one idea the whole file is
+a transcription of.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;a-crc-is-a-remainder&quot;&gt;A CRC is a remainder&lt;&#x2F;h2&gt;
+&lt;p&gt;Strip the acronym away and a CRC is a &lt;strong&gt;remainder&lt;&#x2F;strong&gt; — the leftover
+from a division, carried out in a number system with exactly two
+digits.&lt;&#x2F;p&gt;
+&lt;p&gt;Here is the whole trick. Take a stream of bits and read it as the
+coefficients of a polynomial: the byte &lt;code&gt;00000111&lt;&#x2F;code&gt; becomes
+$x^2 + x + 1$, a one in each place where the polynomial has a
+term. Bytes, messages, whole packets — all just polynomials whose
+coefficients are either $0$ or $1$. Arithmetic on these
+coefficients is done modulo two, which collapses into one
+startling simplification: $1 + 1 = 0$, there are no carries, and
+&lt;strong&gt;addition, subtraction, and XOR are all the same operation&lt;&#x2F;strong&gt;.
+That single fact is why CRC hardware is cheap — every
+“subtraction” below is just an &lt;code&gt;xor&lt;&#x2F;code&gt;.&lt;&#x2F;p&gt;
+&lt;p&gt;The divisor in this division has a name, the &lt;strong&gt;generator
+polynomial&lt;&#x2F;strong&gt;. Tamal’s is the one the module comment spells out,&lt;&#x2F;p&gt;
+&lt;p&gt;$$ G(x) = x^8 + x^2 + x + 1 $$&lt;&#x2F;p&gt;
+&lt;p&gt;whose coefficients, written as bits, are &lt;code&gt;1 0000 0111&lt;&#x2F;code&gt; — nine bits,
+&lt;code&gt;0x107&lt;&#x2F;code&gt;, degree eight. Look at the low eight of those bits: &lt;code&gt;0000 0111&lt;&#x2F;code&gt;, &lt;code&gt;0x07&lt;&#x2F;code&gt;, the very constant sitting in the source. The ninth
+bit, the $x^8$ term, is the one that will “fall off the top” of an
+eight-bit register in a moment; hold onto it.&lt;&#x2F;p&gt;
+&lt;p&gt;To take the CRC of a message $M$ is to do one thing:&lt;&#x2F;p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Shift the message up by eight bits, divide by $G$, and keep the
+remainder.&lt;&#x2F;p&gt;
+&lt;&#x2F;blockquote&gt;
+&lt;p&gt;In symbols, $C = (M \cdot x^8) \bmod G$. The shift by $x^8$ —
+eight zero bits of headroom appended below the message — is what
+makes room for an eight-bit remainder to live, and it is also,
+quietly, the thing that will make the residue trick at the end of
+this post work. A well-chosen $G$ has the property that almost any
+corruption of the message changes the remainder, so the remainder
+acts as a compact fingerprint: change the packet, change the
+fingerprint, and the receiver notices.&lt;&#x2F;p&gt;
+&lt;p&gt;The smallest possible example is worth doing by hand, because we
+are about to meet it again as a unit test. Let $M$ be the one-byte
+message &lt;code&gt;0x01&lt;&#x2F;code&gt;, which as a polynomial is simply $1$. Shift up by
+$x^8$ and reduce modulo $G$:&lt;&#x2F;p&gt;
+&lt;p&gt;$$ x^8 \equiv x^2 + x + 1 \pmod{G} $$&lt;&#x2F;p&gt;
+&lt;p&gt;because $x^8 = G + (x^2 + x + 1)$ and $G \equiv 0$ by definition of
+“modulo $G$.” The remainder is $x^2 + x + 1$, which is &lt;code&gt;0000 0111&lt;&#x2F;code&gt;,
+which is &lt;code&gt;0x07&lt;&#x2F;code&gt;. Remember that number. The code is about to
+reproduce it out of shifts and XORs, and the two answers are going
+to match.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;the-left-fold&quot;&gt;The left fold&lt;&#x2F;h2&gt;
+&lt;p&gt;With the division in mind, the body is short:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;crc8Update crc byte &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;=&lt;&#x2F;span&gt;&lt;span&gt; foldl step crc &lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;unpack byte &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Vec&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 8&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Bit&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Two moves live on that line: turn the byte into bits, then fold
+over them.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;code&gt;unpack byte :: Vec 8 Bit&lt;&#x2F;code&gt; takes the opaque eight-wire &lt;code&gt;BitVector&lt;&#x2F;code&gt;
+and re-presents it as a &lt;code&gt;Vec 8 Bit&lt;&#x2F;code&gt;, a sequence of eight
+individual &lt;code&gt;Bit&lt;&#x2F;code&gt;s you can walk one at a time. The annotation &lt;code&gt;:: Vec 8 Bit&lt;&#x2F;code&gt; is needed because &lt;code&gt;unpack&lt;&#x2F;code&gt; is polymorphic — it will
+produce whatever type the surrounding code asks for — so we pin
+the target explicitly. The ordering is a convention worth naming:
+index &lt;code&gt;0&lt;&#x2F;code&gt; of the vector is the most significant bit, so walking
+the vector head to tail walks the byte &lt;strong&gt;MSB first&lt;&#x2F;strong&gt;, which is
+what this CRC (and eSPI, and SMBus) require.&lt;&#x2F;p&gt;
+&lt;p&gt;Then the fold. From a purely functional standpoint a left fold&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-fold-1&quot;&gt;&lt;a href=&quot;#fn-fold&quot;&gt;1&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt;
+is the most ordinary thing in the world, and it has nothing to do
+with mutation:&lt;&#x2F;p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;&lt;code&gt;foldl&lt;&#x2F;code&gt; threads an accumulator through a sequence, left to
+right, handing the running result and the next element to a
+combining function, over and over.&lt;&#x2F;p&gt;
+&lt;&#x2F;blockquote&gt;
+&lt;p&gt;Written out, &lt;code&gt;foldl step crc [b0, b1, .. b7]&lt;&#x2F;code&gt; is nothing but a
+nest of calls:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;plain&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;step (step (step (.. step (step crc b0) b1 ..) b6) b7)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;The &lt;code&gt;crc&lt;&#x2F;code&gt; seeds the accumulator. &lt;code&gt;step&lt;&#x2F;code&gt; folds in &lt;code&gt;b0&lt;&#x2F;code&gt; to produce a
+&lt;em&gt;new&lt;&#x2F;em&gt; accumulator; that value feeds into &lt;code&gt;step&lt;&#x2F;code&gt; alongside &lt;code&gt;b1&lt;&#x2F;code&gt; to
+produce the next; and so on down the byte until &lt;code&gt;b7&lt;&#x2F;code&gt; yields the
+result. Nothing is ever overwritten. Each &lt;code&gt;step&lt;&#x2F;code&gt; &lt;strong&gt;returns&lt;&#x2F;strong&gt;&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-returns-1&quot;&gt;&lt;a href=&quot;#fn-returns&quot;&gt;2&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt;
+a fresh CRC value and the previous one is simply never referenced
+again. What in C is a register clobbered inside a loop is here a value
+handed along a chain of pure functions — the same dance, performed
+without a single mutation. This is the “mapping, not procedure” point
+from the primer made concrete: the accumulator doesn’t &lt;em&gt;change&lt;&#x2F;em&gt;, it is
+&lt;em&gt;replaced&lt;&#x2F;em&gt;, eight times, by eight applications of one pure function.&lt;&#x2F;p&gt;
+&lt;p&gt;And because the vector has a length the compiler knows — &lt;code&gt;8&lt;&#x2F;code&gt;, right
+there in &lt;code&gt;Vec 8 Bit&lt;&#x2F;code&gt; — the hardware reading is the one the primer
+promised:&lt;&#x2F;p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;A fold over a fixed-size &lt;code&gt;Vec&lt;&#x2F;code&gt; is a pipeline unrolled in space,
+not a loop unrolled in time.&lt;&#x2F;p&gt;
+&lt;&#x2F;blockquote&gt;
+&lt;p&gt;Clash does not synthesize a counter and a loop. It lays down eight
+copies of &lt;code&gt;step&lt;&#x2F;code&gt;’s logic, the output of each feeding the next, a
+chain of combinational stages that transforms the whole byte
+within a single clock. That chain is a shift register with XOR
+taps — a &lt;strong&gt;linear-feedback shift register&lt;&#x2F;strong&gt;, the textbook circuit
+for a bit-serial CRC — except Clash &lt;em&gt;derived&lt;&#x2F;em&gt; it from a &lt;code&gt;foldl&lt;&#x2F;code&gt;
+instead of asking anyone to draw it. The accumulator is the
+register’s contents, &lt;code&gt;step&lt;&#x2F;code&gt; is the tap logic, and the fold is the
+wiring between the stages.&lt;&#x2F;p&gt;
+&lt;figure class=&quot;lfsr-fig&quot; style=&quot;margin:2rem 0&quot;&gt;
+&lt;svg class=&quot;lfsr&quot; viewBox=&quot;0 0 760 200&quot; role=&quot;img&quot; aria-labelledby=&quot;lfsr-t lfsr-d&quot; xmlns=&quot;http:&#x2F;&#x2F;www.w3.org&#x2F;2000&#x2F;svg&quot;&gt;
+&lt;title id=&quot;lfsr-t&quot;&gt;CRC-8 Galois shift register for polynomial 0x07&lt;&#x2F;title&gt;
+&lt;desc id=&quot;lfsr-d&quot;&gt;Eight one-bit cells, b7 (the MSB) on the left through b0 (the LSB) on the right. Data shifts left. The MSB is XORed with the incoming message bit to form the feedback, which is folded back into the cells at bit positions 2, 1 and 0 — the set bits of the polynomial 0x07 = x squared plus x plus 1.&lt;&#x2F;desc&gt;
+&lt;style&gt;
+.lfsr{max-width:760px;width:100%;height:auto;display:block;margin:0 auto}
+.lfsr .ff{fill:var(--bg-dim);stroke:var(--fg-main);stroke-width:2}
+.lfsr .wire{stroke:var(--fg-main);stroke-width:2;fill:none}
+.lfsr .fb{stroke:var(--accent);stroke-width:2;fill:none}
+.lfsr .gate{fill:var(--bg-main);stroke:var(--accent);stroke-width:2}
+.lfsr .plus{stroke:var(--accent);stroke-width:2}
+.lfsr .node{fill:var(--accent)}
+.lfsr text{font-family:var(--sans)}
+.lfsr .bit{fill:var(--fg-main);font-family:var(--mono);font-size:16px}
+.lfsr .idx{fill:var(--fg-dim);font-size:13px}
+.lfsr .lead{fill:var(--fg-main);font-size:13px}
+.lfsr .tap{fill:var(--code-fg);font-family:var(--mono);font-size:13px}
+.lfsr .ah{fill:var(--fg-main)}
+.lfsr .ahf{fill:var(--accent)}
+&lt;&#x2F;style&gt;
+&lt;defs&gt;
+&lt;marker id=&quot;lfsr-a&quot; markerWidth=&quot;8&quot; markerHeight=&quot;6&quot; refX=&quot;6&quot; refY=&quot;3&quot; orient=&quot;auto&quot;&gt;&lt;path d=&quot;M0,0 L6,3 L0,6 Z&quot; class=&quot;ah&quot;&#x2F;&gt;&lt;&#x2F;marker&gt;
+&lt;marker id=&quot;lfsr-af&quot; markerWidth=&quot;8&quot; markerHeight=&quot;6&quot; refX=&quot;6&quot; refY=&quot;3&quot; orient=&quot;auto&quot;&gt;&lt;path d=&quot;M0,0 L6,3 L0,6 Z&quot; class=&quot;ahf&quot;&#x2F;&gt;&lt;&#x2F;marker&gt;
+&lt;&#x2F;defs&gt;
+&lt;line class=&quot;wire&quot; x1=&quot;133&quot; y1=&quot;144&quot; x2=&quot;101&quot; y2=&quot;144&quot; marker-end=&quot;url(#lfsr-a)&quot;&#x2F;&gt;
+&lt;line class=&quot;wire&quot; x1=&quot;221&quot; y1=&quot;144&quot; x2=&quot;189&quot; y2=&quot;144&quot; marker-end=&quot;url(#lfsr-a)&quot;&#x2F;&gt;
+&lt;line class=&quot;wire&quot; x1=&quot;309&quot; y1=&quot;144&quot; x2=&quot;277&quot; y2=&quot;144&quot; marker-end=&quot;url(#lfsr-a)&quot;&#x2F;&gt;
+&lt;line class=&quot;wire&quot; x1=&quot;397&quot; y1=&quot;144&quot; x2=&quot;365&quot; y2=&quot;144&quot; marker-end=&quot;url(#lfsr-a)&quot;&#x2F;&gt;
+&lt;line class=&quot;wire&quot; x1=&quot;485&quot; y1=&quot;144&quot; x2=&quot;453&quot; y2=&quot;144&quot; marker-end=&quot;url(#lfsr-a)&quot;&#x2F;&gt;
+&lt;line class=&quot;wire&quot; x1=&quot;573&quot; y1=&quot;144&quot; x2=&quot;541&quot; y2=&quot;144&quot; marker-end=&quot;url(#lfsr-a)&quot;&#x2F;&gt;
+&lt;line class=&quot;wire&quot; x1=&quot;661&quot; y1=&quot;144&quot; x2=&quot;629&quot; y2=&quot;144&quot; marker-end=&quot;url(#lfsr-a)&quot;&#x2F;&gt;
+&lt;rect class=&quot;ff&quot; x=&quot;45&quot; y=&quot;116&quot; width=&quot;54&quot; height=&quot;56&quot; rx=&quot;6&quot;&#x2F;&gt;
+&lt;rect class=&quot;ff&quot; x=&quot;133&quot; y=&quot;116&quot; width=&quot;54&quot; height=&quot;56&quot; rx=&quot;6&quot;&#x2F;&gt;
+&lt;rect class=&quot;ff&quot; x=&quot;221&quot; y=&quot;116&quot; width=&quot;54&quot; height=&quot;56&quot; rx=&quot;6&quot;&#x2F;&gt;
+&lt;rect class=&quot;ff&quot; x=&quot;309&quot; y=&quot;116&quot; width=&quot;54&quot; height=&quot;56&quot; rx=&quot;6&quot;&#x2F;&gt;
+&lt;rect class=&quot;ff&quot; x=&quot;397&quot; y=&quot;116&quot; width=&quot;54&quot; height=&quot;56&quot; rx=&quot;6&quot;&#x2F;&gt;
+&lt;rect class=&quot;ff&quot; x=&quot;485&quot; y=&quot;116&quot; width=&quot;54&quot; height=&quot;56&quot; rx=&quot;6&quot;&#x2F;&gt;
+&lt;rect class=&quot;ff&quot; x=&quot;573&quot; y=&quot;116&quot; width=&quot;54&quot; height=&quot;56&quot; rx=&quot;6&quot;&#x2F;&gt;
+&lt;rect class=&quot;ff&quot; x=&quot;661&quot; y=&quot;116&quot; width=&quot;54&quot; height=&quot;56&quot; rx=&quot;6&quot;&#x2F;&gt;
+&lt;text class=&quot;bit&quot; x=&quot;72&quot; y=&quot;150&quot; text-anchor=&quot;middle&quot;&gt;b7&lt;&#x2F;text&gt;
+&lt;text class=&quot;bit&quot; x=&quot;160&quot; y=&quot;150&quot; text-anchor=&quot;middle&quot;&gt;b6&lt;&#x2F;text&gt;
+&lt;text class=&quot;bit&quot; x=&quot;248&quot; y=&quot;150&quot; text-anchor=&quot;middle&quot;&gt;b5&lt;&#x2F;text&gt;
+&lt;text class=&quot;bit&quot; x=&quot;336&quot; y=&quot;150&quot; text-anchor=&quot;middle&quot;&gt;b4&lt;&#x2F;text&gt;
+&lt;text class=&quot;bit&quot; x=&quot;424&quot; y=&quot;150&quot; text-anchor=&quot;middle&quot;&gt;b3&lt;&#x2F;text&gt;
+&lt;text class=&quot;bit&quot; x=&quot;512&quot; y=&quot;150&quot; text-anchor=&quot;middle&quot;&gt;b2&lt;&#x2F;text&gt;
+&lt;text class=&quot;bit&quot; x=&quot;600&quot; y=&quot;150&quot; text-anchor=&quot;middle&quot;&gt;b1&lt;&#x2F;text&gt;
+&lt;text class=&quot;bit&quot; x=&quot;688&quot; y=&quot;150&quot; text-anchor=&quot;middle&quot;&gt;b0&lt;&#x2F;text&gt;
+&lt;text class=&quot;idx&quot; x=&quot;72&quot; y=&quot;190&quot; text-anchor=&quot;middle&quot;&gt;MSB&lt;&#x2F;text&gt;
+&lt;text class=&quot;idx&quot; x=&quot;688&quot; y=&quot;190&quot; text-anchor=&quot;middle&quot;&gt;LSB&lt;&#x2F;text&gt;
+&lt;line class=&quot;fb&quot; x1=&quot;72&quot; y1=&quot;116&quot; x2=&quot;72&quot; y2=&quot;67&quot;&#x2F;&gt;
+&lt;line class=&quot;wire&quot; x1=&quot;14&quot; y1=&quot;56&quot; x2=&quot;60&quot; y2=&quot;56&quot; marker-end=&quot;url(#lfsr-a)&quot;&#x2F;&gt;
+&lt;line class=&quot;fb&quot; x1=&quot;83&quot; y1=&quot;56&quot; x2=&quot;688&quot; y2=&quot;56&quot;&#x2F;&gt;
+&lt;line class=&quot;fb&quot; x1=&quot;556&quot; y1=&quot;56&quot; x2=&quot;556&quot; y2=&quot;133&quot;&#x2F;&gt;
+&lt;line class=&quot;fb&quot; x1=&quot;644&quot; y1=&quot;56&quot; x2=&quot;644&quot; y2=&quot;133&quot;&#x2F;&gt;
+&lt;line class=&quot;fb&quot; x1=&quot;688&quot; y1=&quot;56&quot; x2=&quot;688&quot; y2=&quot;116&quot; marker-end=&quot;url(#lfsr-af)&quot;&#x2F;&gt;
+&lt;circle class=&quot;node&quot; cx=&quot;556&quot; cy=&quot;56&quot; r=&quot;3.5&quot;&#x2F;&gt;
+&lt;circle class=&quot;node&quot; cx=&quot;644&quot; cy=&quot;56&quot; r=&quot;3.5&quot;&#x2F;&gt;
+&lt;circle class=&quot;gate&quot; cx=&quot;72&quot; cy=&quot;56&quot; r=&quot;11&quot;&#x2F;&gt;
+&lt;line class=&quot;plus&quot; x1=&quot;66&quot; y1=&quot;56&quot; x2=&quot;78&quot; y2=&quot;56&quot;&#x2F;&gt;
+&lt;line class=&quot;plus&quot; x1=&quot;72&quot; y1=&quot;50&quot; x2=&quot;72&quot; y2=&quot;62&quot;&#x2F;&gt;
+&lt;circle class=&quot;gate&quot; cx=&quot;556&quot; cy=&quot;144&quot; r=&quot;11&quot;&#x2F;&gt;
+&lt;line class=&quot;plus&quot; x1=&quot;550&quot; y1=&quot;144&quot; x2=&quot;562&quot; y2=&quot;144&quot;&#x2F;&gt;
+&lt;line class=&quot;plus&quot; x1=&quot;556&quot; y1=&quot;138&quot; x2=&quot;556&quot; y2=&quot;150&quot;&#x2F;&gt;
+&lt;circle class=&quot;gate&quot; cx=&quot;644&quot; cy=&quot;144&quot; r=&quot;11&quot;&#x2F;&gt;
+&lt;line class=&quot;plus&quot; x1=&quot;638&quot; y1=&quot;144&quot; x2=&quot;650&quot; y2=&quot;144&quot;&#x2F;&gt;
+&lt;line class=&quot;plus&quot; x1=&quot;644&quot; y1=&quot;138&quot; x2=&quot;644&quot; y2=&quot;150&quot;&#x2F;&gt;
+&lt;text class=&quot;lead&quot; x=&quot;14&quot; y=&quot;46&quot;&gt;message bit&lt;&#x2F;text&gt;
+&lt;text class=&quot;lead&quot; x=&quot;385&quot; y=&quot;44&quot; text-anchor=&quot;middle&quot;&gt;feedback = MSB ⊕ message bit&lt;&#x2F;text&gt;
+&lt;text class=&quot;tap&quot; x=&quot;562&quot; y=&quot;80&quot;&gt;x²&lt;&#x2F;text&gt;
+&lt;text class=&quot;tap&quot; x=&quot;650&quot; y=&quot;80&quot;&gt;x¹&lt;&#x2F;text&gt;
+&lt;text class=&quot;tap&quot; x=&quot;694&quot; y=&quot;80&quot;&gt;x⁰&lt;&#x2F;text&gt;
+&lt;&#x2F;svg&gt;
+&lt;figcaption style=&quot;text-align:center;color:var(--fg-dim);font-size:.9rem;margin-top:.85rem;font-family:var(--sans)&quot;&gt;The CRC-8 as a Galois shift register (polynomial &lt;code&gt;0x07&lt;&#x2F;code&gt;). Each step shifts the byte left; the MSB is XORed with the next message bit to form the feedback, which is folded back in at the &lt;code&gt;x²&lt;&#x2F;code&gt;, &lt;code&gt;x¹&lt;&#x2F;code&gt; and &lt;code&gt;x⁰&lt;&#x2F;code&gt; taps — the set bits of &lt;code&gt;0x07&lt;&#x2F;code&gt;. &lt;code&gt;crc8Update&lt;&#x2F;code&gt; &lt;em&gt;is&lt;&#x2F;em&gt; this circuit with the flip-flops replaced by wires: Clash unrolls the &lt;code&gt;foldl&lt;&#x2F;code&gt; into eight combinational copies, one per bit, so a whole byte is absorbed in a single clock.&lt;&#x2F;figcaption&gt;
+&lt;&#x2F;figure&gt;
+&lt;h2 id=&quot;step-one-bit-at-a-time&quot;&gt;&lt;code&gt;step&lt;&#x2F;code&gt;: one bit at a time&lt;&#x2F;h2&gt;
+&lt;p&gt;Which leaves the heart of the module, the private helper the
+export list keeps to itself:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;step&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; ::&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; BitVector&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 8&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; Bit&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; BitVector&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 8&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;step c inBit&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;  |&lt;&#x2F;span&gt;&lt;span&gt; feedbackBit &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;==&lt;&#x2F;span&gt;&lt;span&gt; high &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;=&lt;&#x2F;span&gt;&lt;span&gt; shifted &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;`&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;xor&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;`&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 0x07&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;  |&lt;&#x2F;span&gt;&lt;span&gt; otherwise &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;=&lt;&#x2F;span&gt;&lt;span&gt; shifted&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt; where&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  feedbackBit &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;=&lt;&#x2F;span&gt;&lt;span&gt; msb c &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;`&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;xor&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;`&lt;&#x2F;span&gt;&lt;span&gt; inBit&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  shifted &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;=&lt;&#x2F;span&gt;&lt;span&gt; c &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;`&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;shiftL&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;`&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 1&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;The type tells the whole story of what &lt;code&gt;step&lt;&#x2F;code&gt; is &lt;em&gt;for&lt;&#x2F;em&gt;. It takes a
+running CRC and a &lt;strong&gt;single&lt;&#x2F;strong&gt; &lt;code&gt;Bit&lt;&#x2F;code&gt; — not a byte, one bit — and
+returns the next running CRC. That is the entire kernel of the
+design; everything else in the file is &lt;code&gt;foldl&lt;&#x2F;code&gt; invoking this
+function eight times per byte. Read &lt;code&gt;crc8Update&lt;&#x2F;code&gt; and &lt;code&gt;step&lt;&#x2F;code&gt;
+together and the division of labour is clean: &lt;code&gt;step&lt;&#x2F;code&gt; knows how to
+absorb one bit, and the fold knows how to do it eight times.&lt;&#x2F;p&gt;
+&lt;p&gt;Take the two &lt;code&gt;where&lt;&#x2F;code&gt; bindings first, since the guards are written
+in terms of them.&lt;&#x2F;p&gt;
+&lt;p&gt;The binding &lt;code&gt;shifted = c `shiftL` 1&lt;&#x2F;code&gt; slides the CRC one place
+toward the most significant bit: a zero enters at the bottom, and
+the top bit drops off the end and is gone. In the language of the
+previous section, shifting left by one is &lt;strong&gt;multiplying the
+polynomial by $x$&lt;&#x2F;strong&gt;. The bit that just dropped off is the
+coefficient that &lt;em&gt;would have&lt;&#x2F;em&gt; become the $x^8$ term — the exact
+term $G$ exists to cancel.&lt;&#x2F;p&gt;
+&lt;p&gt;The other binding, &lt;code&gt;feedbackBit = msb c `xor` inBit&lt;&#x2F;code&gt;, takes the
+CRC’s current top bit (&lt;code&gt;msb c&lt;&#x2F;code&gt; reads out the most significant
+&lt;code&gt;Bit&lt;&#x2F;code&gt;) and XORs in the incoming message bit. This is the point
+where the message actually enters the division.&lt;&#x2F;p&gt;
+&lt;p&gt;Now the guards. The &lt;code&gt;|&lt;&#x2F;code&gt; is a &lt;strong&gt;guard&lt;&#x2F;strong&gt;: a list of boolean tests,
+each paired with a result, where the first test that succeeds wins
+and &lt;code&gt;otherwise&lt;&#x2F;code&gt; is the catch-all that is always true. So the
+function reads: if &lt;code&gt;feedbackBit == high&lt;&#x2F;code&gt; — &lt;code&gt;high&lt;&#x2F;code&gt; being the &lt;code&gt;Bit&lt;&#x2F;code&gt;
+whose value is one — the answer is &lt;code&gt;shifted `xor` 0x07&lt;&#x2F;code&gt;;
+otherwise the answer is just &lt;code&gt;shifted&lt;&#x2F;code&gt;.&lt;&#x2F;p&gt;
+&lt;p&gt;Here is why that is division and not sleight of hand. Multiplying
+by $x$ can push the polynomial up to degree eight, one bit wider
+than the register holds. When the coefficient of that
+overflow — &lt;code&gt;feedbackBit&lt;&#x2F;code&gt; — is one, the value has grown “too big” and
+must be brought back into range by subtracting $G$. Subtracting $G$
+means XORing &lt;code&gt;0x107&lt;&#x2F;code&gt;; but the $x^8$ bit already fell off the top in
+the shift, so the only bits left to cancel are the low eight,
+&lt;code&gt;0x07&lt;&#x2F;code&gt;. When &lt;code&gt;feedbackBit&lt;&#x2F;code&gt; is zero there was no overflow and there
+is nothing to subtract. That is the complete rule the five lines
+encode:&lt;&#x2F;p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Multiply by $x$; if the bit that fell off says so, XOR the
+polynomial back in to reduce modulo $G$.&lt;&#x2F;p&gt;
+&lt;&#x2F;blockquote&gt;
+&lt;p&gt;We can watch it produce the very number the algebra promised. Fold
+&lt;code&gt;step&lt;&#x2F;code&gt; from &lt;code&gt;crc = 0&lt;&#x2F;code&gt; across the byte &lt;code&gt;0x01&lt;&#x2F;code&gt;, whose bits MSB-first
+are seven zeros and then a one:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;On each of the first seven bits, &lt;code&gt;msb c&lt;&#x2F;code&gt; is &lt;code&gt;0&lt;&#x2F;code&gt; and &lt;code&gt;inBit&lt;&#x2F;code&gt; is
+&lt;code&gt;0&lt;&#x2F;code&gt;, so &lt;code&gt;feedbackBit&lt;&#x2F;code&gt; is &lt;code&gt;0&lt;&#x2F;code&gt;; &lt;code&gt;shifted&lt;&#x2F;code&gt; is &lt;code&gt;0&lt;&#x2F;code&gt; shifted, still
+&lt;code&gt;0&lt;&#x2F;code&gt;. The accumulator never leaves zero.&lt;&#x2F;li&gt;
+&lt;li&gt;On the final bit, &lt;code&gt;inBit&lt;&#x2F;code&gt; is &lt;code&gt;1&lt;&#x2F;code&gt; while &lt;code&gt;msb c&lt;&#x2F;code&gt; is still &lt;code&gt;0&lt;&#x2F;code&gt;, so
+&lt;code&gt;feedbackBit&lt;&#x2F;code&gt; is &lt;code&gt;0 xor 1 = 1&lt;&#x2F;code&gt;. &lt;code&gt;shifted&lt;&#x2F;code&gt; is
+&lt;code&gt;0 `shiftL` 1 = 0&lt;&#x2F;code&gt;, the guard fires, and the result is
+&lt;code&gt;0 xor 0x07 = 0x07&lt;&#x2F;code&gt;.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;The fold ends at &lt;code&gt;0x07&lt;&#x2F;code&gt; — exactly the $x^8 \bmod G = x^2 + x + 1$
+we worked out by hand. The shifts-and-XORs and the polynomial
+division are not two implementations that happen to agree; they
+are one statement written twice. Fold that per-bit rule across all
+eight bits and the accumulator becomes
+$(\text{byte} \cdot x^8) \bmod G$, the byte’s contribution to the
+running remainder; chain &lt;code&gt;crc8Update&lt;&#x2F;code&gt; across a whole message,
+seeding from &lt;code&gt;0&lt;&#x2F;code&gt; and feeding each result back as the next &lt;code&gt;crc&lt;&#x2F;code&gt;,
+and you have divided the entire message by $G$, one byte at a
+time.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;the-tests&quot;&gt;The tests&lt;&#x2F;h2&gt;
+&lt;p&gt;The module is twenty-eight lines. Its test file is shorter still,
+and the two of them together make a quiet point worth pausing on:
+a claim this small can be pinned down &lt;em&gt;completely&lt;&#x2F;em&gt;, from more than
+one direction. The tests come in two flavours that answer two
+different questions.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;crc8&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; ::&lt;&#x2F;span&gt;&lt;span&gt; [&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt;BitVector&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 8&lt;&#x2F;span&gt;&lt;span&gt;]&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt; BitVector&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 8&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;crc8 &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;=&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt; L.&lt;&#x2F;span&gt;&lt;span&gt;foldl&amp;#39; crc8Update &lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;0&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;tests &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;=&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  testGroup &lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;Crc&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    [&lt;&#x2F;span&gt;&lt;span&gt; testCase &lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;crc8Update 0 0x01 == 0x07&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; $&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        crc8Update &lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;0&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 0x01&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; @?=&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 0x07&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    ,&lt;&#x2F;span&gt;&lt;span&gt; testCase &lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;CRC-8&#x2F;SMBUS check &lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-character&quot;&gt;\&amp;quot;&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;123456789&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-character&quot;&gt;\&amp;quot;&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; == 0xF4&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; $&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        crc8 &lt;&#x2F;span&gt;&lt;span&gt;[&lt;&#x2F;span&gt;&lt;span&gt;fromIntegral &lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;fromEnum c&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; |&lt;&#x2F;span&gt;&lt;span&gt; c &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;&amp;lt;-&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt; &amp;quot;&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;123456789&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;]&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; @?=&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 0xF4&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    ,&lt;&#x2F;span&gt;&lt;span&gt; testProperty &lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;residue law&lt;&#x2F;span&gt;&lt;span class=&quot;z-string&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; $&lt;&#x2F;span&gt;&lt;span&gt; property &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;$&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; do&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        msg &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;&amp;lt;-&lt;&#x2F;span&gt;&lt;span&gt; forAll &lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt;Gen.&lt;&#x2F;span&gt;&lt;span&gt;list &lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt;Range.&lt;&#x2F;span&gt;&lt;span&gt;linear &lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;0&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 32&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt; genByte&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        crc8 &lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;msg &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;&amp;lt;&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt; [&lt;&#x2F;span&gt;&lt;span&gt;crc8 msg&lt;&#x2F;span&gt;&lt;span&gt;]&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; ===&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 0&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    ]&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;First the helper. &lt;code&gt;crc8Update&lt;&#x2F;code&gt; works one byte at a time, but a
+message is a &lt;em&gt;list&lt;&#x2F;em&gt; of bytes, so the tests define &lt;code&gt;crc8 = L.foldl&#x27; crc8Update 0&lt;&#x2F;code&gt; — fold the per-byte update across the whole list,
+seeding from the initial value &lt;code&gt;0&lt;&#x2F;code&gt;. This is the second fold in the
+story, and it sits one level up from the first: the source folds
+&lt;em&gt;bits&lt;&#x2F;em&gt; into a byte’s CRC, the test folds &lt;em&gt;bytes&lt;&#x2F;em&gt; into a message’s
+CRC. Same &lt;code&gt;foldl&lt;&#x2F;code&gt; idea, twice, at two scales.&lt;&#x2F;p&gt;
+&lt;p&gt;A small Clash wrinkle hides in that &lt;code&gt;L.&lt;&#x2F;code&gt;. Because &lt;code&gt;import Clash.Prelude&lt;&#x2F;code&gt; shadowed the list functions with &lt;code&gt;Vec&lt;&#x2F;code&gt; ones back at
+the top of the module, the plain-list fold has to be summoned
+from &lt;code&gt;Data.List&lt;&#x2F;code&gt; under the qualifier &lt;code&gt;L&lt;&#x2F;code&gt;, hence &lt;code&gt;L.foldl&#x27;&lt;&#x2F;code&gt;. The
+note at the bottom of the real test file is flagging the same shadow
+for &lt;code&gt;map&lt;&#x2F;code&gt; and &lt;code&gt;++&lt;&#x2F;code&gt;, which is why the message is stitched together
+with a list comprehension and &lt;code&gt;&amp;lt;&amp;gt;&lt;&#x2F;code&gt; rather than the names you might
+expect. That one import casts its shadow all the way into the
+tests.&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;the-oracle-tests&quot;&gt;The oracle tests&lt;&#x2F;h3&gt;
+&lt;p&gt;The first two entries are &lt;strong&gt;HUnit&lt;&#x2F;strong&gt; cases — plain, hand-checked
+assertions of the shape “this exact input yields this exact
+output,” where &lt;code&gt;@?=&lt;&#x2F;code&gt; reads “the actual value should equal the
+expected one.”&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;code&gt;crc8Update 0 0x01 @?= 0x07&lt;&#x2F;code&gt; is the smallest witness in the whole
+project. We have now derived it &lt;em&gt;twice&lt;&#x2F;em&gt; — once as $x^8 \bmod G$ with
+pencil and polynomials, once by tracing the fold through eight
+bits — and here it is bolted to the workbench so it can never
+silently change. If some future refactor ever breaks the
+multiply-by-$x$-then-reduce rule, this one-liner is the first thing
+to go red.&lt;&#x2F;p&gt;
+&lt;p&gt;The second case checks a number that is not the author’s at all —
+it is the &lt;strong&gt;world’s&lt;&#x2F;strong&gt;. &lt;code&gt;CRC-8&#x2F;SMBUS&lt;&#x2F;code&gt; is a catalogued CRC, and every
+catalogued CRC ships with a standard &lt;em&gt;check value&lt;&#x2F;em&gt;: the CRC of the
+nine ASCII bytes &lt;code&gt;&quot;123456789&quot;&lt;&#x2F;code&gt;. For this polynomial and these
+parameters that value is &lt;code&gt;0xF4&lt;&#x2F;code&gt;, the same &lt;code&gt;0xF4&lt;&#x2F;code&gt; printed in
+reference tables and reproduced by independent implementations in
+every language. Asserting it turns the test suite into a cross-check
+against the entire ecosystem: if Tamal agrees with the catalog on
+&lt;code&gt;&quot;123456789&quot;&lt;&#x2F;code&gt;, then it is computing the CRC it &lt;em&gt;claims&lt;&#x2F;em&gt; to be — the
+one an eSPI or SMBus partner on the other end of the wire will also
+be computing — and not some subtly different cousin. These two are
+&lt;strong&gt;oracle tests&lt;&#x2F;strong&gt;: known questions with known answers, one derived
+in-house, one borrowed from the standard.&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;the-property-test&quot;&gt;The property test&lt;&#x2F;h3&gt;
+&lt;p&gt;The third entry is a different animal. &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;hedgehog.qa&quot;&gt;Hedgehog&lt;&#x2F;a&gt; is a
+property-based testing library: instead of one example, you state a
+&lt;em&gt;law&lt;&#x2F;em&gt; that must hold for &lt;em&gt;every&lt;&#x2F;em&gt; input, and the library manufactures
+hundreds of random inputs trying to break it. The law here is the
+one the whole block exists to satisfy:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;crc8 &lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;msg &lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;&amp;lt;&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt; [&lt;&#x2F;span&gt;&lt;span&gt;crc8 msg&lt;&#x2F;span&gt;&lt;span&gt;]&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; ===&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 0&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Read it aloud: take any message &lt;code&gt;msg&lt;&#x2F;code&gt;, compute its CRC, append that
+CRC byte to the end of the message, and run the CRC over the whole
+extended thing — and you get zero. The line above it, &lt;code&gt;forAll (Gen.list (Range.linear 0 32) genByte)&lt;&#x2F;code&gt;, is Hedgehog drawing &lt;code&gt;msg&lt;&#x2F;code&gt;
+as a random list of up to thirty-two random bytes, with &lt;code&gt;genByte&lt;&#x2F;code&gt;
+(from the shared &lt;code&gt;Test.Gen&lt;&#x2F;code&gt;) producing fully-defined bytes. Every
+run of the suite fires this across a fresh shower of messages. And
+on the day it &lt;em&gt;does&lt;&#x2F;em&gt; fail, Hedgehog does the thing that earns its
+keep: it &lt;strong&gt;shrinks&lt;&#x2F;strong&gt; the counterexample, paring a giant random
+failure down to the smallest message that still breaks the law, and
+hands you that minimal case instead of a haystack.&lt;&#x2F;p&gt;
+&lt;p&gt;Why is this the &lt;em&gt;right&lt;&#x2F;em&gt; property — the single law worth elevating
+above all the specific numbers? For two reasons, one practical and
+one that finally cashes in the polynomial setup.&lt;&#x2F;p&gt;
+&lt;p&gt;The practical reason is that it is exactly how Tamal &lt;em&gt;uses&lt;&#x2F;em&gt; this
+CRC on the bus. The &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-introducing&#x2F;&quot;&gt;introduction post&lt;&#x2F;a&gt;’s
+&lt;code&gt;peripheral_io_read.s&lt;&#x2F;code&gt; ends its response phase by reading the
+trailing CRC byte and checking that the running residue has driven
+to zero — &lt;code&gt;rdsr t2, CRC&lt;&#x2F;code&gt; followed by &lt;code&gt;bnez t2, bad_crc&lt;&#x2F;code&gt;. A good
+packet followed by its CRC leaves a residue of zero; anything else
+is a corrupted packet. The property test is that runtime check,
+lifted out of the eSPI program and asserted directly against the
+pure function. It tests the law the hardware actually leans on.&lt;&#x2F;p&gt;
+&lt;p&gt;The mathematical reason is the payoff for all the polynomials.
+Appending the CRC byte $C$ to the message $M$ builds the number
+$M \cdot x^8 + C$ — the message shifted up eight bits to make room,
+with $C$ dropped into the low byte. But $C$ was &lt;em&gt;defined&lt;&#x2F;em&gt; as the
+remainder of $M \cdot x^8$ divided by $G$, and adding a remainder
+back onto its own dividend lands you on a clean multiple of the
+divisor. (Adding and subtracting are the same XOR here, which is
+why &lt;em&gt;appending&lt;&#x2F;em&gt; $C$ and &lt;em&gt;subtracting off the remainder&lt;&#x2F;em&gt; come to the
+same thing.) So $M \cdot x^8 + C$ is divisible by $G$ with nothing
+left over — a valid codeword — and running the CRC over it is
+dividing a multiple of $G$ by $G$:&lt;&#x2F;p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;The residue is zero because a message-plus-CRC is, by
+construction, a multiple of the generator polynomial.&lt;&#x2F;p&gt;
+&lt;&#x2F;blockquote&gt;
+&lt;p&gt;There is one subtlety the shift handles for free. Running the CRC
+over the codeword multiplies it by a further $x^8$ — the fold’s own
+headroom — before reducing. But that changes nothing in the
+direction we care about: the codeword is already a multiple of $G$,
+and $x^8$ times a multiple of $G$ is still a multiple of $G$, so the
+remainder is still zero. (The extra factor is harmless the other
+way too: because $G$ ends in a one — its constant term is $1$ —
+multiplying by $x$ is reversible modulo $G$, so the headroom can
+never manufacture a false zero out of a &lt;em&gt;bad&lt;&#x2F;em&gt; packet.) The property
+holds for every message because the algebra leaves it no other
+option, and Hedgehog’s hundreds of random trials stand guard over
+the day a careless edit breaks that algebra.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-we-read&quot;&gt;What we read&lt;&#x2F;h2&gt;
+&lt;p&gt;Twenty-eight lines, one exported name, and underneath it a complete
+CRC: a module wall with a single door, a prelude swap that turns the
+file into a circuit, a curried type written fold-shaped on purpose,
+a left fold that Clash unrolls into a linear-feedback shift
+register, and a five-line &lt;code&gt;step&lt;&#x2F;code&gt; that is polynomial division
+disguised as shift-and-XOR. Beside it, a test file that stakes the
+whole thing down from three sides at once — a witness we derived by
+hand, the world’s catalogued check value, and the residue law the
+eSPI engine trusts at runtime.&lt;&#x2F;p&gt;
+&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;tamal-haskell-primer&#x2F;&quot;&gt;primer&lt;&#x2F;a&gt; promised that the syntax would stop standing between
+you and the hardware. This is the first block where that promise
+gets cashed: there is nothing left in these lines that is &lt;em&gt;merely&lt;&#x2F;em&gt;
+Haskell — every one of them is a statement about gates, or about the
+algebra those gates carry out. Next in the series we take on a block
+with a clock inside it — the UART — where &lt;code&gt;Signal&lt;&#x2F;code&gt; stops being a
+footnote and the &lt;code&gt;mealy&lt;&#x2F;code&gt; from the primer finally earns its perch at
+the top of a module.&lt;&#x2F;p&gt;
+&lt;section class=&quot;footnotes&quot;&gt;
+&lt;ol class=&quot;footnotes-list&quot;&gt;
+&lt;li id=&quot;fn-fold&quot;&gt;
+&lt;p&gt;A &lt;strong&gt;fold&lt;&#x2F;strong&gt; — also called &lt;code&gt;reduce&lt;&#x2F;code&gt;, &lt;code&gt;accumulate&lt;&#x2F;code&gt;, &lt;code&gt;inject&lt;&#x2F;code&gt;, or
+&lt;code&gt;aggregate&lt;&#x2F;code&gt;, depending on the language — is the higher-order function
+that collapses a whole sequence into a single value by threading an
+accumulator through it: start from a seed, then repeatedly apply a
+two-argument combining function to “the result so far” and “the next
+element.” It comes handed: a &lt;em&gt;left&lt;&#x2F;em&gt; fold (&lt;code&gt;foldl&lt;&#x2F;code&gt;) brackets from the
+left and walks front to back, a &lt;em&gt;right&lt;&#x2F;em&gt; fold (&lt;code&gt;foldr&lt;&#x2F;code&gt;) from the other
+end. Fold is bread-and-butter in the languages descended from the
+lambda calculus — Lisp and Scheme, the ML family and OCaml, Haskell —
+where it sits beside &lt;code&gt;map&lt;&#x2F;code&gt;, &lt;code&gt;filter&lt;&#x2F;code&gt;, &lt;code&gt;scan&lt;&#x2F;code&gt;, and &lt;code&gt;zip&lt;&#x2F;code&gt; in a shared
+vocabulary of combinators; the &lt;em&gt;array&lt;&#x2F;em&gt; languages (APL, J, BQN, Uiua)
+know it just as intimately, usually as a single-glyph primitive.
+Imperative languages have long had it too, under a scatter of
+names — Python’s &lt;code&gt;functools.reduce&lt;&#x2F;code&gt;, C++’s &lt;code&gt;std::accumulate&lt;&#x2F;code&gt;, Ruby’s
+&lt;code&gt;inject&lt;&#x2F;code&gt;, JavaScript’s &lt;code&gt;reduce&lt;&#x2F;code&gt;, C#’s LINQ &lt;code&gt;Aggregate&lt;&#x2F;code&gt; — but have
+tended to reach for an explicit loop-with-an-accumulator instead;
+Rust is arguably the first mainstream systems language to make &lt;code&gt;fold&lt;&#x2F;code&gt;
+(and &lt;code&gt;reduce&lt;&#x2F;code&gt;) a reached-for, idiomatic tool rather than a
+functional-programming curiosity, largely by building it into the
+iterator adaptors everyone already uses. &lt;a href=&quot;#fr-fold-1&quot;&gt;↩&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;li id=&quot;fn-returns&quot;&gt;
+&lt;p&gt;Technically Haskell functions never &lt;strong&gt;return&lt;&#x2F;strong&gt;, rather
+they &lt;strong&gt;evaluate to&lt;&#x2F;strong&gt; a value. &lt;a href=&quot;#fr-returns-1&quot;&gt;↩&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;&#x2F;section&gt;
+</content>
+  </entry>
+  
+</feed>

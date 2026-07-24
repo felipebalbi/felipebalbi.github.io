@@ -1,0 +1,294 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+  <title>Felipe Balbi</title>
+  <subtitle>Notes on embedded systems, Rust, and the craft of writing software.</subtitle>
+  <link href="https://balbi.sh/tags/mcxa/atom.xml" rel="self" type="application/atom+xml"/>
+  <link href="https://balbi.sh"/>
+  <generator uri="https://www.getzola.org/">Zola</generator>
+  <updated>2026-06-28T09:00:00+00:00</updated>
+  <id>https://balbi.sh/tags/mcxa/atom.xml</id>
+  
+  <entry xml:lang="en">
+    <title>From &#x27;it works&#x27; to &#x27;I trust it&#x27;: two torture loops on a NOR driver</title>
+    <published>2026-06-28T09:00:00+00:00</published>
+    <updated>2026-06-28T09:00:00+00:00</updated>
+    <author><name>Felipe Balbi</name></author>
+    <link rel="alternate" href="https://balbi.sh/posts/flexspi-mcxa-hardening/" type="text/html"/>
+    <id>https://balbi.sh/posts/flexspi-mcxa-hardening/</id>
+    <summary type="html">&lt;p&gt;The FlexSPI NOR driver for the NXP MCXA5xx already worked. The
+blocking self-test was green, the examples ran, I could erase a
+sector, program a page, read it back, and watch the same bytes come
+out of the memory-mapped window. By the usual bar for “the driver
+works,” it worked.&lt;&#x2F;p&gt;
+&lt;p&gt;That bar is too low. A driver that passes its own happy-path
+self-test has demonstrated exactly one thing: that it can succeed when
+nothing goes wrong. It has said nothing about what happens when an
+async operation gets cancelled half a microsecond into a command
+shift, or when a caller does a partial-page write at an address the
+controller quietly dislikes. The distance between “it works” and “I
+trust it” is made entirely of those questions, and you don’t answer
+them by running the happy path again.&lt;&#x2F;p&gt;</summary>
+    
+    <content type="html">&lt;p&gt;The FlexSPI NOR driver for the NXP MCXA5xx already worked. The
+blocking self-test was green, the examples ran, I could erase a
+sector, program a page, read it back, and watch the same bytes come
+out of the memory-mapped window. By the usual bar for “the driver
+works,” it worked.&lt;&#x2F;p&gt;
+&lt;p&gt;That bar is too low. A driver that passes its own happy-path
+self-test has demonstrated exactly one thing: that it can succeed when
+nothing goes wrong. It has said nothing about what happens when an
+async operation gets cancelled half a microsecond into a command
+shift, or when a caller does a partial-page write at an address the
+controller quietly dislikes. The distance between “it works” and “I
+trust it” is made entirely of those questions, and you don’t answer
+them by running the happy path again.&lt;&#x2F;p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;&#x2F;span&gt;
+&lt;p&gt;You answer them by building something whose only job is to be nasty to
+the driver and to notice when the driver flinches. This post is about
+two such things — a pair of self-checking soak rigs for the
+&lt;code&gt;embassy-mcxa&lt;&#x2F;code&gt; FlexSPI driver — and the two bugs they caught on the
+way. The work landed in &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;embassy-rs&#x2F;embassy&#x2F;pull&#x2F;6389&quot;&gt;embassy-rs&#x2F;embassy#6389&lt;&#x2F;a&gt;, validated on an
+FRDM-MCXA577 with its on-board Winbond W25Q64 (8 MiB), and it builds on
+the register-level fixes (&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;embassy-rs&#x2F;embassy&#x2F;pull&#x2F;6386&quot;&gt;AHBCR&lt;&#x2F;a&gt;, &lt;code&gt;DLLCR&lt;&#x2F;code&gt;, &lt;code&gt;FLSHCR2&lt;&#x2F;code&gt;) from
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;embassy-rs&#x2F;embassy&#x2F;pull&#x2F;6386&quot;&gt;#6386&lt;&#x2F;a&gt; — more on how &lt;em&gt;those&lt;&#x2F;em&gt; got found in a moment, because it
+was the same rig.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-a-torture-loop-has-to-be&quot;&gt;What a torture loop has to be&lt;&#x2F;h2&gt;
+&lt;p&gt;A soak test that only loops the happy path faster is not a soak test;
+it’s a slow way to confirm what you already believed. To actually buy
+trust, the loop has to have a few properties, and getting those
+properties right was most of the work.&lt;&#x2F;p&gt;
+&lt;p&gt;It has to be &lt;strong&gt;adversarial&lt;&#x2F;strong&gt;: every round erases a fresh window,
+programs it with randomly-sized, randomly-placed sub-page writes and
+full pages, and then reads it back through &lt;em&gt;two independent paths&lt;&#x2F;em&gt; —
+the IP command path and the memory-mapped AHB window — asserting they
+agree with each other and with the pattern it wrote. A bug that lives
+in only one path can’t hide when the other path is watching.&lt;&#x2F;p&gt;
+&lt;p&gt;It has to be &lt;strong&gt;reproducible&lt;&#x2F;strong&gt;: every round is driven by a logged
+xorshift seed, so a failure three hours in isn’t a ghost — it’s a seed
+I can replay from a clean boot.&lt;&#x2F;p&gt;
+&lt;p&gt;It has to &lt;strong&gt;protect itself from itself&lt;&#x2F;strong&gt;: a torture loop that programs
+random addresses is one off-by-one away from scribbling on the sector
+it’s verifying, or wearing a single sector to death. So the window
+rotates by a prime stride to spread wear, a per-sector erase budget
+caps the damage, a wall-clock limit ends the run, and a &lt;strong&gt;never-erased
+canary sector&lt;&#x2F;strong&gt; sits off to the side. If a wild write ever lands in
+the canary, the canary stops matching, and I learn that the driver
+wrote somewhere it was never told to.&lt;&#x2F;p&gt;
+&lt;p&gt;Stripped of the bookkeeping, each round looks like this:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;loop&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;    let&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; seed&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; rng&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;next&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt;          &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; logged, so any failure replays&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;    let&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; window&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; next_window&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;seed&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; prime-stride rotation, wear-spread&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;    erase&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;window&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;?&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;    verify_erased&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;window&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;?&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;    for&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; write&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; in&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; random_writes&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;seed&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; window&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;        program&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;write&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;addr&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; write&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;bytes&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;?&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; The load-bearing assertion: two independent read paths must&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; agree with each other and with what we wrote.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;    assert_eq!&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;read_ip&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;window&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;   expected&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;seed&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;    assert_eq!&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;read_mmap&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;window&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; expected&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;seed&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;    assert_canary_intact&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;?&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt;        &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; nobody wrote where they shouldn&amp;#39;t&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;    if&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; elapsed&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt; &amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; LIMIT&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; break&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;span&gt; }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;The first time I pointed this at the driver, it didn’t get to a clean
+round. The IP path and the memory-mapped path disagreed, which is how
+the &lt;code&gt;AHBCR.AFLASHBASE&lt;&#x2F;code&gt; addressing bug surfaced — I fixed that
+separately in &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;embassy-rs&#x2F;embassy&#x2F;pull&#x2F;6386&quot;&gt;#6386&lt;&#x2F;a&gt; before any of the rest of this made
+sense. With that fixed, the rig got much further, and then found
+something stranger.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-it-found-first-the-byte-before-the-write-keeps-going-to-zero&quot;&gt;What it found first: the byte before the write keeps going to zero&lt;&#x2F;h2&gt;
+&lt;p&gt;The failure was small and specific, which is the worst kind. Most
+rounds were clean. But on rounds where the random writes happened to
+place one sub-page write starting at an address with &lt;code&gt;addr % 8&lt;&#x2F;code&gt; of 5 or
+7, and &lt;em&gt;another&lt;&#x2F;em&gt; write followed in the same page, the byte immediately
+&lt;em&gt;before&lt;&#x2F;em&gt; the second write’s start address came back as &lt;code&gt;0x00&lt;&#x2F;code&gt;. Not the
+bytes I wrote — those were fine. The byte &lt;em&gt;before&lt;&#x2F;em&gt; them, which I hadn’t
+touched in that operation at all.&lt;&#x2F;p&gt;
+&lt;p&gt;My first assumption was that I had a bug in the FIFO-fill loop: an
+off-by-one in how the driver packs the caller’s buffer into the
+controller’s TX FIFO. I went and read that loop very carefully, then
+did the thing I should have done first and diffed it, byte for byte,
+against NXP’s &lt;code&gt;FLEXSPI_WriteBlocking&lt;&#x2F;code&gt; in their SDK. It was identical.
+The driver was filling the FIFO exactly the way the vendor does.&lt;&#x2F;p&gt;
+&lt;p&gt;That reframed the whole problem. If the loop is byte-identical to the
+reference and the reference is trusted, the corruption isn’t in the
+loop — it’s in the controller’s handling of an unaligned write boundary
+between two consecutive writes in a page. A single write of any length,
+at any alignment, is fine. It’s specifically the seam between two
+sub-page writes when the second one starts unaligned that the IP
+mangles. This is a controller alignment quirk, and no amount of
+re-reading my code was going to fix a property of the silicon.&lt;&#x2F;p&gt;
+&lt;p&gt;So the fix isn’t to make the unaligned write work — it’s to make the
+unaligned write &lt;em&gt;impossible to ask for&lt;&#x2F;em&gt;, loudly, instead of letting it
+silently corrupt an adjacent byte. &lt;code&gt;page_program&lt;&#x2F;code&gt; now enforces a
+write-size contract: the start address and the length must both be
+8-byte aligned, and the write must stay within a single page. Anything
+else returns an error before a single byte reaches the flash.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; The 8 is a property of the FlexSPI IP&#x2F;DMA FIFO window,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; not of the flash chip. Name it so nobody &amp;quot;optimizes&amp;quot; it away.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;const&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; WRITE_GRANULARITY&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; usize&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 8&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;fn&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; check_program&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;addr&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; u32&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; len&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; usize&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; flash_size&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; u32&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Result&lt;&#x2F;span&gt;&lt;span&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; IoError&lt;&#x2F;span&gt;&lt;span&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;    if&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; addr&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; as&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; usize&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; %&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; WRITE_GRANULARITY&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; !=&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 0&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; |&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;|&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; len&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; %&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; WRITE_GRANULARITY&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; !=&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 0&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;        return&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Err&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;IoError&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;Misaligned&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;    match&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; addr&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;checked_add&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;len&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; as&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; u32&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;        Some&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;end&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; if&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; end&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; &amp;lt;=&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; flash_size&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;span&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;        _&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; return&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Err&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;IoError&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;OutOfBounds&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; ...plus the single-page check...&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;    Ok&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Two things made this an easy call rather than a regression. First, it’s
+the exact granularity the DMA write path already required (&lt;code&gt;len % 8 == 0&lt;&#x2F;code&gt;), so the async&#x2F;DMA side of the driver had always lived under this
+contract — I was only making the blocking side honest about it. Second,
+it maps cleanly onto &lt;code&gt;embedded-storage&lt;&#x2F;code&gt;’s &lt;code&gt;WRITE_SIZE&lt;&#x2F;code&gt; model, so a
+future trait impl falls out naturally rather than fighting the
+contract. The same pass also bounds-checks &lt;code&gt;read&lt;&#x2F;code&gt;, &lt;code&gt;erase_sector&lt;&#x2F;code&gt;, and
+&lt;code&gt;program&lt;&#x2F;code&gt; against the configured flash size, returning
+&lt;code&gt;IoError::OutOfBounds&lt;&#x2F;code&gt; instead of wrapping around. Both new variants
+went onto an already &lt;code&gt;#[non_exhaustive]&lt;&#x2F;code&gt; &lt;code&gt;IoError&lt;&#x2F;code&gt;, so none of this
+breaks callers — the only behavioural change is that a sub-page write
+now has to align to 8 bytes, where before it would silently eat the
+byte next door.&lt;&#x2F;p&gt;
+&lt;p&gt;Partial-page writes still work. They just work at 8-byte granularity,
+the way the hardware can actually deliver them. I updated the bundled
+examples to match (a &lt;code&gt;100&lt;&#x2F;code&gt;-byte partial write became &lt;code&gt;96&lt;&#x2F;code&gt;; the stress
+example’s program sizes got rounded to multiples of 8), which was a
+nice forcing function for confirming the contract was livable and not
+just defensible.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;pushing-the-same-idea-at-the-async-path&quot;&gt;Pushing the same idea at the async path&lt;&#x2F;h2&gt;
+&lt;p&gt;The blocking driver was now hardened and soaked. But the interesting
+half of an Embassy driver is the async half, and async brings a failure
+mode that blocking code simply doesn’t have: &lt;strong&gt;cancellation&lt;&#x2F;strong&gt;.&lt;&#x2F;p&gt;
+&lt;p&gt;In async Rust, the idiomatic way to bound an operation is to wrap it in
+&lt;code&gt;with_timeout&lt;&#x2F;code&gt;, or race it in a &lt;code&gt;select!&lt;&#x2F;code&gt;, or cancel the task it runs
+in. All three do the same thing under the hood: they &lt;em&gt;drop the future
+mid-flight&lt;&#x2F;em&gt;. The operation was in progress, and now it isn’t, and it
+never got to run whatever cleanup it might have wanted to run. Any
+async driver that can’t survive that is a driver with a landmine in it,
+waiting for the first caller who puts a timeout around a flash write.&lt;&#x2F;p&gt;
+&lt;p&gt;So the second rig, &lt;code&gt;flexspi-cancel-soak&lt;&#x2F;code&gt;, does that on purpose,
+thousands of times. It runs the same erase&#x2F;program&#x2F;verify integrity
+checks over the async + DMA path, and then it does something deliberately
+hostile: it takes a real operation, wraps it in &lt;code&gt;with_timeout&lt;&#x2F;code&gt; with a
+delay swept across a wide range — from about a microsecond (mid
+command-shift, the operation has barely started) out to a couple of
+milliseconds (mid write-in-progress, the flash is busy) — so the future
+gets dropped at every interesting phase of the transaction. Then it
+issues a &lt;em&gt;fresh&lt;&#x2F;em&gt; operation and asserts that one returns correct data.&lt;&#x2F;p&gt;
+&lt;p&gt;The elegant part of testing cancel-safety is that you barely need an
+assertion. A driver that isn’t cancel-safe doesn’t return wrong data
+after a botched cancellation — it &lt;em&gt;hangs the next operation forever&lt;&#x2F;em&gt;. So
+the test simply &lt;em&gt;reaching the next round&lt;&#x2F;em&gt;, across thousands of
+in-flight cancellations, is itself the pass signal. If the rig is still
+counting rounds, the driver is recovering. If it stops, it wedged.&lt;&#x2F;p&gt;
+&lt;p&gt;It stopped.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-it-found-second-a-dropped-future-wedges-the-controller&quot;&gt;What it found second: a dropped future wedges the controller&lt;&#x2F;h2&gt;
+&lt;p&gt;The symptom was a hang, deep in &lt;code&gt;prepare_ip_transfer&lt;&#x2F;code&gt;, spinning in
+&lt;code&gt;wait_idle()&lt;&#x2F;code&gt; waiting for a sequence engine that was never going to
+become idle. The diagnosis, once I dumped the controller state at the
+hang, was clear: the cancelled operation had left the FlexSPI sequence
+engine non-idle — chip-select still asserted, the TX FIFO in underrun —
+and the driver had no notion that it should clean any of that up. The
+&lt;em&gt;next&lt;&#x2F;em&gt; operation walked in, asked the engine to be idle, and waited for
+a condition that the &lt;em&gt;previous, cancelled&lt;&#x2F;em&gt; operation had made
+permanently false. One cancelled future, and the controller was bricked
+until reset.&lt;&#x2F;p&gt;
+&lt;p&gt;The fix is to stop trusting that the engine is idle just because the
+last operation “finished,” and instead make &lt;code&gt;prepare_ip_transfer&lt;&#x2F;code&gt;
+self-healing. On entry, if the engine isn’t idle — the fingerprint of a
+previously cancelled op — force it idle with a software reset before
+doing anything else:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;fn&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; prepare_ip_transfer&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;&amp;amp;&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt;mut&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-language&quot;&gt; self&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Result&lt;&#x2F;span&gt;&lt;span&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; IoError&lt;&#x2F;span&gt;&lt;span&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; A cancelled op leaves the sequence engine non-idle: CS still&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; asserted, TX FIFO underrun. Detect that fingerprint and recover.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; One SEQIDLE sample is authoritative here: SEQIDLE only deasserts&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; on a fresh IPCMD trigger, and none is pending at this point.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;    if&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; !&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-language&quot;&gt;self&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;seq_idle&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;        &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; Force idle, de-assert CS, reset the instruction pointer,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;        &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; flush the FIFOs. The LUT and controller config survive a&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;        &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; software reset -- the init path already relies on that.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-language&quot;&gt;        self&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;software_reset&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-language&quot;&gt;    self&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;wait_idle&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; ...load the IP command, trigger IPCMD...&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;    Ok&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;There’s a deliberate design decision hiding in what this fix &lt;em&gt;doesn’t&lt;&#x2F;em&gt;
+do. It does not add a timeout. The driver imposes no timeout of its own
+and keeps &lt;code&gt;embassy-time&lt;&#x2F;code&gt; out of its hot path entirely. Timeout &lt;em&gt;policy&lt;&#x2F;em&gt;
+— how long is too long, and whether to give up — belongs to the
+application, which already has &lt;code&gt;with_timeout&lt;&#x2F;code&gt; for exactly that. The
+driver’s job isn’t to decide the policy; it’s to make the policy
+&lt;em&gt;safe&lt;&#x2F;em&gt;. The self-healing recovery is precisely what lets a caller wrap
+any operation in &lt;code&gt;with_timeout&lt;&#x2F;code&gt; without fear: when their timeout
+elapses and drops the future, the driver un-wedges itself on the next
+call instead of staying broken. The cancellation that used to be a
+landmine is now just a thing that happens.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;the-payoff&quot;&gt;The payoff&lt;&#x2F;h2&gt;
+&lt;p&gt;With both fixes in, the two rigs ran clean:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;flexspi-soak&lt;&#x2F;code&gt;&lt;&#x2F;strong&gt; (blocking IP + memory-mapped): 384 rounds, zero
+mismatches between the IP and AHB paths, and every out-of-contract
+call — misaligned, page-crossing, out-of-range — returning the error
+it should.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;flexspi-cancel-soak&lt;&#x2F;code&gt;&lt;&#x2F;strong&gt; (async + DMA): 388 rounds, &lt;strong&gt;5,044
+in-flight cancellations&lt;&#x2F;strong&gt;, 3,880 clean recoveries, zero wedges, zero
+data corruption.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;Those 5,044 cancellations are the number I care about most, because
+every one of them is a &lt;code&gt;with_timeout&lt;&#x2F;code&gt; firing at a moment that, a week
+earlier, would have bricked the controller until the next reset.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-i-d-carry-to-the-next-driver&quot;&gt;What I’d carry to the next driver&lt;&#x2F;h2&gt;
+&lt;p&gt;A few things generalize past this one chip:&lt;&#x2F;p&gt;
+&lt;p&gt;A happy-path self-test proves a driver &lt;em&gt;can&lt;&#x2F;em&gt; work. It says nothing
+about whether you can trust it. Those are different claims, and only the
+second one matters once real callers show up.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;Cancel-safety is a first-class property of an async driver&lt;&#x2F;strong&gt;, not an
+edge case. If dropping an in-flight future can leave your peripheral in
+a state the next operation can’t recover from, you don’t have a working
+async driver yet — you have one that works until someone uses a timeout.
+And in Embassy, &lt;em&gt;someone always uses a timeout.&lt;&#x2F;em&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;Make illegal states loud.&lt;&#x2F;strong&gt; The unaligned write didn’t fail — it
+succeeded and corrupted a neighbour. A contract that turns “silently
+wrong” into “loudly refused” is worth more than it costs, every time.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;Seed your randomness.&lt;&#x2F;strong&gt; A fuzzing soak loop that can’t replay its own
+failures is a slot machine. The xorshift seed turned “it broke
+somewhere in three hours” into “it broke on this seed, here’s the
+repro.”&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;a-note-on-trusting-it&quot;&gt;A note on trusting it&lt;&#x2F;h2&gt;
+&lt;p&gt;I trust this driver today — on this board, with this flash part,
+against everything the two rigs throw at it. That’s a real and specific
+claim, and it’s also a smaller one than “it’s correct.” Both bugs in
+this post were invisible until the moment a rig was nasty enough to
+provoke them, and the honest conclusion to draw from that is &lt;em&gt;not&lt;&#x2F;em&gt; that
+I’ve now found the last one. It’s that the next rig, or the next caller
+with a workload I didn’t imagine, may well surface something these two
+didn’t. Soak tests buy confidence proportional to how mean they are, and
+no finite amount of meanness reaches a proof. If you run this driver and
+it does something neither rig caught, I’d genuinely like to know — that’s
+the rig I haven’t built yet.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-this-doesn-t-cover&quot;&gt;What this doesn’t cover&lt;&#x2F;h2&gt;
+&lt;p&gt;The usual caveats, and they’re real ones. This is one board, one flash
+part, one controller IP. The unaligned-write corruption is a quirk of
+&lt;em&gt;this&lt;&#x2F;em&gt; FlexSPI block, and I’d be unsurprised if it looked nothing like
+that on other silicon — the &lt;em&gt;shape&lt;&#x2F;em&gt; of the lesson (diff against the
+vendor reference; if your loop is identical, suspect the controller)
+transfers better than the specifics. The driver also doesn’t implement
+the &lt;code&gt;embedded-storage&lt;&#x2F;code&gt; traits yet, though the write-size contract was
+designed so it maps straight onto &lt;code&gt;WRITE_SIZE = 8&lt;&#x2F;code&gt; &#x2F; &lt;code&gt;ERASE_SIZE = 4096&lt;&#x2F;code&gt; when it does.&lt;&#x2F;p&gt;
+&lt;p&gt;The full set of fixes, the two soak rigs, and the hardware run logs are
+in &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;embassy-rs&#x2F;embassy&#x2F;pull&#x2F;6389&quot;&gt;embassy-rs&#x2F;embassy#6389&lt;&#x2F;a&gt;. If you’re bringing up FlexSPI on
+MCXA, I hope the rigs save you the half-week. If you’re doing it on
+something else and one of these patterns rhymes with what you’re seeing,
+I’d like to hear about it.&lt;&#x2F;p&gt;
+</content>
+  </entry>
+  
+</feed>

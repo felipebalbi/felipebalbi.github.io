@@ -1,0 +1,683 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"
+     xmlns:atom="http://www.w3.org/2005/Atom"
+     xmlns:content="http://purl.org/rss/1.0/modules/content/"
+     xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Felipe Balbi</title>
+    <link>https://balbi.sh</link>
+    <description>Notes on embedded systems, Rust, and the craft of writing software.</description>
+    <generator>Zola</generator>
+    <language>en</language>
+    <lastBuildDate>Mon, 13 Jul 2026 09:00:00 +0000</lastBuildDate>
+    <atom:link href="https://balbi.sh/tags/testing/rss.xml" rel="self" type="application/rss+xml"/>
+    
+    <item>
+      <title>Tamal: an eSPI exerciser</title>
+      <link>https://balbi.sh/posts/tamal-introducing/</link>
+      <guid isPermaLink="true">https://balbi.sh/posts/tamal-introducing/</guid>
+      <pubDate>Mon, 13 Jul 2026 09:00:00 +0000</pubDate>
+      <dc:creator>Felipe Balbi</dc:creator>
+      <description>&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;felipebalbi&#x2F;mole&quot;&gt;mole&lt;&#x2F;a&gt; is an FPGA bit-cycle engine for exercising I²C and I³C — you
+write a little program, it drives the bus edge by edge, legal or
+illegal, and hands you back a structured trace of what happened.
+&lt;em&gt;Tamal&lt;&#x2F;em&gt; is that same idea aimed at a different, meaner bus: Intel’s
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;www.intel.com&#x2F;content&#x2F;www&#x2F;us&#x2F;en&#x2F;support&#x2F;articles&#x2F;000020952&#x2F;software&#x2F;chipset-software.html&quot;&gt;Enhanced Serial Peripheral Interface&lt;&#x2F;a&gt; (eSPI, base spec
+rev 1.0).&lt;&#x2F;p&gt;</description>
+      
+      <content:encoded>&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;felipebalbi&#x2F;mole&quot;&gt;mole&lt;&#x2F;a&gt; is an FPGA bit-cycle engine for exercising I²C and I³C — you
+write a little program, it drives the bus edge by edge, legal or
+illegal, and hands you back a structured trace of what happened.
+&lt;em&gt;Tamal&lt;&#x2F;em&gt; is that same idea aimed at a different, meaner bus: Intel’s
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;www.intel.com&#x2F;content&#x2F;www&#x2F;us&#x2F;en&#x2F;support&#x2F;articles&#x2F;000020952&#x2F;software&#x2F;chipset-software.html&quot;&gt;Enhanced Serial Peripheral Interface&lt;&#x2F;a&gt; (eSPI, base spec
+rev 1.0).&lt;&#x2F;p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;&#x2F;span&gt;
+&lt;p&gt;The one-line pitch, which is the vision more than the current state:&lt;&#x2F;p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;A programmable eSPI controller&#x2F;target that turns compliance testing
+into a reproducible, fully-observable, byte-for-byte deterministic
+exercise.&lt;&#x2F;p&gt;
+&lt;&#x2F;blockquote&gt;
+&lt;p&gt;Read that as the destination, not the odometer. Tamal is
+&lt;strong&gt;experimental&lt;&#x2F;strong&gt; — I’m keeping that adjective on it until it has
+withstood considerable real-world load, at which point I’ll drop it.
+Today it plays eSPI &lt;strong&gt;controller&lt;&#x2F;strong&gt; only (target role is designed but
+not built), at a &lt;strong&gt;single 20 MHz clock&lt;&#x2F;strong&gt; (all eSPI speeds are on the
+roadmap), and everything below the honesty line near the end of this
+post runs in &lt;em&gt;simulation&lt;&#x2F;em&gt;, not on silicon.&lt;&#x2F;p&gt;
+&lt;p&gt;This post is what Tamal is, why it’s shaped the way it is, why the
+gateware is written in Haskell of all things, what I’ve learned
+building it — and, honestly, how early it still is. The repo is
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;felipebalbi&#x2F;tamal&quot;&gt;github.com&#x2F;felipebalbi&#x2F;tamal&lt;&#x2F;a&gt;, public and split-licensed. Read
+on before you clone it expecting a finished product; it isn’t one yet.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;the-problem&quot;&gt;The problem&lt;&#x2F;h2&gt;
+&lt;p&gt;eSPI is the bus that replaced LPC on modern platforms: a short,
+fast-ish serial link between a chipset&#x2F;SoC and an embedded controller,
+flash device, or BMC. It’s more capable than it looks. A single eSPI
+link multiplexes four logical channels — &lt;strong&gt;Peripheral&lt;&#x2F;strong&gt;, &lt;strong&gt;Virtual
+Wire&lt;&#x2F;strong&gt;, &lt;strong&gt;OOB&lt;&#x2F;strong&gt; (tunneled SMBus), and &lt;strong&gt;Runtime Flash Access&lt;&#x2F;strong&gt; — over
+one set of pins, with command&#x2F;response framing, turnaround phases,
+CRC, alerts, and a status register that gates who’s allowed to talk.&lt;&#x2F;p&gt;
+&lt;p&gt;That density is exactly what makes it hard to test. “Does my eSPI
+target behave correctly?” is not one question. It’s: does it honour
+turnaround timing, does it respect CRC when enabled, does it track the
+status register, does it tolerate a WAIT STATE, does it drive alerts
+correctly, does it decode each channel’s packets, and — the part
+almost nothing can produce on demand — &lt;em&gt;does it do the right thing
+when the other side does the wrong thing?&lt;&#x2F;em&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;Producing a legal transaction is the easy 20%. Producing a specific
+&lt;em&gt;illegal&lt;&#x2F;em&gt; one — a deliberately short turnaround, a corrupted CRC, a
+truncated packet, a cycle on a channel that isn’t enabled yet — at a
+precise moment, reproducibly, over and over, is the 80% that a real
+device or a canned test fixture can’t give you. That’s the gap Tamal
+is built to fill: an exerciser that will drive &lt;em&gt;any&lt;&#x2F;em&gt; cycle, correct or
+malformed, with deterministic timing, and capture everything the bus
+did in response.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;the-name&quot;&gt;The name&lt;&#x2F;h2&gt;
+&lt;p&gt;eSPI wraps four logical channels into one serial packet stream. A
+&lt;em&gt;tamal&lt;&#x2F;em&gt; is a wrapped, layered dish — masa and filling folded inside a
+husk. The mapping wrote itself: eSPI wraps Peripheral, Virtual Wire,
+OOB, and Runtime Flash Access into one stream of bytes on the wire;
+Tamal is the thing that unwraps every layer and checks it against the
+spec. Naming projects is one of the few unambiguous joys of this line
+of work, and the &lt;em&gt;mole&lt;&#x2F;em&gt; → &lt;em&gt;tamal&lt;&#x2F;em&gt; lineage (both wrapped, both
+Mesoamerican, both about what’s hidden inside) was too good to pass
+up.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;the-key-insight&quot;&gt;The key insight&lt;&#x2F;h2&gt;
+&lt;p&gt;The temptation with an FPGA bus tool is to think of it as a throughput
+problem — get the bytes on and off the wire fast enough. eSPI defeats
+that framing immediately, and in a useful way:&lt;&#x2F;p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;This is &lt;strong&gt;not&lt;&#x2F;strong&gt; a throughput problem. It is an &lt;strong&gt;external timing
+alignment&lt;&#x2F;strong&gt; problem.&lt;&#x2F;p&gt;
+&lt;&#x2F;blockquote&gt;
+&lt;p&gt;eSPI tops out at 66 MHz. On an Artix-7 that’s &lt;em&gt;slow&lt;&#x2F;em&gt;; the fabric runs
+at 100 MHz and never breaks a sweat pushing bits. The danger isn’t
+speed. It’s that in &lt;strong&gt;target&lt;&#x2F;strong&gt; role — which Tamal is designed for but
+does not yet play — you are not the clock master: the eSPI clock is
+driven by the device under test, and you must respond &lt;em&gt;relative to
+it&lt;&#x2F;em&gt;. The parts that will actually hurt you are turnaround&#x2F;tri-state
+timing, setup and hold against an external clock, and getting IO
+direction control exactly right on a shared, bidirectional data bus.
+None of that is about going fast. All of it is about being aligned.&lt;&#x2F;p&gt;
+&lt;p&gt;Internalizing that reframed the whole design. The engine doesn’t need
+to be clever or quick. It needs to be &lt;em&gt;precise&lt;&#x2F;em&gt; about when it drives,
+when it samples, and when it lets go of the pins.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;the-shape-three-planes&quot;&gt;The shape: three planes&lt;&#x2F;h2&gt;
+&lt;p&gt;Tamal has a clean split into three planes, and almost every design
+decision falls out of which plane it belongs to:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;Control plane&lt;&#x2F;strong&gt; (host → FPGA): load a compiled test program,
+select role (controller today; target is designed but not yet built),
+IO mode (single&#x2F;dual&#x2F;quad), CRC on or off, and triggers. Error
+injection isn’t a knob here — it lives &lt;em&gt;in the program&lt;&#x2F;em&gt;, where the
+test author writes the malformed cycle directly (more on that below).&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;strong&gt;Bus plane&lt;&#x2F;strong&gt; (FPGA ↔ DUT): the eSPI link itself — &lt;code&gt;CS#&lt;&#x2F;code&gt;, &lt;code&gt;CLK&lt;&#x2F;code&gt;,
+&lt;code&gt;IO[3:0]&lt;&#x2F;code&gt;, &lt;code&gt;ALERT#&lt;&#x2F;code&gt;, &lt;code&gt;RESET#&lt;&#x2F;code&gt; — driven or sampled against the device
+under test.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;strong&gt;Trace &#x2F; result plane&lt;&#x2F;strong&gt; (FPGA → host): observed transactions,
+channel decode, captured cycles, and verdicts.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;There’s one load-bearing rule that spans the planes: &lt;strong&gt;never block the
+bus on trace backpressure.&lt;&#x2F;strong&gt; If the host can’t keep up draining the
+trace, the bus plane does not stall waiting for it — events get
+dropped with an overflow marker instead. A test rig that perturbs the
+timing of the thing it’s measuring is worse than useless, so the trace
+plane is always allowed to lose data before the bus plane is allowed
+to hesitate.&lt;&#x2F;p&gt;
+&lt;p&gt;On the FPGA, that shape is deliberately boring:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;plain&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt; host ──UART──► loader ──► instr BRAM ──► engine (mealy step) ──► eSPI pads&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;      ◄─UART──── drain  ◄──── ring BRAM ◄──────┘   (IO[3:0], CS#, SCK,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;                                                     RESET#, ALERT#)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;The host ships a compiled program over UART; the loader writes it into
+an instruction block RAM; the engine executes it as a Mealy machine,
+driving and sampling the eSPI pads; every transaction lands in a trace
+ring (another block RAM); on &lt;code&gt;HALT&lt;&#x2F;code&gt; the drainer sweeps the ring back
+out over the same UART.&lt;&#x2F;p&gt;
+&lt;p&gt;The whole thing is &lt;strong&gt;one clock domain&lt;&#x2F;strong&gt; — &lt;code&gt;Dom100&lt;&#x2F;code&gt;, 100 MHz — with no
+clock-domain crossings and no FIFOs. The trace ring BRAM &lt;em&gt;is&lt;&#x2F;em&gt; the
+buffer, and UART is roughly 500× slower than the fabric, so there’s
+nothing to gain from a FIFO in front of it. (On the Cyclone V board a
+50 MHz oscillator is multiplied up to 100 MHz by an Altera PLL, but
+it’s still a single design domain.) Fewer moving parts, less to get
+wrong, and — this matters later — a design that simulates end to end
+without any special-casing.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;the-repo&quot;&gt;The repo&lt;&#x2F;h2&gt;
+&lt;p&gt;Two toolchains, cleanly separated:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;plain&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;crates&#x2F;                 Rust host tooling (Cargo workspace)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  tamal-abi&#x2F;            bytecode&#x2F;ISA encoding + COBS&#x2F;CRC-8 wire format + typed trace decode&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  tamal-asm&#x2F;            assembler: RISC-V-flavored source -&amp;gt; tamal bytecode&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  tamal-asm-cli&#x2F;        `tamal-asm` binary (clap front-end)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  tamal-loader&#x2F;         host-side loader: load -&amp;gt; trigger -&amp;gt; drain over a transport&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  tamal-loader-cli&#x2F;     `tamal-loader` binary&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;hdl&#x2F;                    Clash gateware + Vivado&#x2F;Quartus build (self-contained)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;docs&#x2F;                   design specs + implementation plans&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;code&gt;tamal-abi&lt;&#x2F;code&gt; is the crate that matters most: it’s the ABI, the single
+source of truth for the bytecode encoding, the COBS&#x2F;CRC-8 wire format,
+and the typed trace decode. Everything else — assembler, loader,
+gateware — agrees with &lt;code&gt;tamal-abi&lt;&#x2F;code&gt; byte for byte or it’s a bug. It is
+deliberately &lt;strong&gt;transport-agnostic&lt;&#x2F;strong&gt;: v1 speaks UART because that’s
+what the Arty’s FT2232 gives you (USB-UART plus JTAG, not a USB3
+SuperSpeed FIFO), but the wire format doesn’t know or care, so a
+future EZ-USB FX3 (GPIF II slave-FIFO) shield can be bolted on as
+another backend without touching the ABI.&lt;&#x2F;p&gt;
+&lt;p&gt;The licensing follows the &lt;code&gt;crates&#x2F;&lt;&#x2F;code&gt; ↔ &lt;code&gt;hdl&#x2F;&lt;&#x2F;code&gt; seam. The Rust host
+tooling is &lt;strong&gt;MIT&lt;&#x2F;strong&gt;. The Clash gateware is &lt;strong&gt;CERN-OHL-W-2.0&lt;&#x2F;strong&gt; (CERN
+Open Hardware Licence v2, Weakly Reciprocal), because an open-hardware
+licence fits a hardware description better than a software licence
+does. Every &lt;code&gt;.hs&lt;&#x2F;code&gt; file under &lt;code&gt;hdl&#x2F;&lt;&#x2F;code&gt; carries a REUSE-style SPDX header
+to make that boundary machine-checkable.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;a-risc-v-flavored-isa-and-a-very-dumb-engine&quot;&gt;A RISC-V-flavored ISA, and a very dumb engine&lt;&#x2F;h2&gt;
+&lt;p&gt;Tamal’s on-FPGA engine is programmable, and the instruction set is
+&lt;strong&gt;inspired by — but not compatible with — the RISC-V 32-bit (RV32I)
+ISA.&lt;&#x2F;strong&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;From RV32I it borrows the ergonomics: 32-bit fixed-width instructions;
+a 32-name register space &lt;code&gt;x0&lt;&#x2F;code&gt;..&lt;code&gt;x31&lt;&#x2F;code&gt; with &lt;code&gt;x0&lt;&#x2F;code&gt; hardwired to zero (v1
+implements 16 physical registers, with &lt;code&gt;x16&lt;&#x2F;code&gt;..&lt;code&gt;x31&lt;&#x2F;code&gt; aliasing their
+low-4 twin); the R&#x2F;I&#x2F;S&#x2F;B&#x2F;U&#x2F;J instruction formats; and the ABI register
+names (&lt;code&gt;zero&lt;&#x2F;code&gt;, &lt;code&gt;ra&lt;&#x2F;code&gt;, &lt;code&gt;sp&lt;&#x2F;code&gt;, &lt;code&gt;t0&lt;&#x2F;code&gt;, &lt;code&gt;s0&lt;&#x2F;code&gt;, &lt;code&gt;a0&lt;&#x2F;code&gt;, …). The assembler follows
+the &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;riscv-non-isa&#x2F;riscv-asm-manual&quot;&gt;riscv-asm-manual&lt;&#x2F;a&gt; conventions for directives, labels,
+and pseudo-instructions — but &lt;em&gt;follows&lt;&#x2F;em&gt; is doing real work in that
+sentence. What’s implemented today is the subset the examples exercise
+(&lt;code&gt;.text&lt;&#x2F;code&gt;, &lt;code&gt;.globl&lt;&#x2F;code&gt;, &lt;code&gt;.equ&lt;&#x2F;code&gt;, the &lt;code&gt;li&lt;&#x2F;code&gt; pseudo-instruction, symbolic
+labels, the branch mnemonics). The rest of the RISC-V surface I’d like
+to have — &lt;code&gt;.align&lt;&#x2F;code&gt;, &lt;code&gt;.macro&lt;&#x2F;code&gt;, numeric local labels (&lt;code&gt;1f&lt;&#x2F;code&gt;&#x2F;&lt;code&gt;1b&lt;&#x2F;code&gt;),
+&lt;code&gt;mv&lt;&#x2F;code&gt;&#x2F;&lt;code&gt;j&lt;&#x2F;code&gt;&#x2F;&lt;code&gt;call&lt;&#x2F;code&gt;&#x2F;&lt;code&gt;ret&lt;&#x2F;code&gt;&#x2F;&lt;code&gt;beqz&lt;&#x2F;code&gt; and friends — is intended but not written
+yet. If you’ve used RISC-V assembly the current subset will read like
+home; just don’t assume the whole manual works.&lt;&#x2F;p&gt;
+&lt;p&gt;Where it diverges is the opcode space: Tamal repurposes and extends it
+with bus-domain instructions for eSPI work — driving and sampling
+cycles, per-channel operations, deterministic timing, author-written
+error injection, and capture&#x2F;verdict. The upshot is a hard rule: Tamal
+bytecode is &lt;strong&gt;not&lt;&#x2F;strong&gt; interchangeable with a stock RISC-V toolchain, and
+the project never claims otherwise. It’s RISC-V-&lt;em&gt;flavored&lt;&#x2F;em&gt;, not
+RISC-V.&lt;&#x2F;p&gt;
+&lt;p&gt;The design decision I’m happiest with is how little the engine knows.
+&lt;strong&gt;The engine is a nearly-dumb SPI shifter with almost no eSPI
+knowledge.&lt;&#x2F;strong&gt; There is no “PUT_IORD” opcode and no notion of a channel.
+The one concession is a CRC-8 unit that runs over &lt;em&gt;incoming&lt;&#x2F;em&gt; bytes, so
+a program can read the residue and decide whether a packet from the
+link partner was valid — but even it has no idea what a “packet” &lt;em&gt;is&lt;&#x2F;em&gt;,
+and every &lt;em&gt;outbound&lt;&#x2F;em&gt; CRC byte is still computed by the host. The host
+builds every byte that goes on the wire — command, header, payload, TX
+CRC — and the engine just shifts them out and shifts responses back.
+All the eSPI semantics live in the program, in software, where they’re
+easy to read, easy to change, and easy to get deliberately wrong.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;the-shape-of-a-program&quot;&gt;The shape of a program&lt;&#x2F;h2&gt;
+&lt;p&gt;The smallest interesting program reads one byte from an eSPI
+Peripheral-channel I&#x2F;O port. Here’s the real &lt;code&gt;peripheral_io_read.s&lt;&#x2F;code&gt;
+from the repo, reading I&#x2F;O port &lt;code&gt;0x64&lt;&#x2F;code&gt; — the classic 8042
+keyboard-controller status port:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;asm&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    .&lt;&#x2F;span&gt;&lt;span class=&quot;z-support z-function&quot;&gt;equ&lt;&#x2F;span&gt;&lt;span&gt;  PUT_IORD1,      &lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;0x44&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt;    # PUT_IORD_SHORT, length = 1 byte&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    .&lt;&#x2F;span&gt;&lt;span class=&quot;z-support z-function&quot;&gt;equ&lt;&#x2F;span&gt;&lt;span&gt;  RSP_WAIT_STATE, &lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;0x0F&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt;    # eSPI WAIT_STATE response code&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    .&lt;&#x2F;span&gt;&lt;span class=&quot;z-support z-function&quot;&gt;equ&lt;&#x2F;span&gt;&lt;span&gt;  VERDICT_OK,     &lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;0x00&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt;    # host verdict codes (written by halt)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    .&lt;&#x2F;span&gt;&lt;span class=&quot;z-support z-function&quot;&gt;equ&lt;&#x2F;span&gt;&lt;span&gt;  VERDICT_CRC,    &lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;0x11&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    .text&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    .globl _start&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;_start&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    set_config CONTROLLER, X1, SCK20, ALERT_PIN  &lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; # controller, x1 IO, 20 MHz&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    cs_assert                      &lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; # begin frame: CS# low&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    # --- command phase: host-built eSPI packet ---&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    put_byte PUT_IORD1             &lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; # CMD:  PUT_IORD_SHORT (1 byte)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    put_byte &lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;0x00&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt;                   # addr [15:8]&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    put_byte &lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;0x64&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt;                   # addr [7:0]  -&amp;gt; I&#x2F;O port 0x64&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    put_byte &lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;0x16&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt;                   # TX CRC-8 over the 3 bytes above (poly 0x07)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    tar &lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt;2&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt;                           # legal turnaround; tar 3 &#x2F; tar 1 = deliberate violation&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    # --- response phase: WAIT_STATE poll + RX CRC residue verdict ---&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;poll&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    crc_reset                      &lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; # drop any prior WAIT_STATE byte from the residue&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    get_byte t0                    &lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; # response code (auto-updates RX CRC-8)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    li   t1, RSP_WAIT_STATE&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    beq  t0, t1, poll              &lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; # WAIT_STATE -&amp;gt; keep polling&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    get_byte t0                    &lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; # read data byte (port 0x64 value)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    get_byte t0                    &lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; # status [7:0]&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    get_byte t0                    &lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; # status [15:8]&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    get_byte t0                    &lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; # trailing CRC byte -&amp;gt; drives residue to 0&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    rdsr t2, CRC                   &lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; # RX CRC-8 residue (0 == good packet)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    cs_deassert                    &lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; # end frame: CS# high&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    bnez t2, bad_crc&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    halt VERDICT_OK&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;bad_crc&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    halt VERDICT_CRC&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Read it top to bottom and the whole model is visible. &lt;code&gt;set_config&lt;&#x2F;code&gt;
+picks controller role, single (x1) IO, a 20 MHz clock (&lt;code&gt;SCK20&lt;&#x2F;code&gt; — the
+only rate wired up today, though the ISA reserves the field for the
+faster eSPI speeds still to come), and pin-based alerts. &lt;code&gt;cs_assert&lt;&#x2F;code&gt;
+pulls &lt;code&gt;CS#&lt;&#x2F;code&gt; low. Then a run of &lt;code&gt;put_byte&lt;&#x2F;code&gt;s spells out the eSPI command
+packet a byte at a time — opcode, address, and a TX CRC-8 the &lt;em&gt;program&lt;&#x2F;em&gt;
+computed, not the engine. &lt;code&gt;tar 2&lt;&#x2F;code&gt; performs a legal turnaround;
+swapping in &lt;code&gt;tar 3&lt;&#x2F;code&gt; or &lt;code&gt;tar 1&lt;&#x2F;code&gt; is how you inject a deliberate
+turnaround violation — that’s the whole error-injection story, a test
+author spelling out the malformed cycle by hand, not a probabilistic
+“corrupt 10% of packets” knob. The response phase polls for
+WAIT_STATE, reads the data and status bytes, and checks that the RX
+CRC residue drove to zero — the eSPI-idiomatic way to validate a
+packet. Finally &lt;code&gt;halt&lt;&#x2F;code&gt; writes a verdict code the host reads back from
+the trace.&lt;&#x2F;p&gt;
+&lt;p&gt;The load-bearing observation: &lt;strong&gt;only the command-phase &lt;code&gt;put_byte&lt;&#x2F;code&gt;s are
+channel-specific.&lt;&#x2F;strong&gt; The CS framing, the WAIT_STATE poll, and the CRC
+residue check are byte-for-byte identical across the Peripheral I&#x2F;O
+read, the &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;felipebalbi&#x2F;tamal&#x2F;blob&#x2F;main&#x2F;examples&#x2F;virtual_wire_pltrst.s&quot;&gt;Virtual Wire&lt;&#x2F;a&gt; example that deasserts &lt;code&gt;PLTRST#&lt;&#x2F;code&gt;,
+and every other per-channel program in &lt;code&gt;examples&#x2F;&lt;&#x2F;code&gt;. The channel is
+just a different run of bytes in the middle. That’s the payoff of a
+dumb engine: the interesting part of each test is a handful of lines,
+and everything around it is boilerplate you can read once and stop
+thinking about.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;why-clash-why-haskell&quot;&gt;Why Clash, why Haskell&lt;&#x2F;h2&gt;
+&lt;p&gt;The gateware is written in &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;clash-lang.org&quot;&gt;Clash&lt;&#x2F;a&gt; — a Haskell-to-RTL compiler — and
+that’s the choice people ask about first. It looks exotic next to
+Verilog or even the SpinalHDL that drives mole. The reasons are
+entirely practical, and they all come back to one thing: &lt;strong&gt;iteration
+speed&lt;&#x2F;strong&gt; — how fast the edit-test loop closes. (Not to be confused with
+eSPI’s turnaround; this is developer seconds, not bus cycles.)&lt;&#x2F;p&gt;
+&lt;p&gt;The Tamal test suite runs in &lt;strong&gt;under a second.&lt;&#x2F;strong&gt; Not the synthesis —
+the &lt;em&gt;tests&lt;&#x2F;em&gt;. Every pure leaf of the design (&lt;code&gt;stepM&lt;&#x2F;code&gt;, &lt;code&gt;ringWrite&lt;&#x2F;code&gt;,
+&lt;code&gt;rigState&lt;&#x2F;code&gt;, &lt;code&gt;ledPattern&lt;&#x2F;code&gt;) is a plain Haskell function, and I test them
+the way I’d test any Haskell function: &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;hedgehog.qa&quot;&gt;hedgehog&lt;&#x2F;a&gt; property tests and
+HUnit unit tests, each pure leaf and the engine keystone checked
+against a reference model. No simulator to spin up, no waveform to
+eyeball, no four-minute Vivado round-trip to find out I got a mux
+backwards. &lt;code&gt;cabal test&lt;&#x2F;code&gt;, a second later I know.&lt;&#x2F;p&gt;
+&lt;p&gt;It gets better at the top. Because the whole integration is wired over
+plain Clash &lt;code&gt;Signal&lt;&#x2F;code&gt;s — no &lt;code&gt;BiSignal&lt;&#x2F;code&gt; in the core, the tri-state only
+appears in the thin board shell — the &lt;em&gt;entire system&lt;&#x2F;em&gt; simulates in
+Haskell. There’s a whole-system cosim (&lt;code&gt;Test.Top&lt;&#x2F;code&gt;) that serializes a
+real &lt;code&gt;LOAD_PROGRAM&lt;&#x2F;code&gt; + &lt;code&gt;TRIGGER&lt;&#x2F;code&gt; onto a modeled UART line, runs the
+actual load → run → drain path, decodes the UART output, and asserts
+the drained trace (revision header, records, &lt;code&gt;HALT&lt;&#x2F;code&gt; terminator) &lt;em&gt;and&lt;&#x2F;em&gt;
+the eSPI pin activity — UART → loader → engine → eSPI → ring → drain,
+end to end, in one test, in the same language as the design, in
+milliseconds. I can refactor the engine and know within a second
+whether the full pipeline still behaves. That feedback loop is the
+single biggest force multiplier on the project.&lt;&#x2F;p&gt;
+&lt;p&gt;The type system pulls its weight too. eSPI is a bidirectional,
+tri-state, direction-controlled bus, which is precisely where hardware
+bugs love to hide. Having the compiler track widths, states, and pad
+directions catches a whole class of “which way is this pin pointing
+this cycle” mistakes before simulation, let alone before silicon.&lt;&#x2F;p&gt;
+&lt;p&gt;And the discipline of a single clock domain with no CDC and no FIFOs
+means the design is small enough to hold in your head — which is what
+makes the sub-second property testing tractable in the first place.
+Fast tests and a simple design reinforce each other.&lt;&#x2F;p&gt;
+&lt;p&gt;The trade is real and worth stating: Clash is a smaller ecosystem, the
+error messages can be a wall of type, and the toolchain (GHC 9.10.3 +
+&lt;code&gt;cabal&lt;&#x2F;code&gt; + Vivado&#x2F;Quartus) is more to stand up than &lt;code&gt;verilator&lt;&#x2F;code&gt;. For
+this project, on this bus, that sub-second feedback loop won the
+argument easily.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;lessons-learned&quot;&gt;Lessons learned&lt;&#x2F;h2&gt;
+&lt;p&gt;A few things I didn’t know going in, in case they save you some time:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;The bus is not the hard part; the pins are.&lt;&#x2F;strong&gt; I spent the early
+design energy worrying about eSPI’s channel matrix and almost none
+on tri-state timing. That was backwards. Reframing the whole thing
+as an &lt;em&gt;external timing alignment&lt;&#x2F;em&gt; problem — especially for the
+not-yet-built target role — is what made the architecture click.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;strong&gt;A dumb engine is a feature.&lt;&#x2F;strong&gt; Every time I was tempted to teach the
+engine more eSPI (“just let it build the TX CRC too”, “just add a
+channel register”), pushing it back up into the host program made the
+design smaller &lt;em&gt;and&lt;&#x2F;em&gt; made illegal-cycle injection trivial. Malformed
+packets are free when the host builds every byte. (The one place I
+gave in — an RX-side CRC-8 so a program can check an inbound residue —
+earns its keep precisely because it stops at &lt;em&gt;checking&lt;&#x2F;em&gt; and never
+learns what a packet is.)&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;strong&gt;Clash’s tri-state lowering has sharp edges.&lt;&#x2F;strong&gt; Four scalar &lt;code&gt;inout&lt;&#x2F;code&gt;
+lanes (&lt;code&gt;io0&lt;&#x2F;code&gt;..&lt;code&gt;io3&lt;&#x2F;code&gt;) exist instead of a tidy &lt;code&gt;Vec&lt;&#x2F;code&gt; because Clash
+fuses a per-lane &lt;code&gt;BiSignalIn&lt;&#x2F;code&gt;&#x2F;&lt;code&gt;BiSignalOut&lt;&#x2F;code&gt; pair into one &lt;code&gt;inout&lt;&#x2F;code&gt;
+port — but a &lt;code&gt;Vec&lt;&#x2F;code&gt; of BiSignals does &lt;em&gt;not&lt;&#x2F;em&gt;; it silently lowers to a
+plain input. That one cost me an afternoon.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;strong&gt;The no-reset power-up design is deliberate.&lt;&#x2F;strong&gt; The top ties reset
+permanently de-asserted and relies on power-up &lt;code&gt;init&lt;&#x2F;code&gt;, so Clash emits
+no reset port at all — matching the sibling Clash examples. Fighting
+that to add a “proper” reset is a trap.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;strong&gt;Some ghc-options are load-bearing.&lt;&#x2F;strong&gt; The &lt;code&gt;common-options&lt;&#x2F;code&gt; in
+&lt;code&gt;tamal.cabal&lt;&#x2F;code&gt; aren’t optional style — Clash needs them. Trimming them
+to tidy up breaks codegen in non-obvious ways.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h2 id=&quot;what-s-running-today-and-what-isn-t&quot;&gt;What’s running today — and what isn’t&lt;&#x2F;h2&gt;
+&lt;p&gt;Now the honest part, because this is the whole reason for the
+&lt;strong&gt;experimental&lt;&#x2F;strong&gt; label I put on it up top.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;Gateware: v1 complete, in &lt;em&gt;simulation&lt;&#x2F;em&gt;.&lt;&#x2F;strong&gt; The full pipeline exists
+and is tested in Clash — the RISC-V-flavored cycle engine, the
+instruction and trace-ring block RAMs, the COBS&#x2F;CRC-8 wire format, the
+UART load&#x2F;drain loader, the tri-state eSPI pad boundary, and the
+&lt;code&gt;topEntity&lt;&#x2F;code&gt; that wires it all to the Arty A7 pins. The whole-system
+cosim streams a program in and checks the drained trace end to end.
+&lt;code&gt;cabal run clash -- Tamal.Board.ArtyA7 --verilog&lt;&#x2F;code&gt; emits a
+synthesizable top, and &lt;code&gt;cd hdl &amp;amp;&amp;amp; make&lt;&#x2F;code&gt; builds a bitstream. But &lt;strong&gt;v1
+is controller role, single (x1) IO, one 20 MHz clock rate, UART
+transport, and it has not yet been brought up on real hardware.&lt;&#x2F;strong&gt;
+Simulation-complete is a real milestone; it is not the same as “works
+on the bench.”&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;Host tooling: v1 implemented and tested.&lt;&#x2F;strong&gt; The Rust ABI, assembler,
+and loader are built and mirror the gateware’s wire and bytecode
+contract byte for byte. The live serial path is exercised on hardware
+rather than in CI, and the pass&#x2F;fail &lt;em&gt;conformance verdict engine&lt;&#x2F;em&gt; — the
+thing that would let Tamal actually render a compliance judgment —
+does not exist yet. Today a program ends in a &lt;code&gt;HALT&lt;&#x2F;code&gt;&#x2F;&lt;code&gt;TRAP&lt;&#x2F;code&gt; with a
+host-defined verdict code; a real conformance catalog is a later
+phase.&lt;&#x2F;p&gt;
+&lt;p&gt;So, plainly: &lt;strong&gt;Tamal is early.&lt;&#x2F;strong&gt; What it most needs next is validation
+against &lt;em&gt;real&lt;&#x2F;em&gt; eSPI scenarios — on real silicon, against real targets,
+with a logic analyzer confirming the timing the simulator promises.
+Until on-hardware bring-up lands, every claim in this post about what
+the bus does is a claim the &lt;em&gt;model&lt;&#x2F;em&gt; makes, and models are exactly the
+thing an exerciser exists to distrust.&lt;&#x2F;p&gt;
+&lt;p&gt;The roadmap is four phases:&lt;&#x2F;p&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;Link + transaction bring-up.&lt;&#x2F;strong&gt; SPI-style framing,
+command&#x2F;response&#x2F;turnaround, Get Status &#x2F; Get Configuration, CRC;
+controller role over single IO. &lt;em&gt;(This is where v1 sits — done in
+sim, next on hardware.)&lt;&#x2F;em&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;strong&gt;The four channels.&lt;&#x2F;strong&gt; Peripheral, Virtual Wire, OOB (tunneled
+SMBus), Runtime Flash Access; the ISA, assembler, and loader path;
+result streaming.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;strong&gt;Target role, alerts, dual&#x2F;quad IO, faster clocks.&lt;&#x2F;strong&gt; The
+external-timing-alignment problem in full: responding to a clock you
+don’t own, and driving the higher eSPI speeds beyond today’s 20 MHz.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;strong&gt;Determinism and verdicts.&lt;&#x2F;strong&gt; The error-injection model stays what
+it is today — the test author writes the malformed cycle by hand, so
+a program is byte-for-byte reproducible by construction — joined by
+the verdict engine and a conformance catalog that turn a captured
+trace into an actual pass&#x2F;fail judgment.&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;h2 id=&quot;where-to-look&quot;&gt;Where to look&lt;&#x2F;h2&gt;
+&lt;p&gt;The source is &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;felipebalbi&#x2F;tamal&quot;&gt;on GitHub&lt;&#x2F;a&gt;. The gateware’s story is in
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;felipebalbi&#x2F;tamal&#x2F;blob&#x2F;main&#x2F;hdl&#x2F;README.md&quot;&gt;&lt;code&gt;hdl&#x2F;README.md&lt;&#x2F;code&gt;&lt;&#x2F;a&gt; and &lt;code&gt;hdl&#x2F;PLAN.md&lt;&#x2F;code&gt;; the design specs live
+under &lt;code&gt;docs&#x2F;&lt;&#x2F;code&gt;; &lt;code&gt;AGENTS.md&lt;&#x2F;code&gt; is the fastest orientation to how the
+pieces fit. The &lt;code&gt;examples&#x2F;&lt;&#x2F;code&gt; directory is the best way to get the feel
+of the ISA — start with &lt;code&gt;smoke_halt.s&lt;&#x2F;code&gt;, then &lt;code&gt;peripheral_io_read.s&lt;&#x2F;code&gt;,
+then the per-channel programs.&lt;&#x2F;p&gt;
+&lt;p&gt;It’s early, it’s promising, and it’s exactly the stage where design
+critiques are most useful. If you know eSPI — especially its nastier
+corners — I’d love to hear where this is wrong before it meets
+silicon.&lt;&#x2F;p&gt;
+</content:encoded>
+    </item>
+    
+    <item>
+      <title>From &#x27;it works&#x27; to &#x27;I trust it&#x27;: two torture loops on a NOR driver</title>
+      <link>https://balbi.sh/posts/flexspi-mcxa-hardening/</link>
+      <guid isPermaLink="true">https://balbi.sh/posts/flexspi-mcxa-hardening/</guid>
+      <pubDate>Sun, 28 Jun 2026 09:00:00 +0000</pubDate>
+      <dc:creator>Felipe Balbi</dc:creator>
+      <description>&lt;p&gt;The FlexSPI NOR driver for the NXP MCXA5xx already worked. The
+blocking self-test was green, the examples ran, I could erase a
+sector, program a page, read it back, and watch the same bytes come
+out of the memory-mapped window. By the usual bar for “the driver
+works,” it worked.&lt;&#x2F;p&gt;
+&lt;p&gt;That bar is too low. A driver that passes its own happy-path
+self-test has demonstrated exactly one thing: that it can succeed when
+nothing goes wrong. It has said nothing about what happens when an
+async operation gets cancelled half a microsecond into a command
+shift, or when a caller does a partial-page write at an address the
+controller quietly dislikes. The distance between “it works” and “I
+trust it” is made entirely of those questions, and you don’t answer
+them by running the happy path again.&lt;&#x2F;p&gt;</description>
+      
+      <content:encoded>&lt;p&gt;The FlexSPI NOR driver for the NXP MCXA5xx already worked. The
+blocking self-test was green, the examples ran, I could erase a
+sector, program a page, read it back, and watch the same bytes come
+out of the memory-mapped window. By the usual bar for “the driver
+works,” it worked.&lt;&#x2F;p&gt;
+&lt;p&gt;That bar is too low. A driver that passes its own happy-path
+self-test has demonstrated exactly one thing: that it can succeed when
+nothing goes wrong. It has said nothing about what happens when an
+async operation gets cancelled half a microsecond into a command
+shift, or when a caller does a partial-page write at an address the
+controller quietly dislikes. The distance between “it works” and “I
+trust it” is made entirely of those questions, and you don’t answer
+them by running the happy path again.&lt;&#x2F;p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;&#x2F;span&gt;
+&lt;p&gt;You answer them by building something whose only job is to be nasty to
+the driver and to notice when the driver flinches. This post is about
+two such things — a pair of self-checking soak rigs for the
+&lt;code&gt;embassy-mcxa&lt;&#x2F;code&gt; FlexSPI driver — and the two bugs they caught on the
+way. The work landed in &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;embassy-rs&#x2F;embassy&#x2F;pull&#x2F;6389&quot;&gt;embassy-rs&#x2F;embassy#6389&lt;&#x2F;a&gt;, validated on an
+FRDM-MCXA577 with its on-board Winbond W25Q64 (8 MiB), and it builds on
+the register-level fixes (&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;embassy-rs&#x2F;embassy&#x2F;pull&#x2F;6386&quot;&gt;AHBCR&lt;&#x2F;a&gt;, &lt;code&gt;DLLCR&lt;&#x2F;code&gt;, &lt;code&gt;FLSHCR2&lt;&#x2F;code&gt;) from
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;embassy-rs&#x2F;embassy&#x2F;pull&#x2F;6386&quot;&gt;#6386&lt;&#x2F;a&gt; — more on how &lt;em&gt;those&lt;&#x2F;em&gt; got found in a moment, because it
+was the same rig.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-a-torture-loop-has-to-be&quot;&gt;What a torture loop has to be&lt;&#x2F;h2&gt;
+&lt;p&gt;A soak test that only loops the happy path faster is not a soak test;
+it’s a slow way to confirm what you already believed. To actually buy
+trust, the loop has to have a few properties, and getting those
+properties right was most of the work.&lt;&#x2F;p&gt;
+&lt;p&gt;It has to be &lt;strong&gt;adversarial&lt;&#x2F;strong&gt;: every round erases a fresh window,
+programs it with randomly-sized, randomly-placed sub-page writes and
+full pages, and then reads it back through &lt;em&gt;two independent paths&lt;&#x2F;em&gt; —
+the IP command path and the memory-mapped AHB window — asserting they
+agree with each other and with the pattern it wrote. A bug that lives
+in only one path can’t hide when the other path is watching.&lt;&#x2F;p&gt;
+&lt;p&gt;It has to be &lt;strong&gt;reproducible&lt;&#x2F;strong&gt;: every round is driven by a logged
+xorshift seed, so a failure three hours in isn’t a ghost — it’s a seed
+I can replay from a clean boot.&lt;&#x2F;p&gt;
+&lt;p&gt;It has to &lt;strong&gt;protect itself from itself&lt;&#x2F;strong&gt;: a torture loop that programs
+random addresses is one off-by-one away from scribbling on the sector
+it’s verifying, or wearing a single sector to death. So the window
+rotates by a prime stride to spread wear, a per-sector erase budget
+caps the damage, a wall-clock limit ends the run, and a &lt;strong&gt;never-erased
+canary sector&lt;&#x2F;strong&gt; sits off to the side. If a wild write ever lands in
+the canary, the canary stops matching, and I learn that the driver
+wrote somewhere it was never told to.&lt;&#x2F;p&gt;
+&lt;p&gt;Stripped of the bookkeeping, each round looks like this:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;loop&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;    let&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; seed&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; rng&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;next&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt;          &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; logged, so any failure replays&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;    let&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; window&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; next_window&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;seed&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; prime-stride rotation, wear-spread&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;    erase&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;window&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;?&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;    verify_erased&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;window&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;?&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;    for&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; write&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; in&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; random_writes&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;seed&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; window&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;        program&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;write&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;addr&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; write&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;bytes&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;?&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; The load-bearing assertion: two independent read paths must&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; agree with each other and with what we wrote.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;    assert_eq!&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;read_ip&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;window&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;   expected&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;seed&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;    assert_eq!&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;read_mmap&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;window&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; expected&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;seed&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;    assert_canary_intact&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;?&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt;        &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; nobody wrote where they shouldn&amp;#39;t&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;    if&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; elapsed&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt; &amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; LIMIT&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; break&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;span&gt; }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;The first time I pointed this at the driver, it didn’t get to a clean
+round. The IP path and the memory-mapped path disagreed, which is how
+the &lt;code&gt;AHBCR.AFLASHBASE&lt;&#x2F;code&gt; addressing bug surfaced — I fixed that
+separately in &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;embassy-rs&#x2F;embassy&#x2F;pull&#x2F;6386&quot;&gt;#6386&lt;&#x2F;a&gt; before any of the rest of this made
+sense. With that fixed, the rig got much further, and then found
+something stranger.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-it-found-first-the-byte-before-the-write-keeps-going-to-zero&quot;&gt;What it found first: the byte before the write keeps going to zero&lt;&#x2F;h2&gt;
+&lt;p&gt;The failure was small and specific, which is the worst kind. Most
+rounds were clean. But on rounds where the random writes happened to
+place one sub-page write starting at an address with &lt;code&gt;addr % 8&lt;&#x2F;code&gt; of 5 or
+7, and &lt;em&gt;another&lt;&#x2F;em&gt; write followed in the same page, the byte immediately
+&lt;em&gt;before&lt;&#x2F;em&gt; the second write’s start address came back as &lt;code&gt;0x00&lt;&#x2F;code&gt;. Not the
+bytes I wrote — those were fine. The byte &lt;em&gt;before&lt;&#x2F;em&gt; them, which I hadn’t
+touched in that operation at all.&lt;&#x2F;p&gt;
+&lt;p&gt;My first assumption was that I had a bug in the FIFO-fill loop: an
+off-by-one in how the driver packs the caller’s buffer into the
+controller’s TX FIFO. I went and read that loop very carefully, then
+did the thing I should have done first and diffed it, byte for byte,
+against NXP’s &lt;code&gt;FLEXSPI_WriteBlocking&lt;&#x2F;code&gt; in their SDK. It was identical.
+The driver was filling the FIFO exactly the way the vendor does.&lt;&#x2F;p&gt;
+&lt;p&gt;That reframed the whole problem. If the loop is byte-identical to the
+reference and the reference is trusted, the corruption isn’t in the
+loop — it’s in the controller’s handling of an unaligned write boundary
+between two consecutive writes in a page. A single write of any length,
+at any alignment, is fine. It’s specifically the seam between two
+sub-page writes when the second one starts unaligned that the IP
+mangles. This is a controller alignment quirk, and no amount of
+re-reading my code was going to fix a property of the silicon.&lt;&#x2F;p&gt;
+&lt;p&gt;So the fix isn’t to make the unaligned write work — it’s to make the
+unaligned write &lt;em&gt;impossible to ask for&lt;&#x2F;em&gt;, loudly, instead of letting it
+silently corrupt an adjacent byte. &lt;code&gt;page_program&lt;&#x2F;code&gt; now enforces a
+write-size contract: the start address and the length must both be
+8-byte aligned, and the write must stay within a single page. Anything
+else returns an error before a single byte reaches the flash.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; The 8 is a property of the FlexSPI IP&#x2F;DMA FIFO window,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; not of the flash chip. Name it so nobody &amp;quot;optimizes&amp;quot; it away.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-storage&quot;&gt;const&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; WRITE_GRANULARITY&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; usize&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 8&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;fn&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; check_program&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;addr&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; u32&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; len&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; usize&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; flash_size&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;:&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; u32&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Result&lt;&#x2F;span&gt;&lt;span&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; IoError&lt;&#x2F;span&gt;&lt;span&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;    if&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; addr&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; as&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; usize&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; %&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; WRITE_GRANULARITY&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; !=&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 0&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; |&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;|&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; len&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; %&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-other&quot;&gt; WRITE_GRANULARITY&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; !=&lt;&#x2F;span&gt;&lt;span class=&quot;z-constant z-numeric&quot;&gt; 0&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;        return&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Err&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;IoError&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;Misaligned&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;    match&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; addr&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;checked_add&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;len&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; as&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; u32&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;        Some&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;end&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; if&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; end&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; &amp;lt;=&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; flash_size&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;span&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;        _&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; =&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; return&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Err&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;IoError&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;OutOfBounds&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; ...plus the single-page check...&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;    Ok&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Two things made this an easy call rather than a regression. First, it’s
+the exact granularity the DMA write path already required (&lt;code&gt;len % 8 == 0&lt;&#x2F;code&gt;), so the async&#x2F;DMA side of the driver had always lived under this
+contract — I was only making the blocking side honest about it. Second,
+it maps cleanly onto &lt;code&gt;embedded-storage&lt;&#x2F;code&gt;’s &lt;code&gt;WRITE_SIZE&lt;&#x2F;code&gt; model, so a
+future trait impl falls out naturally rather than fighting the
+contract. The same pass also bounds-checks &lt;code&gt;read&lt;&#x2F;code&gt;, &lt;code&gt;erase_sector&lt;&#x2F;code&gt;, and
+&lt;code&gt;program&lt;&#x2F;code&gt; against the configured flash size, returning
+&lt;code&gt;IoError::OutOfBounds&lt;&#x2F;code&gt; instead of wrapping around. Both new variants
+went onto an already &lt;code&gt;#[non_exhaustive]&lt;&#x2F;code&gt; &lt;code&gt;IoError&lt;&#x2F;code&gt;, so none of this
+breaks callers — the only behavioural change is that a sub-page write
+now has to align to 8 bytes, where before it would silently eat the
+byte next door.&lt;&#x2F;p&gt;
+&lt;p&gt;Partial-page writes still work. They just work at 8-byte granularity,
+the way the hardware can actually deliver them. I updated the bundled
+examples to match (a &lt;code&gt;100&lt;&#x2F;code&gt;-byte partial write became &lt;code&gt;96&lt;&#x2F;code&gt;; the stress
+example’s program sizes got rounded to multiples of 8), which was a
+nice forcing function for confirming the contract was livable and not
+just defensible.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;pushing-the-same-idea-at-the-async-path&quot;&gt;Pushing the same idea at the async path&lt;&#x2F;h2&gt;
+&lt;p&gt;The blocking driver was now hardened and soaked. But the interesting
+half of an Embassy driver is the async half, and async brings a failure
+mode that blocking code simply doesn’t have: &lt;strong&gt;cancellation&lt;&#x2F;strong&gt;.&lt;&#x2F;p&gt;
+&lt;p&gt;In async Rust, the idiomatic way to bound an operation is to wrap it in
+&lt;code&gt;with_timeout&lt;&#x2F;code&gt;, or race it in a &lt;code&gt;select!&lt;&#x2F;code&gt;, or cancel the task it runs
+in. All three do the same thing under the hood: they &lt;em&gt;drop the future
+mid-flight&lt;&#x2F;em&gt;. The operation was in progress, and now it isn’t, and it
+never got to run whatever cleanup it might have wanted to run. Any
+async driver that can’t survive that is a driver with a landmine in it,
+waiting for the first caller who puts a timeout around a flash write.&lt;&#x2F;p&gt;
+&lt;p&gt;So the second rig, &lt;code&gt;flexspi-cancel-soak&lt;&#x2F;code&gt;, does that on purpose,
+thousands of times. It runs the same erase&#x2F;program&#x2F;verify integrity
+checks over the async + DMA path, and then it does something deliberately
+hostile: it takes a real operation, wraps it in &lt;code&gt;with_timeout&lt;&#x2F;code&gt; with a
+delay swept across a wide range — from about a microsecond (mid
+command-shift, the operation has barely started) out to a couple of
+milliseconds (mid write-in-progress, the flash is busy) — so the future
+gets dropped at every interesting phase of the transaction. Then it
+issues a &lt;em&gt;fresh&lt;&#x2F;em&gt; operation and asserts that one returns correct data.&lt;&#x2F;p&gt;
+&lt;p&gt;The elegant part of testing cancel-safety is that you barely need an
+assertion. A driver that isn’t cancel-safe doesn’t return wrong data
+after a botched cancellation — it &lt;em&gt;hangs the next operation forever&lt;&#x2F;em&gt;. So
+the test simply &lt;em&gt;reaching the next round&lt;&#x2F;em&gt;, across thousands of
+in-flight cancellations, is itself the pass signal. If the rig is still
+counting rounds, the driver is recovering. If it stops, it wedged.&lt;&#x2F;p&gt;
+&lt;p&gt;It stopped.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-it-found-second-a-dropped-future-wedges-the-controller&quot;&gt;What it found second: a dropped future wedges the controller&lt;&#x2F;h2&gt;
+&lt;p&gt;The symptom was a hang, deep in &lt;code&gt;prepare_ip_transfer&lt;&#x2F;code&gt;, spinning in
+&lt;code&gt;wait_idle()&lt;&#x2F;code&gt; waiting for a sequence engine that was never going to
+become idle. The diagnosis, once I dumped the controller state at the
+hang, was clear: the cancelled operation had left the FlexSPI sequence
+engine non-idle — chip-select still asserted, the TX FIFO in underrun —
+and the driver had no notion that it should clean any of that up. The
+&lt;em&gt;next&lt;&#x2F;em&gt; operation walked in, asked the engine to be idle, and waited for
+a condition that the &lt;em&gt;previous, cancelled&lt;&#x2F;em&gt; operation had made
+permanently false. One cancelled future, and the controller was bricked
+until reset.&lt;&#x2F;p&gt;
+&lt;p&gt;The fix is to stop trusting that the engine is idle just because the
+last operation “finished,” and instead make &lt;code&gt;prepare_ip_transfer&lt;&#x2F;code&gt;
+self-healing. On entry, if the engine isn’t idle — the fingerprint of a
+previously cancelled op — force it idle with a software reset before
+doing anything else:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;fn&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt; prepare_ip_transfer&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;&amp;amp;&lt;&#x2F;span&gt;&lt;span class=&quot;z-storage&quot;&gt;mut&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-language&quot;&gt; self&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; Result&lt;&#x2F;span&gt;&lt;span&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt; IoError&lt;&#x2F;span&gt;&lt;span&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; A cancelled op leaves the sequence engine non-idle: CS still&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; asserted, TX FIFO underrun. Detect that fingerprint and recover.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; One SEQIDLE sample is authoritative here: SEQIDLE only deasserts&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; on a fresh IPCMD trigger, and none is pending at this point.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-keyword&quot;&gt;    if&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt; !&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-language&quot;&gt;self&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;seq_idle&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;        &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; Force idle, de-assert CS, reset the instruction pointer,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;        &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; flush the FIFOs. The LUT and controller config survive a&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;        &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; software reset -- the init path already relies on that.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-language&quot;&gt;        self&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;software_reset&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-language&quot;&gt;    self&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;wait_idle&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;    &#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; ...load the IP command, trigger IPCMD...&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;    Ok&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;There’s a deliberate design decision hiding in what this fix &lt;em&gt;doesn’t&lt;&#x2F;em&gt;
+do. It does not add a timeout. The driver imposes no timeout of its own
+and keeps &lt;code&gt;embassy-time&lt;&#x2F;code&gt; out of its hot path entirely. Timeout &lt;em&gt;policy&lt;&#x2F;em&gt;
+— how long is too long, and whether to give up — belongs to the
+application, which already has &lt;code&gt;with_timeout&lt;&#x2F;code&gt; for exactly that. The
+driver’s job isn’t to decide the policy; it’s to make the policy
+&lt;em&gt;safe&lt;&#x2F;em&gt;. The self-healing recovery is precisely what lets a caller wrap
+any operation in &lt;code&gt;with_timeout&lt;&#x2F;code&gt; without fear: when their timeout
+elapses and drops the future, the driver un-wedges itself on the next
+call instead of staying broken. The cancellation that used to be a
+landmine is now just a thing that happens.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;the-payoff&quot;&gt;The payoff&lt;&#x2F;h2&gt;
+&lt;p&gt;With both fixes in, the two rigs ran clean:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;flexspi-soak&lt;&#x2F;code&gt;&lt;&#x2F;strong&gt; (blocking IP + memory-mapped): 384 rounds, zero
+mismatches between the IP and AHB paths, and every out-of-contract
+call — misaligned, page-crossing, out-of-range — returning the error
+it should.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;flexspi-cancel-soak&lt;&#x2F;code&gt;&lt;&#x2F;strong&gt; (async + DMA): 388 rounds, &lt;strong&gt;5,044
+in-flight cancellations&lt;&#x2F;strong&gt;, 3,880 clean recoveries, zero wedges, zero
+data corruption.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;Those 5,044 cancellations are the number I care about most, because
+every one of them is a &lt;code&gt;with_timeout&lt;&#x2F;code&gt; firing at a moment that, a week
+earlier, would have bricked the controller until the next reset.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-i-d-carry-to-the-next-driver&quot;&gt;What I’d carry to the next driver&lt;&#x2F;h2&gt;
+&lt;p&gt;A few things generalize past this one chip:&lt;&#x2F;p&gt;
+&lt;p&gt;A happy-path self-test proves a driver &lt;em&gt;can&lt;&#x2F;em&gt; work. It says nothing
+about whether you can trust it. Those are different claims, and only the
+second one matters once real callers show up.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;Cancel-safety is a first-class property of an async driver&lt;&#x2F;strong&gt;, not an
+edge case. If dropping an in-flight future can leave your peripheral in
+a state the next operation can’t recover from, you don’t have a working
+async driver yet — you have one that works until someone uses a timeout.
+And in Embassy, &lt;em&gt;someone always uses a timeout.&lt;&#x2F;em&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;Make illegal states loud.&lt;&#x2F;strong&gt; The unaligned write didn’t fail — it
+succeeded and corrupted a neighbour. A contract that turns “silently
+wrong” into “loudly refused” is worth more than it costs, every time.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;Seed your randomness.&lt;&#x2F;strong&gt; A fuzzing soak loop that can’t replay its own
+failures is a slot machine. The xorshift seed turned “it broke
+somewhere in three hours” into “it broke on this seed, here’s the
+repro.”&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;a-note-on-trusting-it&quot;&gt;A note on trusting it&lt;&#x2F;h2&gt;
+&lt;p&gt;I trust this driver today — on this board, with this flash part,
+against everything the two rigs throw at it. That’s a real and specific
+claim, and it’s also a smaller one than “it’s correct.” Both bugs in
+this post were invisible until the moment a rig was nasty enough to
+provoke them, and the honest conclusion to draw from that is &lt;em&gt;not&lt;&#x2F;em&gt; that
+I’ve now found the last one. It’s that the next rig, or the next caller
+with a workload I didn’t imagine, may well surface something these two
+didn’t. Soak tests buy confidence proportional to how mean they are, and
+no finite amount of meanness reaches a proof. If you run this driver and
+it does something neither rig caught, I’d genuinely like to know — that’s
+the rig I haven’t built yet.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-this-doesn-t-cover&quot;&gt;What this doesn’t cover&lt;&#x2F;h2&gt;
+&lt;p&gt;The usual caveats, and they’re real ones. This is one board, one flash
+part, one controller IP. The unaligned-write corruption is a quirk of
+&lt;em&gt;this&lt;&#x2F;em&gt; FlexSPI block, and I’d be unsurprised if it looked nothing like
+that on other silicon — the &lt;em&gt;shape&lt;&#x2F;em&gt; of the lesson (diff against the
+vendor reference; if your loop is identical, suspect the controller)
+transfers better than the specifics. The driver also doesn’t implement
+the &lt;code&gt;embedded-storage&lt;&#x2F;code&gt; traits yet, though the write-size contract was
+designed so it maps straight onto &lt;code&gt;WRITE_SIZE = 8&lt;&#x2F;code&gt; &#x2F; &lt;code&gt;ERASE_SIZE = 4096&lt;&#x2F;code&gt; when it does.&lt;&#x2F;p&gt;
+&lt;p&gt;The full set of fixes, the two soak rigs, and the hardware run logs are
+in &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;embassy-rs&#x2F;embassy&#x2F;pull&#x2F;6389&quot;&gt;embassy-rs&#x2F;embassy#6389&lt;&#x2F;a&gt;. If you’re bringing up FlexSPI on
+MCXA, I hope the rigs save you the half-week. If you’re doing it on
+something else and one of these patterns rhymes with what you’re seeing,
+I’d like to hear about it.&lt;&#x2F;p&gt;
+</content:encoded>
+    </item>
+    
+  </channel>
+</rss>

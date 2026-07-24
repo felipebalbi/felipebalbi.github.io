@@ -1,0 +1,226 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"
+     xmlns:atom="http://www.w3.org/2005/Atom"
+     xmlns:content="http://purl.org/rss/1.0/modules/content/"
+     xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Felipe Balbi</title>
+    <link>https://balbi.sh</link>
+    <description>Notes on embedded systems, Rust, and the craft of writing software.</description>
+    <generator>Zola</generator>
+    <language>en</language>
+    <lastBuildDate>Mon, 22 Jun 2026 09:00:00 +0000</lastBuildDate>
+    <atom:link href="https://balbi.sh/tags/release/rss.xml" rel="self" type="application/rss+xml"/>
+    
+    <item>
+      <title>Pico de Gallo: Release Announcement</title>
+      <link>https://balbi.sh/posts/pico-de-gallo-reliability-release/</link>
+      <guid isPermaLink="true">https://balbi.sh/posts/pico-de-gallo-reliability-release/</guid>
+      <pubDate>Mon, 22 Jun 2026 09:00:00 +0000</pubDate>
+      <dc:creator>Felipe Balbi</dc:creator>
+      <description>&lt;p&gt;&lt;a href=&quot;&#x2F;pico-de-gallo&#x2F;&quot;&gt;Pico de Gallo&lt;&#x2F;a&gt; turns an RP2350 into a USB-attached bridge that
+lets a host program drive real I²C, SPI, GPIO, PWM, ADC, UART, and
+1-Wire from &lt;code&gt;std&lt;&#x2F;code&gt; Rust, C, or Python — so you can write and test
+device drivers on your laptop instead of cross-compiling for an MCU
+every time. Today’s release moves the whole ecosystem forward at once.&lt;&#x2F;p&gt;</description>
+      
+      <content:encoded>&lt;p&gt;&lt;a href=&quot;&#x2F;pico-de-gallo&#x2F;&quot;&gt;Pico de Gallo&lt;&#x2F;a&gt; turns an RP2350 into a USB-attached bridge that
+lets a host program drive real I²C, SPI, GPIO, PWM, ADC, UART, and
+1-Wire from &lt;code&gt;std&lt;&#x2F;code&gt; Rust, C, or Python — so you can write and test
+device drivers on your laptop instead of cross-compiling for an MCU
+every time. Today’s release moves the whole ecosystem forward at once.&lt;&#x2F;p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;&#x2F;span&gt;
+&lt;p&gt;This is a &lt;strong&gt;lockstep release&lt;&#x2F;strong&gt;. The wire protocol in
+&lt;code&gt;pico-de-gallo-internal&lt;&#x2F;code&gt; went from schema 0.5 to 0.6, and under the
+pre-1.0 schema-versioning rule that is a breaking change. &lt;strong&gt;Firmware
+and host must be upgraded together&lt;&#x2F;strong&gt; — a 0.10 firmware will reject an
+older host’s RPCs, and a new host will refuse to talk to old firmware
+rather than silently mis-decode bytes on the wire. The
+&lt;a href=&quot;https:&#x2F;&#x2F;balbi.sh&#x2F;posts&#x2F;pico-de-gallo-reliability-release&#x2F;#upgrade-and-compatibility&quot;&gt;upgrade notes&lt;&#x2F;a&gt; at the bottom have the full
+version table.&lt;&#x2F;p&gt;
+&lt;p&gt;Most of what landed here comes out of a reliability review that turned
+up a handful of real bugs: a GPIO wait could wedge the entire firmware
+dispatcher, a hung handler had no recovery path, GPIO subscriptions
+leaked when a host process crashed, and a bumped schema &lt;em&gt;major&lt;&#x2F;em&gt; could
+slip past validation and corrupt decoding silently. Each crate’s share
+of the fix is below.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;pico-de-gallo-internal-0-6-0-the-wire-protocol&quot;&gt;&lt;code&gt;pico-de-gallo-internal&lt;&#x2F;code&gt; 0.6.0 — the wire protocol&lt;&#x2F;h2&gt;
+&lt;p&gt;This is the crate every other one depends on, and the breaking schema
+bump that drives the lockstep.&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;GpioWaitRequest&lt;&#x2F;code&gt; gained a &lt;code&gt;timeout_ms: u32&lt;&#x2F;code&gt; field, used by all five
+&lt;code&gt;gpio&#x2F;wait-*&lt;&#x2F;code&gt; endpoints (&lt;code&gt;wait-high&lt;&#x2F;code&gt;, &lt;code&gt;wait-low&lt;&#x2F;code&gt;, &lt;code&gt;wait-rising&lt;&#x2F;code&gt;,
+&lt;code&gt;wait-falling&lt;&#x2F;code&gt;, &lt;code&gt;wait-any&lt;&#x2F;code&gt;). A value of &lt;code&gt;0&lt;&#x2F;code&gt; preserves the old
+wait-forever behavior; a non-zero value bounds the firmware-side wait
+and returns the new &lt;code&gt;GpioError::Timeout&lt;&#x2F;code&gt; on expiry. This is the wire
+half of the fix for the dispatcher wedge — a wait on a pin that never
+transitions used to block &lt;em&gt;every other endpoint&lt;&#x2F;em&gt; until you
+power-cycled the board.&lt;&#x2F;li&gt;
+&lt;li&gt;New &lt;code&gt;system&#x2F;reset-subscriptions&lt;&#x2F;code&gt; endpoint (request &lt;code&gt;()&lt;&#x2F;code&gt;, response
+&lt;code&gt;u8&lt;&#x2F;code&gt; count). GPIO subscriptions are server-side state that outlives
+the USB transport, so a host that crashed without sending
+&lt;code&gt;gpio&#x2F;unsubscribe&lt;&#x2F;code&gt; would strand those pins until a power cycle. This
+endpoint is the recovery path.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;Both changes are append-only on the wire, but the schema-version bump
+itself is what requires the coordinated upgrade.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;pico-de-gallo-lib-0-6-0-the-rust-host-library&quot;&gt;&lt;code&gt;pico-de-gallo-lib&lt;&#x2F;code&gt; 0.6.0 — the Rust host library&lt;&#x2F;h2&gt;
+&lt;ul&gt;
+&lt;li&gt;New &lt;code&gt;gpio_wait_for_{high,low,rising_edge,falling_edge,any_edge}_with_timeout&lt;&#x2F;code&gt;
+methods take a &lt;code&gt;std::time::Duration&lt;&#x2F;code&gt; and return
+&lt;code&gt;Err(PicoDeGalloError::Endpoint(GpioError::Timeout))&lt;&#x2F;code&gt; on expiry. The
+existing two-argument methods keep waiting forever by sending
+&lt;code&gt;timeout_ms: 0&lt;&#x2F;code&gt;.&lt;&#x2F;li&gt;
+&lt;li&gt;New &lt;code&gt;system_reset_subscriptions()&lt;&#x2F;code&gt; method returns the number of
+subscriptions it reset. The recommended connect sequence is now
+&lt;code&gt;new()&lt;&#x2F;code&gt; → &lt;code&gt;validate().await?&lt;&#x2F;code&gt; → &lt;code&gt;system_reset_subscriptions().await?&lt;&#x2F;code&gt;.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;code&gt;validate()&lt;&#x2F;code&gt; now checks &lt;code&gt;schema_major&lt;&#x2F;code&gt; in addition to
+&lt;code&gt;schema_minor&lt;&#x2F;code&gt;. Previously a firmware reporting a bumped major with a
+matching minor would pass validation and the host would then
+mis-decode wire bytes — silent garbage out. &lt;code&gt;ValidateError::SchemaMismatch&lt;&#x2F;code&gt;
+now carries &lt;code&gt;expected_major&lt;&#x2F;code&gt; &#x2F; &lt;code&gt;actual_major&lt;&#x2F;code&gt;, and its &lt;code&gt;Display&lt;&#x2F;code&gt;
+shows the full &lt;code&gt;MAJOR.MINOR.x&lt;&#x2F;code&gt; skew.&lt;&#x2F;li&gt;
+&lt;li&gt;Fixed: &lt;code&gt;validate()&lt;&#x2F;code&gt; no longer mis-classifies transport,
+postcard-decode, and frame-size errors as
+&lt;code&gt;ValidateError::LegacyFirmware&lt;&#x2F;code&gt;. Only the postcard-rpc “no handler
+for that key” signals (&lt;code&gt;UnknownKey&lt;&#x2F;code&gt;, &lt;code&gt;KeyTooSmall&lt;&#x2F;code&gt;) map to
+&lt;code&gt;LegacyFirmware&lt;&#x2F;code&gt;; everything else routes to &lt;code&gt;Comms&lt;&#x2F;code&gt;, so you stop
+being told to upgrade firmware that is already current.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;code&gt;MAX_BATCH_OPS&lt;&#x2F;code&gt; and &lt;code&gt;MAX_TRANSFER_SIZE&lt;&#x2F;code&gt; are now re-exported, so you
+don’t have to depend on the wire crate just to validate batch sizes.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h2 id=&quot;pico-de-gallo-hal-0-6-0-the-embedded-hal-layer&quot;&gt;&lt;code&gt;pico-de-gallo-hal&lt;&#x2F;code&gt; 0.6.0 — the &lt;code&gt;embedded-hal&lt;&#x2F;code&gt; layer&lt;&#x2F;h2&gt;
+&lt;ul&gt;
+&lt;li&gt;New &lt;code&gt;Hal::new_validated()&lt;&#x2F;code&gt; and &lt;code&gt;Hal::new_validated_with_serial_number()&lt;&#x2F;code&gt;
+constructors call &lt;code&gt;validate()&lt;&#x2F;code&gt; before returning, failing loudly on a
+disconnected device or a schema mismatch. The lazy &lt;code&gt;Hal::new()&lt;&#x2F;code&gt; still
+defers failures to the first RPC if that’s what you want. A standalone
+&lt;code&gt;Hal::validate()&lt;&#x2F;code&gt; accessor lets you check after the fact.&lt;&#x2F;li&gt;
+&lt;li&gt;New &lt;code&gt;Hal::system_reset_subscriptions() -&amp;gt; Result&amp;lt;u8, SystemHalError&amp;gt;&lt;&#x2F;code&gt;
+exposes the subscription teardown that previously required dropping
+down to &lt;code&gt;pico-de-gallo-lib&lt;&#x2F;code&gt;. Recommended right after
+&lt;code&gt;new_validated()&lt;&#x2F;code&gt; in any app that uses GPIO subscriptions.&lt;&#x2F;li&gt;
+&lt;li&gt;New &lt;code&gt;Gpio::wait_for_*_with_timeout&lt;&#x2F;code&gt; inherent async methods accept a
+&lt;code&gt;Duration&lt;&#x2F;code&gt; and return &lt;code&gt;GpioError::Timeout&lt;&#x2F;code&gt; on expiry. They’re
+inherent methods rather than trait methods because
+&lt;code&gt;embedded-hal-async&lt;&#x2F;code&gt;’s &lt;code&gt;Wait&lt;&#x2F;code&gt; trait has no notion of a timeout; the
+trait methods keep their wait-forever semantics.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;code&gt;AdcChannel&lt;&#x2F;code&gt;, &lt;code&gt;AdcConfigurationInfo&lt;&#x2F;code&gt;, &lt;code&gt;GpioDirection&lt;&#x2F;code&gt;, &lt;code&gt;GpioEdge&lt;&#x2F;code&gt;,
+and &lt;code&gt;GpioPull&lt;&#x2F;code&gt; are now re-exported — driver authors no longer need
+&lt;code&gt;pico-de-gallo-lib&lt;&#x2F;code&gt; in their &lt;code&gt;Cargo.toml&lt;&#x2F;code&gt; just for these types.&lt;&#x2F;li&gt;
+&lt;li&gt;New &lt;code&gt;HalInitError&lt;&#x2F;code&gt; and &lt;code&gt;SystemHalError&lt;&#x2F;code&gt; types, and a fix for a stale
+doc-comment that referenced a &lt;code&gt;Hal::uart_set_config&lt;&#x2F;code&gt; method that
+never existed.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h2 id=&quot;pico-de-gallo-ffi-0-7-0-the-c-bindings&quot;&gt;&lt;code&gt;pico-de-gallo-ffi&lt;&#x2F;code&gt; 0.7.0 — the C bindings&lt;&#x2F;h2&gt;
+&lt;ul&gt;
+&lt;li&gt;New &lt;code&gt;gallo_init_strict()&lt;&#x2F;code&gt; and &lt;code&gt;gallo_init_strict_with_serial_number()&lt;&#x2F;code&gt;
+call &lt;code&gt;validate()&lt;&#x2F;code&gt; internally and return &lt;code&gt;NULL&lt;&#x2F;code&gt; on device-not-found,
+schema mismatch, or legacy firmware. Prefer these over the lazy
+&lt;code&gt;gallo_init&lt;&#x2F;code&gt; in production C — failures surface at construct time
+instead of on the first RPC.&lt;&#x2F;li&gt;
+&lt;li&gt;New &lt;code&gt;gallo_gpio_wait_for_{high,low,rising_edge,falling_edge,any_edge}_with_timeout_ms&lt;&#x2F;code&gt;
+functions. &lt;code&gt;timeout_ms == 0&lt;&#x2F;code&gt; keeps the wait-forever behavior;
+non-zero bounds it and returns &lt;code&gt;Status::GpioTimeout&lt;&#x2F;code&gt; (&lt;code&gt;-70&lt;&#x2F;code&gt;). These
+need firmware schema 0.6+; older firmware returns
+&lt;code&gt;Status::SchemaMismatch&lt;&#x2F;code&gt;.&lt;&#x2F;li&gt;
+&lt;li&gt;New &lt;code&gt;gallo_system_reset_subscriptions()&lt;&#x2F;code&gt; with
+&lt;code&gt;SystemResetSubscriptionsFailed&lt;&#x2F;code&gt; (&lt;code&gt;-69&lt;&#x2F;code&gt;).&lt;&#x2F;li&gt;
+&lt;li&gt;The high-throughput primitives &lt;code&gt;gallo_spi_transfer&lt;&#x2F;code&gt;, &lt;code&gt;gallo_spi_batch&lt;&#x2F;code&gt;,
+and &lt;code&gt;gallo_i2c_batch&lt;&#x2F;code&gt; are now reachable from C, via the tagged structs
+&lt;code&gt;GalloSpiBatchOp&lt;&#x2F;code&gt; &#x2F; &lt;code&gt;GalloI2cBatchOp&lt;&#x2F;code&gt;. On a per-operation failure an
+optional &lt;code&gt;out_failed_op&lt;&#x2F;code&gt; receives the zero-based index of the failing
+op. New status codes: &lt;code&gt;I2cBatchFailed&lt;&#x2F;code&gt; (&lt;code&gt;-66&lt;&#x2F;code&gt;), &lt;code&gt;SpiBatchFailed&lt;&#x2F;code&gt;
+(&lt;code&gt;-67&lt;&#x2F;code&gt;), &lt;code&gt;SpiTransferFailed&lt;&#x2F;code&gt; (&lt;code&gt;-68&lt;&#x2F;code&gt;). The wire protocol is unchanged
+here — this is pure FFI surface over existing endpoints.&lt;&#x2F;li&gt;
+&lt;li&gt;All &lt;code&gt;gallo_*&lt;&#x2F;code&gt; functions now take &lt;code&gt;const PicoDeGallo *&lt;&#x2F;code&gt; for the device
+handle. The ABI is unchanged, but C consumers that previously cast
+away &lt;code&gt;const&lt;&#x2F;code&gt; on every call can drop those casts, and headers built
+with &lt;code&gt;-Wcast-qual&lt;&#x2F;code&gt; stop warning. The handle remains &lt;code&gt;Send + Sync&lt;&#x2F;code&gt; and
+interior-mutable.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h2 id=&quot;pyco-de-gallo-0-4-2-the-python-bindings&quot;&gt;&lt;code&gt;pyco-de-gallo&lt;&#x2F;code&gt; 0.4.2 — the Python bindings&lt;&#x2F;h2&gt;
+&lt;ul&gt;
+&lt;li&gt;New &lt;code&gt;pyco_de_gallo.open_strict()&lt;&#x2F;code&gt; and
+&lt;code&gt;open_strict_with_serial_number(serial_number)&lt;&#x2F;code&gt; call &lt;code&gt;validate()&lt;&#x2F;code&gt;
+before returning the handle and raise &lt;code&gt;RuntimeError&lt;&#x2F;code&gt; on
+device-not-found, schema mismatch, or legacy firmware. Prefer these
+over the lazy &lt;code&gt;open()&lt;&#x2F;code&gt; in production Python.&lt;&#x2F;li&gt;
+&lt;li&gt;New &lt;code&gt;gpio_wait_for_*_with_timeout(timeout_ms: int)&lt;&#x2F;code&gt; methods — &lt;code&gt;0&lt;&#x2F;code&gt;
+waits forever, non-zero raises &lt;code&gt;RuntimeError&lt;&#x2F;code&gt; on &lt;code&gt;GpioError::Timeout&lt;&#x2F;code&gt;.
+Requires firmware schema 0.6+.&lt;&#x2F;li&gt;
+&lt;li&gt;New &lt;code&gt;system_reset_subscriptions()&lt;&#x2F;code&gt; returns an &lt;code&gt;int&lt;&#x2F;code&gt;.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h2 id=&quot;gallo-cli-0-7-0-the-command-line-tool&quot;&gt;&lt;code&gt;gallo&lt;&#x2F;code&gt; (CLI) 0.7.0 — the command-line tool&lt;&#x2F;h2&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;gallo&lt;&#x2F;code&gt; now calls &lt;code&gt;validate()&lt;&#x2F;code&gt; at the top of every subcommand except
+&lt;code&gt;list&lt;&#x2F;code&gt; and &lt;code&gt;version&lt;&#x2F;code&gt;. A schema-version mismatch is reported up front
+with an actionable message that points at &lt;code&gt;gallo version&lt;&#x2F;code&gt; and tells
+you to re-flash the firmware or install a matching &lt;code&gt;gallo&lt;&#x2F;code&gt;, instead
+of surfacing as a confusing &lt;code&gt;CommsFailed&lt;&#x2F;code&gt; on the first RPC. &lt;code&gt;list&lt;&#x2F;code&gt; is
+exempt because it doesn’t touch a connected device; &lt;code&gt;version&lt;&#x2F;code&gt; is
+exempt because it &lt;em&gt;is&lt;&#x2F;em&gt; the diagnostic that reports schema skew.&lt;&#x2F;li&gt;
+&lt;li&gt;Everything else is unchanged. The existing &lt;code&gt;gpio&lt;&#x2F;code&gt; subcommands
+(&lt;code&gt;get&lt;&#x2F;code&gt;, &lt;code&gt;put&lt;&#x2F;code&gt;, &lt;code&gt;set-config&lt;&#x2F;code&gt;, &lt;code&gt;monitor&lt;&#x2F;code&gt;) keep working. The CLI doesn’t
+expose &lt;code&gt;gpio wait-for-*&lt;&#x2F;code&gt; subcommands, so bounded waits stay available
+through the Rust, C, and Python libraries.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h2 id=&quot;pico-de-gallo-firmware-0-10-0-the-device&quot;&gt;&lt;code&gt;pico-de-gallo-firmware&lt;&#x2F;code&gt; 0.10.0 — the device&lt;&#x2F;h2&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;gpio_wait_for_*&lt;&#x2F;code&gt; handlers now honor the per-request &lt;code&gt;timeout_ms&lt;&#x2F;code&gt;.
+Non-zero values wrap embassy’s &lt;code&gt;wait_for_*_edge()&lt;&#x2F;code&gt; future in
+&lt;code&gt;embassy_time::with_timeout(...)&lt;&#x2F;code&gt; and return &lt;code&gt;GpioError::Timeout&lt;&#x2F;code&gt; on
+expiry; &lt;code&gt;0&lt;&#x2F;code&gt; keeps the pre-0.6 wait-forever behavior.&lt;&#x2F;li&gt;
+&lt;li&gt;An embassy-rp watchdog is now enabled at a 2-second timeout, fed
+every 800 ms by a dedicated &lt;code&gt;watchdog_feeder_task&lt;&#x2F;code&gt;. It’s a separate
+task on purpose — a wedged handler can’t be trusted to feed a
+handler-based scheme — so the device recovers from any future handler
+hang. &lt;code&gt;pause_on_debug(true)&lt;&#x2F;code&gt; keeps debugger sessions from resetting
+the chip.&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;code&gt;i2c_scan_handler&lt;&#x2F;code&gt; now wraps each per-address probe in a 50 ms
+timeout, so one slow-to-NAK address no longer burns the whole scan
+budget.&lt;&#x2F;li&gt;
+&lt;li&gt;New &lt;code&gt;system&#x2F;reset-subscriptions&lt;&#x2F;code&gt; handler iterates the GPIO monitor
+slots, signals each live one to stop, awaits the pin back from its
+monitor task, and returns it to the context. It’s idempotent and
+cheap when nothing is subscribed — the device-side half of the
+subscription-leak recovery.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;Together these close the dispatcher-wedge regression (a &lt;code&gt;gpio_wait&lt;&#x2F;code&gt; on
+a never-transitioning pin blocking every other endpoint), the
+no-recovery-from-a-hung-handler gap, and the worst-case impact of a
+flaky I²C bus on &lt;code&gt;i2c_scan&lt;&#x2F;code&gt;.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;upgrade-and-compatibility&quot;&gt;Upgrade and compatibility&lt;&#x2F;h2&gt;
+&lt;p&gt;Because the wire schema changed, &lt;strong&gt;flash the new firmware and update
+your host crate in the same step&lt;&#x2F;strong&gt;. Mixed versions won’t talk to each
+other — by design, the new validation refuses rather than mis-decodes.&lt;&#x2F;p&gt;
+&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Crate&lt;&#x2F;th&gt;&lt;th&gt;Old&lt;&#x2F;th&gt;&lt;th&gt;New&lt;&#x2F;th&gt;&lt;&#x2F;tr&gt;&lt;&#x2F;thead&gt;&lt;tbody&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;pico-de-gallo-internal&lt;&#x2F;code&gt;&lt;&#x2F;td&gt;&lt;td&gt;0.5.0&lt;&#x2F;td&gt;&lt;td&gt;0.6.0&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;pico-de-gallo-lib&lt;&#x2F;code&gt;&lt;&#x2F;td&gt;&lt;td&gt;0.5.0&lt;&#x2F;td&gt;&lt;td&gt;0.6.0&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;pico-de-gallo-hal&lt;&#x2F;code&gt;&lt;&#x2F;td&gt;&lt;td&gt;0.5.0&lt;&#x2F;td&gt;&lt;td&gt;0.6.0&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;pico-de-gallo-ffi&lt;&#x2F;code&gt;&lt;&#x2F;td&gt;&lt;td&gt;0.6.0&lt;&#x2F;td&gt;&lt;td&gt;0.7.0&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;gallo&lt;&#x2F;code&gt; (CLI)&lt;&#x2F;td&gt;&lt;td&gt;0.6.0&lt;&#x2F;td&gt;&lt;td&gt;0.7.0&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;pyco-de-gallo&lt;&#x2F;code&gt;&lt;&#x2F;td&gt;&lt;td&gt;0.2.0&lt;&#x2F;td&gt;&lt;td&gt;0.4.2&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;pico-de-gallo-firmware&lt;&#x2F;code&gt;&lt;&#x2F;td&gt;&lt;td&gt;0.9.0&lt;&#x2F;td&gt;&lt;td&gt;0.10.0&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;&#x2F;tbody&gt;&lt;&#x2F;table&gt;
+&lt;p&gt;After flashing, point the host at the device and confirm the schema
+lines up:&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;shellsession&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;$&lt;&#x2F;span&gt;&lt;span&gt; gallo version&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;For new code, reach for the validating entry points so a version skew
+or a missing board fails at construct time rather than on the first
+call:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;Rust library: &lt;code&gt;PicoDeGallo::new()&lt;&#x2F;code&gt; → &lt;code&gt;validate().await?&lt;&#x2F;code&gt; →
+&lt;code&gt;system_reset_subscriptions().await?&lt;&#x2F;code&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;HAL: &lt;code&gt;Hal::new_validated()&lt;&#x2F;code&gt;, then &lt;code&gt;system_reset_subscriptions()&lt;&#x2F;code&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;C: &lt;code&gt;gallo_init_strict()&lt;&#x2F;code&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;Python: &lt;code&gt;pyco_de_gallo.open_strict()&lt;&#x2F;code&gt;&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;If you hit a schema-mismatch error after upgrading only one side, that
+mismatch is the new validation doing its job. Re-flash or re-install so
+both ends report the same schema, and you’re good.&lt;&#x2F;p&gt;
+</content:encoded>
+    </item>
+    
+  </channel>
+</rss>

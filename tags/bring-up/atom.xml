@@ -1,0 +1,213 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+  <title>Felipe Balbi</title>
+  <subtitle>Notes on embedded systems, Rust, and the craft of writing software.</subtitle>
+  <link href="https://balbi.sh/tags/bring-up/atom.xml" rel="self" type="application/atom+xml"/>
+  <link href="https://balbi.sh"/>
+  <generator uri="https://www.getzola.org/">Zola</generator>
+  <updated>2026-06-20T09:00:00+00:00</updated>
+  <id>https://balbi.sh/tags/bring-up/atom.xml</id>
+  
+  <entry xml:lang="en">
+    <title>I3C target mode on MCXA: three things the datasheet didn&#x27;t warn me about</title>
+    <published>2026-06-20T09:00:00+00:00</published>
+    <updated>2026-06-20T09:00:00+00:00</updated>
+    <author><name>Felipe Balbi</name></author>
+    <link rel="alternate" href="https://balbi.sh/posts/i3c-target-mcxa-bring-up-gotchas/" type="text/html"/>
+    <id>https://balbi.sh/posts/i3c-target-mcxa-bring-up-gotchas/</id>
+    <summary type="html">&lt;p&gt;I spent the last several weeks bringing up an I3C &lt;em&gt;target&lt;&#x2F;em&gt; driver for
+the NXP MCXA family (MCXA2xx and MCXA5xx share the same I3C IP) inside
+the embassy HAL. “Target” is what I3C calls the role I²C calls
+“&lt;em&gt;slave&lt;&#x2F;em&gt;”: the device that sits on the bus, responds to a controller,
+and can also raise an in-band interrupt (IBI) and service a directed
+read without anyone toggling a sideband pin.  The use case was the
+boring one: a Rust target talking to a Rust controller, raising IBIs
+and returning responses for a few million iterations without
+panicking.&lt;&#x2F;p&gt;
+&lt;p&gt;The driver landed in &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;embassy-rs&#x2F;embassy&#x2F;pull&#x2F;6160&quot;&gt;embassy-rs&#x2F;embassy#6160&lt;&#x2F;a&gt; and the soak rig
+has now ticked past 50 million IBI-then-directed-read iterations at
+16-byte payloads, bus at 1.5 MHz SDR, against an NXP SDK controller
+on the other end. It got there by way of three corner cases that
+each took longer to diagnose than to fix, and that each looked
+nothing like what I’d assumed they were when I started chasing them.
+This post is those three.&lt;&#x2F;p&gt;</summary>
+    
+    <content type="html">&lt;p&gt;I spent the last several weeks bringing up an I3C &lt;em&gt;target&lt;&#x2F;em&gt; driver for
+the NXP MCXA family (MCXA2xx and MCXA5xx share the same I3C IP) inside
+the embassy HAL. “Target” is what I3C calls the role I²C calls
+“&lt;em&gt;slave&lt;&#x2F;em&gt;”: the device that sits on the bus, responds to a controller,
+and can also raise an in-band interrupt (IBI) and service a directed
+read without anyone toggling a sideband pin.  The use case was the
+boring one: a Rust target talking to a Rust controller, raising IBIs
+and returning responses for a few million iterations without
+panicking.&lt;&#x2F;p&gt;
+&lt;p&gt;The driver landed in &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;embassy-rs&#x2F;embassy&#x2F;pull&#x2F;6160&quot;&gt;embassy-rs&#x2F;embassy#6160&lt;&#x2F;a&gt; and the soak rig
+has now ticked past 50 million IBI-then-directed-read iterations at
+16-byte payloads, bus at 1.5 MHz SDR, against an NXP SDK controller
+on the other end. It got there by way of three corner cases that
+each took longer to diagnose than to fix, and that each looked
+nothing like what I’d assumed they were when I started chasing them.
+This post is those three.&lt;&#x2F;p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;&#x2F;span&gt;
+&lt;p&gt;One caveat up front: this is one vendor, one HAL crate, one
+bring-up. I have no idea whether these gotchas generalize to other
+I3C silicon. The shape of &lt;em&gt;how the bugs hid&lt;&#x2F;em&gt; probably transfers;
+the specific register names and timing numbers don’t.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;the-setup&quot;&gt;The setup&lt;&#x2F;h2&gt;
+&lt;p&gt;The hardware is two MCXA boards wired together over their I3C0
+peripherals: one running the Rust controller, one running the Rust
+target, both on top of the &lt;code&gt;embassy-mcxa&lt;&#x2F;code&gt; HAL. The bus runs SDR at
+1.5 MHz push-pull &#x2F; 750 kHz open-drain. The exchange under test is the
+obvious one: controller writes a few bytes, target raises an IBI,
+controller responds with a directed read, target returns a pre-loaded
+payload, repeat. The target’s RX path is DMA-fed into a bbqueue ring
+so the IRQ can drain &lt;code&gt;SRDATAB&lt;&#x2F;code&gt; at line rate while the consuming task
+takes its time — that ring is what makes the soak loop possible at
+all, but it isn’t where any of these three gotchas live.&lt;&#x2F;p&gt;
+&lt;p&gt;For the first few days everything worked. Then the rig started
+panicking after twenty thousand to a few hundred thousand
+iterations with &lt;code&gt;InvalidStart&lt;&#x2F;code&gt; or &lt;code&gt;SdrParity&lt;&#x2F;code&gt; on the target side,
+and I’d go back to staring at register dumps.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;gotcha-1-the-target-clock-was-4x-too-slow-and-the-symptom-was-on-the-controller&quot;&gt;Gotcha 1: the target clock was 4× too slow, and the symptom was on the controller&lt;&#x2F;h2&gt;
+&lt;p&gt;The first failure mode looked like SDA contention around the IBI
+handshake — once every few hundred thousand iterations, the
+controller would see a frame with bad parity, or the target would
+surface &lt;code&gt;SERRWARN.INVSTART&lt;&#x2F;code&gt; on what should have been a clean
+repeated-Start. Not every IBI; not even most IBIs. Just enough to
+be unmissable in soak and unreproducible at the bench.&lt;&#x2F;p&gt;
+&lt;p&gt;I lost a day re-reading the IBI sequencing code for a race that
+wasn’t there before I gave up and added a &lt;code&gt;dump_registers()&lt;&#x2F;code&gt;
+method on both sides — one defmt line each, every &lt;code&gt;M*&lt;&#x2F;code&gt; &#x2F; &lt;code&gt;S*&lt;&#x2F;code&gt;
+register as a raw &lt;code&gt;u32&lt;&#x2F;code&gt;. Diffed against the NXP SDK’s target on
+the same wires, every register matched byte-for-byte except
+&lt;code&gt;SCONFIG&lt;&#x2F;code&gt;. I had &lt;code&gt;BAMATCH=1&lt;&#x2F;code&gt; on the mcxa5xx example and
+&lt;code&gt;BAMATCH=2&lt;&#x2F;code&gt; on mcxa2xx; the SDK had &lt;code&gt;BAMATCH=11&lt;&#x2F;code&gt;.&lt;&#x2F;p&gt;
+&lt;p&gt;BAMATCH is the count, in I3C functional-clock cycles, the target
+waits after seeing bus-idle before declaring the bus “available.”
+The HAL computes it as &lt;code&gt;fclk_MHz - 1&lt;&#x2F;code&gt; — correct, but only if
+&lt;code&gt;fclk&lt;&#x2F;code&gt; is in the range the I3C spec assumes. The MCXA examples
+were feeding I3C0 at roughly 3 MHz (mcxa5xx) and 2.8 MHz
+(mcxa2xx), giving bus-available times of 0.36 µs and 0.67 µs; the
+spec puts the minimum at 1 µs and the SDK runs at 12 MHz
+(0.92 µs). With BAMATCH expiring sub-microsecond, the target was
+declaring the bus available before the controller had finished
+releasing SDA, and very occasionally both ends would drive the
+line at the same time. That was the parity error and the
+&lt;code&gt;INVSTART&lt;&#x2F;code&gt;: SDA contention manifesting one full transaction
+downstream of the actual race.&lt;&#x2F;p&gt;
+&lt;p&gt;The fix is one line in the example clock-tree setup: route
+I3C0_FCLK from FRO_LF (12 MHz exact) with a &#x2F;1 divider, and the
+HAL’s math produces &lt;code&gt;BAMATCH=11&lt;&#x2F;code&gt;. &lt;code&gt;SCONFIG&lt;&#x2F;code&gt; becomes &lt;code&gt;0x140b0019&lt;&#x2F;code&gt;
+exactly, matching the SDK. The soak loop went from failing inside
+half a million iterations to running indefinitely clean.&lt;&#x2F;p&gt;
+&lt;p&gt;The lesson: when a vendor’s reference and yours run on the same
+wires and only one is reliable, dump every register on both sides
+post-init and diff them — the difference is almost never where
+you’re looking. And if a peripheral’s clock contributes to a
+&lt;em&gt;bus-timing&lt;&#x2F;em&gt; parameter rather than just a baud rate, check that
+field’s spec minimum before you trust the formula the HAL uses to
+compute it.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;gotcha-2-raising-the-ibi-before-the-fifo-was-loaded&quot;&gt;Gotcha 2: raising the IBI before the FIFO was loaded&lt;&#x2F;h2&gt;
+&lt;p&gt;With the clocks corrected, the soak rig hit a different failure:
+&lt;code&gt;SERRWARN.INVSTART&lt;&#x2F;code&gt; on the target, during the IBI-payload phase
+itself this time. The trace was unambiguous — the controller ACK’d
+the IBI, issued a repeated-Start with the target’s dynamic address
+and the read bit, started clocking SCL — and the target’s TX FIFO
+was empty when the first byte was demanded. The cause was an
+ordering bug in &lt;code&gt;dma_respond_to_read_with_ibi&lt;&#x2F;code&gt;: arm TX DMA, set
+&lt;code&gt;SCTRL.EVENT = Ibi&lt;&#x2F;code&gt;, then wait for DMA to drain into the FIFO.
+The IBI arbitration plus the controller’s auto-IBI ACK plus the
+repeated-Start plus the read bit takes about 640 ns at 1.5 MHz —
+on a quiet executor DMA setup wins that race; under realistic
+Embassy load it doesn’t.&lt;&#x2F;p&gt;
+&lt;p&gt;The intuitive fix is to invert the order — drain DMA synchronously,
+push the end-marker via &lt;code&gt;SWDATABE&lt;&#x2F;code&gt;, &lt;em&gt;then&lt;&#x2F;em&gt; raise &lt;code&gt;EVENT = Ibi&lt;&#x2F;code&gt;.
+This works perfectly up to the TX FIFO depth, which on this IP is
+8 bytes. The moment you try a 9-byte payload it deadlocks: DMA
+blocks waiting for FIFO space; the FIFO won’t drain because the
+controller hasn’t been told there’s anything to read; the
+controller hasn’t been told because the IBI hasn’t gone out. The
+shape the fix has to take is the one the NXP SDK uses, and isn’t
+the one I’d have guessed: arm DMA, raise the IBI &lt;em&gt;immediately&lt;&#x2F;em&gt;,
+then await DMA completion while the controller drains the FIFO at
+the same rate DMA fills it.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo z-code&quot;&gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; Arm DMA first so the first transfer is in flight.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-language&quot;&gt;self&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;dma_arm_tx&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;buf&lt;&#x2F;span&gt;&lt;span&gt;,&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; end_marker&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;await&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;?&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; Raise IBI immediately. Controller starts clocking; FIFO drains&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; concurrently with DMA filling it.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-language&quot;&gt;self&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;regs&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;sctrl&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;modify&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;|&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt;w&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;|&lt;&#x2F;span&gt;&lt;span class=&quot;z-variable z-other&quot;&gt; w&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;set_event&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-namespace&quot;&gt;Event&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;::&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-type&quot;&gt;Ibi&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-comment&quot;&gt;&#x2F;&#x2F;&lt;&#x2F;span&gt;&lt;span class=&quot;z-comment&quot;&gt; Now wait for DMA. The FIFO is active throughout.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-variable z-language&quot;&gt;self&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-entity z-name z-function&quot;&gt;dma_wait_complete&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;.&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;await&lt;&#x2F;span&gt;&lt;span class=&quot;z-keyword&quot;&gt;?&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;The lesson I keep relearning: when “obviously correct order” and
+“actually correct order” disagree, the hardware is usually right.
+If a peripheral’s FIFO is meant to be filled concurrently with
+being drained, you can’t fill it sequentially before signalling
+the drain, however much safer that feels.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;gotcha-3-the-post-ibi-stop-turned-my-repeated-start-into-a-fresh-frame&quot;&gt;Gotcha 3: the post-IBI Stop turned my repeated-Start into a fresh frame&lt;&#x2F;h2&gt;
+&lt;p&gt;The third one took longer to believe than it did to find. With
+clocks correct and the IBI ordering fixed, Rust↔Rust soak still
+failed — much later — and the failure mode was that the target’s
+directed-read response was misaligned by a byte, or surfaced as
+&lt;code&gt;InvalidStart&lt;&#x2F;code&gt; immediately after a successful IBI.&lt;&#x2F;p&gt;
+&lt;p&gt;The IBI itself was clean. The handshake worked. The TX FIFO was
+loaded correctly. The problem was that the controller side, in
+&lt;code&gt;async_wait_for_ibi&lt;&#x2F;code&gt;, was emitting an &lt;code&gt;async_stop&lt;&#x2F;code&gt; once the IBI
+completed. That turned the next &lt;code&gt;async_read&lt;&#x2F;code&gt; the caller issued
+into a fresh Start at the dynamic address, rather than the
+repeated-Start the target’s pre-loaded response was sitting there
+expecting. The target was set up for Sr→addr→R; the controller
+handed it Stop→Start→addr→R; the framing went sideways.&lt;&#x2F;p&gt;
+&lt;p&gt;The fix is to delete the &lt;code&gt;async_stop&lt;&#x2F;code&gt;. After a successful IBI the
+bus is already in &lt;code&gt;NORMACT&lt;&#x2F;code&gt; and the controller can issue a
+repeated-Start directly into the directed-read. The function’s doc
+comment now spells out at some length why putting the Stop back
+would be wrong, because the temptation to “clean up after yourself”
+by trailing every transaction with a Stop is real.&lt;&#x2F;p&gt;
+&lt;p&gt;The lesson is shorter than the bug: I3C, like I²C, distinguishes
+Start, repeated-Start, and Stop, and the &lt;em&gt;target’s&lt;&#x2F;em&gt; response state
+machine cares which one comes next. Pre-load a response for a
+repeated-Start, hand the target a fresh Start instead, and you
+don’t get a parity error — you get a perfectly framed read that
+returns the wrong bytes. That’s the worst kind of bug to have in
+soak: the symptom looks like data corruption, not a protocol
+violation.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-i-d-do-first-next-time&quot;&gt;What I’d do first next time&lt;&#x2F;h2&gt;
+&lt;p&gt;If I were starting an I3C target bring-up on this family of silicon
+tomorrow, in this order:&lt;&#x2F;p&gt;
+&lt;p&gt;First, &lt;strong&gt;set the I3C functional clock to 12 MHz exactly&lt;&#x2F;strong&gt; and
+verify &lt;code&gt;SCONFIG.BAMATCH&lt;&#x2F;code&gt; post-init against the spec’s 1 µs
+bus-available minimum. The HAL’s formula is correct; whether the
+input clock makes it produce a legal value is on you. FRO_LF &#x2F;1
+gives you 12 MHz exact and matches the SDK.&lt;&#x2F;p&gt;
+&lt;p&gt;Second, &lt;strong&gt;add a &lt;code&gt;dump_registers()&lt;&#x2F;code&gt; method to both controller and
+target from day one&lt;&#x2F;strong&gt; and call it after init in the examples. One
+defmt line each, every &lt;code&gt;M*&lt;&#x2F;code&gt; &#x2F; &lt;code&gt;S*&lt;&#x2F;code&gt; register as a raw &lt;code&gt;u32&lt;&#x2F;code&gt;. The cost
+is trivial; the diagnostic value the first time something goes weird
+against a known-good reference is disproportionate. Of course,
+remember to remove that method prior to producing a PR. That method is
+easy to write and only useful when things go awry. In general, we
+don’t need it.&lt;&#x2F;p&gt;
+&lt;p&gt;Third, &lt;strong&gt;mirror the vendor SDK’s ordering on anything that combines
+DMA, FIFO, and bus signalling&lt;&#x2F;strong&gt; even if it looks wrong: arm DMA,
+signal the bus, &lt;em&gt;then&lt;&#x2F;em&gt; wait for completion. Don’t drain the FIFO
+before raising the IBI. Don’t emit a Stop after an IBI if the next
+thing you expect is a directed read.&lt;&#x2F;p&gt;
+&lt;p&gt;Those three would have saved me the bulk of the bring-up time.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-this-doesn-t-cover&quot;&gt;What this doesn’t cover&lt;&#x2F;h2&gt;
+&lt;p&gt;One developer, one family of silicon, two boards on a bench. I have no
+idea how I3C target mode looks on other vendors’ IP, and I’d be
+surprised if specific register names, FIFO depths, or clock-tree
+dependencies transferred. The PR also contains a handful of smaller
+fixes I didn’t write up — a stale &lt;code&gt;MERRWARN&lt;&#x2F;code&gt; warning leaking across
+frames, a racy &lt;code&gt;state == Slvreq&lt;&#x2F;code&gt; guard in the IBI wake path, a
+controller-side ODHPP-vs-baud-rate calculation race — each of which
+fixed a real failure but wasn’t structurally interesting enough to
+earn a section. Read the PR if you want the full list.&lt;&#x2F;p&gt;
+&lt;p&gt;If you’re bringing up I3C target mode on MCXA, I hope this saves you
+the half-week. If you’re doing it on something else and one of these
+patterns rhymes with what you’re seeing, I’d genuinely like to hear
+about it.&lt;&#x2F;p&gt;
+</content>
+  </entry>
+  
+</feed>
