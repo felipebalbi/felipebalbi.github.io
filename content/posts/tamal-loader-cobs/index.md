@@ -1,7 +1,7 @@
 +++
 title = "Tamal: The COBS codec"
 date = 2026-07-25T09:00:00
-draft = true
+draft = false
 description = "Reading Tamal's streaming COBS codec end to end: how Consistent Overhead Byte Stuffing strips every 0x00 from a payload so a lone 0x00 can delimit frames, why the loader reached for it, why the two functions are pure s -> i -> (s, o) steps the loader clocks rather than mealy machines of their own, how cobsDecodeStep walks a group at a time and manufactures each implied zero lazily — only when the next code byte arrives — then quietly drops the final group's pending zero at the frame boundary, how cobsEncodeStep buffers a 254-byte group and then drives code-plus-group downstream, why testing the full-group case before the zero case is load-bearing so that a zero landing on a full group terminates a fresh empty group instead of vanishing, and how the whole thing is welded to the pure Tamal.Wire.Cobs reference by differential property tests."
 [taxonomies]
 tags = ["haskell", "clash", "fpga", "tamal", "cobs", "loader"]
