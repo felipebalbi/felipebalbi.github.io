@@ -1,7 +1,7 @@
 +++
 title = "Tamal: The Loader's Three Lives"
 date = 2026-07-27T09:00:00
-draft = true
+draft = false
 description = "Reading Tamal's impure loader end to end: the streaming realization of the pure Tamal.Wire model and the first block in the series that owns a clock, where the series' pure s -> i -> (s, o) steps finally get the mealy that clocks them; how the module is the confluence where the COBS codec, the CRC-8 fold, the UART's four wires, the two BRAMs, and the engine's start pulse and halt level all plug in at once; how the lifecycle FSM lives three lives in a loop --- RxControl listening for control frames, Run standing aside while the engine executes, and Drain sweeping the trace ring back out as one frame --- dispatched by a single case on lPhase; how the daunting eighteen-field state record is really four small records sharing one constructor; how the RX path peels a frame layer by layer and uses a one-byte holdback to separate the trailing CRC from payload while streaming, writing each little-endian word straight through to the instruction store and committing nothing until a separate TRIGGER; how the seven-phase drain dances with the block RAM's one-cycle read latency, unpacks each word into four little-endian bytes, folds a drain CRC, flushes the COBS encoder, and self-paces every byte off txReady so a link with no flow control never overruns; and how the whole streaming machine is welded byte-for-byte to the pure encodeControl/encodeResult oracle by Signal-level property tests."
 [taxonomies]
 tags = ["haskell", "clash", "fpga", "tamal", "loader", "fsm"]
