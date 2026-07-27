@@ -1033,8 +1033,8 @@ logical stream while the other four move memory and manage the encoder.
 - **`DrLatch`** --- the BRAM's answer is on `ringData` now; latch it into
   `lWord`, reset the byte cursor `lWIx = 0`, advance to `DrWordByte`. The
   *data* half. Fetch-then-latch, two states, is exactly the block RAM's
-  one-cycle read latency written out --- the contract the memory's own post
-  nailed down, honoured here as a pair of phases.
+  one-cycle read latency written out --- a contract the two memories get
+  their own post next to explain, honoured here as a pair of phases.
 - **`DrWordByte`** --- feed the current little-endian byte of `lWord`
   (via `leByte`) to the encoder; on consume, run `afterWordByte`. That
   helper is the drain's only real branching: if bytes remain in this word
@@ -1241,7 +1241,10 @@ What the loader loads, triggers, and drains is a *program* --- run by a
 machine we have circled for the entire series and never once opened. The
 instruction store the loader fills, the trace ring it sweeps, the `halted`
 it waits on and the `startOut` it pulses: those are all the engine's, and
-the engine is the last door. Next, at last, we walk through it.
+the engine is the last door. We open it soon --- but first, a shorter
+breath: the two memories the loader has spent this post driving, and that
+the engine is about to live between, deserve a look of their own. Then, at
+last, we walk through the door.
 
 [^ports]: The collision-free claim is the block-RAM design's
 port-ownership contract cashed in. `RxControl`/`Drain` and `Run` are
