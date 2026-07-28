@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-28d96dd3.js";
+            window.path_to_searchindex_js = "../searchindex-9379a0ff.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -185,9 +185,12 @@ exposed by the firmware.</p>
 of it.</p>
 <h2 id="connection-model"><a class="header" href="#connection-model">Connection Model</a></h2>
 <p><code>PicoDeGallo::new()</code> and <code>PicoDeGallo::new_with_serial_number()</code> are <strong>synchronous
-constructors</strong>. They do not perform an async handshake up front; the client
-connects lazily in the background and operations fail only when you actually try
-to use the device.</p>
+constructors</strong>. They enumerate USB when called and <strong>panic</strong> if no matching board
+is present or the interface cannot be claimed; the fallible <code>PicoDeGallo::try_new()</code>
+and <code>PicoDeGallo::try_new_with_serial_number()</code> return a <code>Result&lt;PicoDeGallo, String&gt;</code>
+instead. They do not perform an async handshake up front — once constructed, the
+client completes the connection in the background and per-RPC calls (not the
+constructor) fail if the link drops later.</p>
 <p>That gives you a simple startup story:</p>
 <ul>
 <li>create the client synchronously,</li>
@@ -203,6 +206,8 @@ to use the device.</p>
 <tbody>
 <tr><td><code>PicoDeGallo::new()</code></td><td>Targets the first matching board the host sees</td></tr>
 <tr><td><code>PicoDeGallo::new_with_serial_number(serial)</code></td><td>Targets one specific board by USB serial</td></tr>
+<tr><td><code>PicoDeGallo::try_new()</code></td><td>Fallible <code>new()</code> — <code>Err</code> instead of panic when absent/unclaimable</td></tr>
+<tr><td><code>PicoDeGallo::try_new_with_serial_number(serial)</code></td><td>Fallible <code>new_with_serial_number()</code></td></tr>
 <tr><td><code>list_devices()</code></td><td>Returns <code>DeviceDescription</code> values for every attached board</td></tr>
 <tr><td><code>wait_closed().await</code></td><td>Resolves when the underlying USB connection closes</td></tr>
 </tbody>

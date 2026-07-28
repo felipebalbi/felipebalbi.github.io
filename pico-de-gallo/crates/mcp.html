@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-28d96dd3.js";
+            window.path_to_searchindex_js = "../searchindex-9379a0ff.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -205,9 +205,13 @@ interactively.</p>
 <ul>
 <li><code>-s, --serial-number &lt;SN&gt;</code> selects a specific board by USB serial when
 more than one is attached.</li>
-<li><strong>Lazy connect:</strong> the server starts even with no board attached and
-begins serving as soon as a Pico de Gallo is present. You can plug the
-board in mid-session; the tools work once it appears.</li>
+<li><strong>Per-call connection:</strong> the server holds no persistent USB claim. Each
+tool call opens the board, runs, and releases it when the call completes,
+so the device is free for the <code>gallo</code> CLI or other host processes between
+calls. Each call re-opens and re-validates the board, so there is a small
+fixed per-call connection cost. The server starts even with no board
+attached and tools begin working as soon as a Pico de Gallo is present;
+you can plug the board in mid-session.</li>
 </ul>
 <h2 id="using-it-with-an-mcp-client"><a class="header" href="#using-it-with-an-mcp-client">Using it with an MCP client</a></h2>
 <p>Add <code>gallo-mcp</code> as a local (stdio) server in your client’s config. These

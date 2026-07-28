@@ -38,7 +38,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-28d96dd3.js";
+            window.path_to_searchindex_js = "searchindex-9379a0ff.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-2de855f1.js"></script>
@@ -3117,9 +3117,12 @@ exposed by the firmware.</p>
 of it.</p>
 <h2 id="connection-model"><a class="header" href="#connection-model">Connection Model</a></h2>
 <p><code>PicoDeGallo::new()</code> and <code>PicoDeGallo::new_with_serial_number()</code> are <strong>synchronous
-constructors</strong>. They do not perform an async handshake up front; the client
-connects lazily in the background and operations fail only when you actually try
-to use the device.</p>
+constructors</strong>. They enumerate USB when called and <strong>panic</strong> if no matching board
+is present or the interface cannot be claimed; the fallible <code>PicoDeGallo::try_new()</code>
+and <code>PicoDeGallo::try_new_with_serial_number()</code> return a <code>Result&lt;PicoDeGallo, String&gt;</code>
+instead. They do not perform an async handshake up front — once constructed, the
+client completes the connection in the background and per-RPC calls (not the
+constructor) fail if the link drops later.</p>
 <p>That gives you a simple startup story:</p>
 <ul>
 <li>create the client synchronously,</li>
@@ -3135,6 +3138,8 @@ to use the device.</p>
 <tbody>
 <tr><td><code>PicoDeGallo::new()</code></td><td>Targets the first matching board the host sees</td></tr>
 <tr><td><code>PicoDeGallo::new_with_serial_number(serial)</code></td><td>Targets one specific board by USB serial</td></tr>
+<tr><td><code>PicoDeGallo::try_new()</code></td><td>Fallible <code>new()</code> — <code>Err</code> instead of panic when absent/unclaimable</td></tr>
+<tr><td><code>PicoDeGallo::try_new_with_serial_number(serial)</code></td><td>Fallible <code>new_with_serial_number()</code></td></tr>
 <tr><td><code>list_devices()</code></td><td>Returns <code>DeviceDescription</code> values for every attached board</td></tr>
 <tr><td><code>wait_closed().await</code></td><td>Resolves when the underlying USB connection closes</td></tr>
 </tbody>
@@ -4009,9 +4014,13 @@ interactively.</p>
 <ul>
 <li><code>-s, --serial-number &lt;SN&gt;</code> selects a specific board by USB serial when
 more than one is attached.</li>
-<li><strong>Lazy connect:</strong> the server starts even with no board attached and
-begins serving as soon as a Pico de Gallo is present. You can plug the
-board in mid-session; the tools work once it appears.</li>
+<li><strong>Per-call connection:</strong> the server holds no persistent USB claim. Each
+tool call opens the board, runs, and releases it when the call completes,
+so the device is free for the <code>gallo</code> CLI or other host processes between
+calls. Each call re-opens and re-validates the board, so there is a small
+fixed per-call connection cost. The server starts even with no board
+attached and tools begin working as soon as a Pico de Gallo is present;
+you can plug the board in mid-session.</li>
 </ul>
 <h2 id="using-it-with-an-mcp-client"><a class="header" href="#using-it-with-an-mcp-client">Using it with an MCP client</a></h2>
 <p>Add <code>gallo-mcp</code> as a local (stdio) server in your client’s config. These
