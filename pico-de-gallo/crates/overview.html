@@ -37,10 +37,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4f8c22da.js";
+            window.path_to_searchindex_js = "../searchindex-28d96dd3.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-d167d9bc.js"></script>
+        <script src="../toc-2de855f1.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -191,6 +191,7 @@ USB with <code>tokio</code> + <code>nusb</code>.</li>
 <li><code>pico-de-gallo-ffi</code> exports a stable <strong>C ABI</strong> as a <code>cdylib</code>.</li>
 <li><code>pyco-de-gallo</code> exposes the same device to <strong>Python</strong> via PyO3 + maturin.</li>
 <li><code>gallo</code> is the <strong>CLI</strong> built on top of the Rust library.</li>
+<li><code>gallo-mcp</code> is an <strong>MCP server</strong> exposing the device to AI agents over stdio.</li>
 <li><code>pico-de-gallo-firmware</code> is the <strong>RP2350 no_std firmware</strong> running on the board.</li>
 </ul>
 <blockquote class="blockquote-tag blockquote-tag-note">
@@ -247,6 +248,7 @@ and firmware must move together.</p>
 <tr><td><code>pico-de-gallo-ffi</code></td><td>C-compatible shared library and generated header</td><td>Using Pico de Gallo from C, C++, Zig, or other FFI-friendly languages</td></tr>
 <tr><td><code>pyco-de-gallo</code></td><td>Python module <code>pyco_de_gallo</code></td><td>Quick experiments, test scripts, notebooks, lab automation</td></tr>
 <tr><td><code>gallo</code></td><td>Command-line utility</td><td>Interactive bring-up, one-off reads/writes, smoke tests, scripting</td></tr>
+<tr><td><code>gallo-mcp</code></td><td>MCP server (stdio) exposing one tool per peripheral op</td><td>Letting AI coding agents probe and drive real hardware</td></tr>
 <tr><td><code>pico-de-gallo-firmware</code></td><td>Device-side implementation for the RP2350</td><td>Flashing the board, adding endpoints, changing hardware behavior</td></tr>
 </tbody>
 </table>
@@ -259,6 +261,7 @@ and firmware must move together.</p>
 </thead>
 <tbody>
 <tr><td>Probe hardware from a shell</td><td><a href="./app.html"><code>gallo</code></a></td></tr>
+<tr><td>Let an AI agent drive hardware</td><td><a href="./mcp.html"><code>gallo-mcp</code></a></td></tr>
 <tr><td>Write a Rust host tool</td><td><a href="./lib.html"><code>pico-de-gallo-lib</code></a></td></tr>
 <tr><td>Test an <code>embedded-hal</code> driver on your laptop</td><td><a href="./hal.html"><code>pico-de-gallo-hal</code></a></td></tr>
 <tr><td>Call Pico de Gallo from C or C++</td><td><a href="./ffi.html"><code>pico-de-gallo-ffi</code></a></td></tr>
