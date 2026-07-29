@@ -5,7 +5,8 @@ on:
     branches: [main]
   workflow_dispatch:
   schedule:
-    - cron: '10 8 * * *'      # daily 08:10 UTC — tune to your preferred publish hour
+    - cron: '10 13 * * *'     # daily 13:10 UTC = 06:10 PDT (05:10 PST once DST ends —
+                              # GitHub cron is always UTC and does not follow DST)
 
 concurrency:
   group: pages-deploy
