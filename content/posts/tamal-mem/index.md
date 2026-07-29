@@ -1,7 +1,7 @@
 +++
 title = "Tamal: Four Lines and Three Promises"
 date = 2026-07-29T09:00:00
-draft = true
+draft = false
 description = "Reading Tamal's two block RAMs end to end: the forty-one-line leaf whose entire synthesizable content is blockRamPow2 applied to a vector of zeros, written twice; why the only real decision is which primitive rather than which code, and why the write port is a bare tuple so the memory never learns what a trace record is; the three semantics the wrappers inherit rather than implement --- one-cycle read latency, read-before-write, and an undefined cycle-zero output --- each read out of a concrete four-cycle trace; how eight lines of assoc-list Haskell restate all three as an executable oracle a machine can check; why the sweep property deliberately uses a second, independent oracle instead of the first one again; and why a primitive you did not write is exactly the kind you must pin down before anything else is allowed to depend on it."
 [taxonomies]
 tags = ["haskell", "clash", "fpga", "tamal", "memory", "testing"]
