@@ -1,7 +1,7 @@
 +++
 title = "Tamal: Eight Phases and a Pure Step"
 date = 2026-07-31T09:00:00
-draft = true
+draft = false
 description = "Reading Tamal's engine from the outside in: why the machine that runs a compiled program is read shape-first, not whole, the way a leaf is read whole; the widest export list in the series, eleven names and six of them types, because the top must name the engine's state to wire it; the eight imported modules that are eight still-closed boxes, the exact inversion of the leaves-first UART; the one-line keystone type step :: State -> BusIn -> (State, BusOut, Maybe Ring), a pure Mealy transition the top lifts and hedgehog tests to death; the eight-phase lifecycle enum that is the machine's spine; the seventeen-field State record read in six groups, its pin drives registered so the outputs are a projection and not a computation; the boundary types that carry the one-cycle fetch latency the memories established; and the four trivial phases --- Idle, Halted, Preamble, Fetch --- that hold, re-run, stamp a REVISION word, and spend one deliberate cycle waiting for a block RAM, leaving Exec and the bus for the posts that follow."
 [taxonomies]
 tags = ["haskell", "clash", "fpga", "tamal", "engine", "fsm"]
