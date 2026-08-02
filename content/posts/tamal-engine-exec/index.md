@@ -47,11 +47,12 @@ stepExec s inp = case decode (instrWord inp) of
 ```
 
 Everything the engine does with a word begins with `decode (instrWord
-inp)`. `decode` is the first of the [shut boxes][shape] we reach for ---
-it lives in `Tamal.Isa`, it turns the raw 32 bits the memory handed back
-into a typed `Instr`, and it is the whole subject of a later post. Here
-we treat it exactly as its type asks us to: it returns an `Either`, and
-the two sides are the fork this function is built on.
+inp)`. `decode` is the first of the [shut boxes][shape] we reach for
+--- it lives in `Tamal.Isa`, it turns the raw 32 bits the memory
+handed back into a typed `Instr`, and it is the whole subject of a
+later post. Here we treat it exactly as its type asks us to: it
+returns an `Either` --- a cousin of Rust's `Result<T,E>` ---, and the
+two sides are the fork this function is built on.
 
 `Left` is a **decode error**: the word was not a legal instruction ---
 a reserved opcode, a bad field, a bit pattern the ISA refuses. There is
@@ -207,7 +208,7 @@ operation, because `dataResult` reads the operation off the instruction.
 The arm supplies `rd`; the ALU supplies everything else.
 
 `writeReg (regs s) rd (…)` stores that value into the register file ---
-`writeReg` is the [register file][shape]'s, a box for a later post, and
+`writeReg` belongs to the [register file][shape], a box for a later post, and
 it quietly enforces one rule we will lean on: a write to `x0` is
 discarded, because `x0` is hardwired zero. `advance s` sets the phase back
 to `Fetch` and steps the program counter to `pc + 1`. And the output is
@@ -343,16 +344,16 @@ has a cousin here --- means the engine needs no signed adder and no
 special case for a backwards branch. It adds the low bits and lets the
 tenth-bit overflow fall off, and the arithmetic comes out right.[^offset]
 
-The two outcomes differ in one field. Taken: `s{phase = Fetch, pc = pc s
-+ offAw}` --- jump, by pointing the counter at the target and going
-straight to `Fetch`. Not taken: `advance s` --- the ordinary `pc + 1`. The
-offset is measured from the branch's own address, because `pc` still
-holds that address in `Exec`; `Fetch` spent a cycle but never touched it.
-And the unconditional jump the assembler offers, `j off`, is not a new
-instruction at all --- it is `beq x0, x0, off`, a branch whose condition
-compares `x0` to itself and is therefore always taken. The zero register
-earns its keep twice: once as the absent operand, once as the always-true
-comparison.
+The two outcomes differ in one field. Taken: `s{phase = Fetch, pc = pc
+s + offAw}` --- jump, by pointing the counter at the target and going
+straight to `Fetch`. Not taken: `advance s` --- the ordinary `pc +
+1`. The offset is measured from the branch's own address, because `pc`
+still holds that address in `Exec`; `Fetch` spent a cycle but never
+touched it.  And the unconditional jump the assembler offers, `j off`,
+is not a new instruction at all --- it is `beq x0, x0, off`, a branch
+whose condition compares `x0` to itself and is therefore always
+taken. The zero register earns its keep twice: once as the absent
+operand, once as the always-true comparison.
 
 ## Pokes: pins and config
 
