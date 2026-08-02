@@ -326,13 +326,13 @@ pushWord ptr ov w
   | otherwise = (ptr, True, Nothing)
 ```
 
-Three cases, and they are the [trace ring's][mem] whole contract. If the
-overflow flag `ov` is already set, the ring has given up: drop the word,
-keep the flag high, write nothing. If there is room --- `ptr <= termAddr
-- 1`, at or below the last usable slot --- write the word at `ptr` and
-bump the pointer. Otherwise the ring is full: set overflow, drop the word,
-and --- the important part --- write *nothing*, so the pointer never
-climbs onto `termAddr`.
+Three cases, and they are the [trace ring's][mem] whole contract. If
+the overflow flag `ov` is already set, the ring has given up: drop the
+word, keep the flag high, write nothing. If there is room --- `ptr <=
+termAddr - 1`, at or below the last usable slot --- write the word at
+`ptr` and bump the pointer. Otherwise the ring is full: set overflow,
+drop the word, and --- the important part --- write *nothing*, so the
+pointer never climbs onto `termAddr`.
 
 That last slot is reserved on purpose. The [memories post][mem] noticed it
 from the other side: the ring is 4096 words, `termAddr = maxBound`, and
