@@ -139,6 +139,36 @@ p, ul, ol, blockquote, pre, figure, table {
 }
 p + p { margin-top: -0.25rem; }
 
+// ---- Rag control ------------------------------------------
+// hyphens: auto requires <html lang>, which base.html:3 already
+// sets from config.default_language.
+// text-wrap: pretty makes the browser spend extra line-breaking
+// passes to avoid orphans and stub last lines. Rag stays, but
+// it gets much shallower and more even.
+article {
+  p, li, dd, blockquote, figcaption, .footnotes {
+    text-align: justify;
+    hyphens: auto;
+    -webkit-hyphens: auto;          // Safari < 17
+    hyphenate-limit-chars: 6 3 3;   // min word 6, 3 before, 3 after
+    text-wrap: pretty;
+  }
+
+  // `hyphens` is inherited, so inline <code> inside a paragraph
+  // would otherwise get auto-hyphenated. Never break identifiers,
+  // paths, or CLI flags.
+  code, kbd, samp, var, pre {
+    hyphens: manual;
+    -webkit-hyphens: manual;
+  }
+
+  // Short blocks want balance, not pretty.
+  h1, h2, h3, h4 {
+    text-wrap: balance;
+    hyphens: manual;
+  }
+}
+
 a {
   color: var(--accent);
   text-decoration-thickness: 1px;
