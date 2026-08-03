@@ -38,7 +38,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-9379a0ff.js";
+            window.path_to_searchindex_js = "searchindex-cf161bba.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-2de855f1.js"></script>
@@ -3516,7 +3516,8 @@ knowing anything about Rust internals.</p>
 <ul>
 <li>the device handle is opaque: C code only sees <code>const PicoDeGallo *</code>,</li>
 <li>the handle is safe to share across threads (<code>Send + Sync</code> on the Rust side),</li>
-<li>each FFI call drives the async Rust client with its own <code>block_on</code>,</li>
+<li>all FFI calls drive the async Rust client on a shared multi-threaded Tokio
+runtime (required by the <code>postcard-rpc</code> nusb transport),</li>
 <li>the crate builds as a <code>cdylib</code>:
 <ul>
 <li>Linux: <code>libpico_de_gallo_ffi.so</code></li>
