@@ -1,7 +1,7 @@
 +++
 title = "Tamal: One Instruction, One Cycle"
 date = 2026-08-03T09:00:00
-draft = true
+draft = false
 description = "Standing inside Exec, the engine's one working phase, and watching a decoded word become an action: how stepExec is two lines --- decode, then dispatch or trap --- and why a decode error is the first of five trap reasons, driving the pins safe on its way to Halted; how execInstr is a case wider than any in the series and yet collapses to a handful of handlers, thirteen DATA instructions funnelling through one dataWb that calls the still-shut ALU; the operand-selector tables that say which registers each instruction reads, and why immediates need none; RDSR, the single status read the engine answers itself, handing back the CRC residue the CRC post built; the four branch arms and the PC arithmetic the engine owns, an eleven-bit signed offset truncated to ten and added modulo the program counter so a backwards jump falls out of wraparound; the pin and config pokes that latch one field and step on, sharing a handler that is not really about pins; and the instructions that spend their one Exec cycle not finishing but arming --- loading a shifter, setting a beat count, recording what they owe in pending --- and handing off to the phases the next post opens."
 [taxonomies]
 tags = ["haskell", "clash", "fpga", "tamal", "engine"]
