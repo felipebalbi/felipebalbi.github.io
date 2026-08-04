@@ -1,7 +1,7 @@
 +++
 title = "Tamal: The Wire and the Record"
 date = 2026-08-04T09:00:00
-draft = true
+draft = false
 description = "Following the four instructions that armed themselves and stopped, across the seam into the phases that finish them: SCK as the fabric clock divided by five, three cycles low and two high, the rising edge at the two-to-three boundary where a driven bit is latched and a sampled bit is read; stepBusBeat as a three-way guard that ticks a beat forward, starts the next, or completes; beatLanes choosing among releasing the bus for a GET, driving a turnaround, and serialising a byte for a PUT --- three directions off one pending field; the sample that shifts IO1 into an accumulator MSB-first at phase three; completion, where a GET finally writes its register, folds the byte into the CRC residue the CRC post built, and pushes a CAPTURE into the trace ring; the ring itself, drop-on-full with a sticky overflow bit and a terminator slot at the top a record can never overwrite; MARK's second word, spilled a cycle later in TraceEmit; WAIT_ON counting down against an active-low alert; and HALT, the terminator that carries a status and, on a trap, a reason and safe pins --- four record shapes, built inline with bitCoerce but mirroring Tamal.Trace's reference encoder, that a run leaves behind for the host to read."
 [taxonomies]
 tags = ["haskell", "clash", "fpga", "tamal", "engine", "espi"]
