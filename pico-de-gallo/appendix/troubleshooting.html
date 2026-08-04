@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-cf161bba.js";
+            window.path_to_searchindex_js = "../searchindex-8777e747.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -189,9 +189,10 @@ device, the firmware <strong>is not</strong> running — see
 <li><strong>Linux</strong>: install the udev rule from
 <a href="../getting-started/usb.html">USB &amp; OS Notes</a>. Without it,
 <code>nusb</code> can’’t claim the interface as a regular user.</li>
-<li><strong>Windows</strong>: install the WinUSB driver via Zadig. The default
-Windows USB driver does not expose vendor-specific endpoints
-to user space.</li>
+<li><strong>Windows</strong>: install the WinUSB driver via Zadig, selecting
+<strong>interface 0</strong>. The default Windows USB driver does not expose
+vendor-specific endpoints to user space, and Pico de Gallo’s
+second interface exists only for WebUSB descriptors.</li>
 <li>Check <code>dmesg</code> (Linux), Device Manager (Windows), or
 <code>system_profiler SPUSBDataType</code> (macOS) for VID <code>045E</code> and
 PID <code>067D</code>.</li>

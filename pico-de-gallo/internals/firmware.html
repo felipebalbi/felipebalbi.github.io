@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-cf161bba.js";
+            window.path_to_searchindex_js = "../searchindex-8777e747.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -212,6 +212,78 @@ and reset the device.</p>
 <p><code>pause_on_debug(true)</code> is set so an attached debugger session does not
 reset the chip while you single-step. The watchdog is the same on both
 <code>hw-rev1</code> and <code>hw-rev2</code> (no rev-specific code).</p>
+<h2 id="usb-descriptors"><a class="header" href="#usb-descriptors">USB descriptors</a></h2>
+<p>The device enumerates as VID <code>045e</code> / PID <code>067d</code> with
+<code>bDeviceClass = 0xFF</code> (vendor-specific), so no OS class driver claims
+it. <code>embassy_usb::Config</code> defaults <code>bcdUSB</code> to <code>0x0210</code>, which is what
+makes hosts request the BOS descriptor at all.</p>
+<h3 id="interfaces"><a class="header" href="#interfaces">Interfaces</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>#</th><th>Class</th><th>Endpoints</th><th>Purpose</th></tr>
+</thead>
+<tbody>
+<tr><td>0</td><td><code>0xFF</code></td><td>bulk IN + bulk OUT</td><td>The postcard-rpc transport</td></tr>
+<tr><td>1</td><td><code>0xFF</code></td><td>none</td><td>Carries the WebUSB capability only</td></tr>
+</tbody>
+</table>
+</div>
+<p>Interface 0 <strong>must</strong> stay first. The two interfaces share an identical
+class/subclass/protocol triple, so ordering is the only thing that
+distinguishes them. On Linux and macOS the host claims the first
+class-<code>0xFF</code> interface it finds; on Windows it claims interface 0
+outright, because interfaces cannot be enumerated through WinUSB.
+Interface 1 exists because
+<code>WebUsb::configure()</code> cannot append a capability to an existing
+interface — <code>bos_capability()</code> is only reachable through an
+<code>InterfaceAltBuilder</code>, and embassy-usb exposes no public
+<code>Builder::bos_writer()</code>.</p>
+<h3 id="bos-capabilities"><a class="header" href="#bos-capabilities">BOS capabilities</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Capability</th><th style="text-align: right">Bytes</th><th>Written by</th></tr>
+</thead>
+<tbody>
+<tr><td>BOS header</td><td style="text-align: right">5</td><td>embassy-usb, automatically</td></tr>
+<tr><td><code>USB_2_0_EXTENSION</code></td><td style="text-align: right">7</td><td>embassy-usb, automatically</td></tr>
+<tr><td><code>PLATFORM</code> — Microsoft OS 2.0</td><td style="text-align: right">28</td><td>postcard-rpc</td></tr>
+<tr><td><code>PLATFORM</code> — WebUSB</td><td style="text-align: right">24</td><td>firmware, via <code>WebUsb::configure()</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Listed by size, not by wire order: the WebUSB capability is appended
+during builder setup, while the Microsoft OS 2.0 one is written later,
+inside <code>Builder::build()</code>.</p>
+<p>Those sizes are as of embassy-usb 0.5.1 and postcard-rpc 0.12.1. That
+is 64 bytes of the 256-byte BOS buffer sized by the <code>WireStorage</code> type
+alias in <code>main.rs</code>. Overflowing that buffer, or the configuration
+descriptor buffer, is a <code>"Descriptor buffer full"</code> panic raised at the
+point the descriptor is written.</p>
+<p>The MS OS 2.0 capability is what makes Windows bind WinUSB without an
+INF file. The WebUSB capability advertises the landing page described
+in <a href="../getting-started/usb.html">USB &amp; OS Notes</a>.</p>
+<h3 id="vendor-codes"><a class="header" href="#vendor-codes">Vendor codes</a></h3>
+<p>Both platform capabilities reserve a <code>bRequest</code> value for
+vendor-specific control transfers on the device:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Descriptor</th><th>Vendor code</th></tr>
+</thead>
+<tbody>
+<tr><td>Microsoft OS 2.0</td><td><code>0x00</code> (set by postcard-rpc)</td></tr>
+<tr><td>WebUSB</td><td><code>0x01</code> (<code>WEBUSB_VENDOR_CODE</code> in <code>main.rs</code>)</td></tr>
+</tbody>
+</table>
+</div>
+<p>They are kept distinct deliberately, though not out of strict necessity.
+embassy-usb answers a vendor request as an MS OS 2.0 descriptor request
+only when the <code>bRequest</code> matches <strong>and</strong> <code>wIndex</code> is <code>7</code>; WebUSB’s
+<code>GET_URL</code> uses <code>wIndex</code> <code>2</code>, so the two would not actually collide even
+if they shared a code. Using separate codes avoids relying on that
+disambiguation.</p>
 <h2 id="no_std-and-logging"><a class="header" href="#no_std-and-logging"><code>no_std</code> and logging</a></h2>
 <p>This crate is <code>no_std</code>. Logging uses <code>defmt</code> over RTT.</p>
 <blockquote class="blockquote-tag blockquote-tag-important">

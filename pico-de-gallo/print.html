@@ -38,7 +38,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-cf161bba.js";
+            window.path_to_searchindex_js = "searchindex-8777e747.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-2de855f1.js"></script>
@@ -852,12 +852,57 @@ without any extra setup.</p>
 override, or driver-signing policy on a corporate machine), use
 <a href="https://zadig.akeo.ie/">Zadig</a> to manually install the WinUSB
 driver against the Pico de Gallo interface.</p>
+<blockquote class="blockquote-tag blockquote-tag-important">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Important</p>
+<p>Zadig lists <strong>two</strong> Pico de Gallo interfaces, because the device
+exposes a second vendor-class interface to carry its WebUSB
+descriptor. Bind WinUSB to <strong>interface 0</strong> — the one with the bulk
+endpoints. Interface 1 has no endpoints, and binding it leaves
+<code>gallo</code> unable to reach the device.</p>
+</blockquote>
 <h2 id="macos"><a class="header" href="#macos">macOS</a></h2>
 <p>No extra setup. macOS picks the device up automatically.</p>
 <p>If <code>gallo list</code> returns nothing, check System Information →
 USB and confirm the device enumerates. If it shows up there but
 <code>gallo</code> can’t find it, you might have a code-signing issue with a
 locally-built <code>gallo</code> binary — try the pre-built release artifact.</p>
+<h2 id="browsers-webusb"><a class="header" href="#browsers-webusb">Browsers (WebUSB)</a></h2>
+<p>The firmware advertises a WebUSB platform capability in its BOS
+descriptor, along with a landing-page URL. Chrome and Edge use this to
+show a notification pointing at
+<a href="https://balbi.sh/pico-de-gallo/">https://balbi.sh/pico-de-gallo/</a> when you plug the device in.</p>
+<p>Two browser requirements are worth knowing up front, because neither is
+something the firmware can influence:</p>
+<ul>
+<li><strong>Secure context.</strong> <code>navigator.usb</code> only exists on pages served over
+HTTPS, or on <code>localhost</code>.</li>
+<li><strong>User gesture.</strong> <code>navigator.usb.requestDevice()</code> must be called from
+a click or keypress handler. There is no way to connect
+automatically on page load; the user picks the device from a browser
+dialog every time a new origin asks.</li>
+</ul>
+<pre><code class="language-js">const device = await navigator.usb.requestDevice({
+  filters: [{ vendorId: 0x045e, productId: 0x067d }],
+});
+await device.open();
+// The OS does not always configure the device during enumeration.
+if (device.configuration === null) await device.selectConfiguration(1);
+await device.claimInterface(0);
+</code></pre>
+<p>Interface <code>0</code> is the vendor-specific interface carrying the two bulk
+endpoints that the RPC protocol uses. The device also exposes a second,
+endpoint-less vendor interface that exists only to carry the WebUSB
+capability descriptor — do not claim it.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>These descriptors are a convenience, not a gate. WebUSB can talk to
+any vendor-class device, so a browser could already reach Pico de
+Gallo without them. What they add is the landing-page notification
+and explicit signalling that the device is WebUSB-aware.</p>
+</blockquote>
+<p>The same OS-level permissions still apply: a Linux udev rule is
+required (see above), and on Windows the device must be bound to
+WinUSB, which the Microsoft OS 2.0 descriptor handles automatically.</p>
 <h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
 <ul>
 <li><strong><code>gallo: device not found</code></strong> — Is the device plugged in? Did
@@ -5569,6 +5614,78 @@ and reset the device.</p>
 <p><code>pause_on_debug(true)</code> is set so an attached debugger session does not
 reset the chip while you single-step. The watchdog is the same on both
 <code>hw-rev1</code> and <code>hw-rev2</code> (no rev-specific code).</p>
+<h2 id="usb-descriptors"><a class="header" href="#usb-descriptors">USB descriptors</a></h2>
+<p>The device enumerates as VID <code>045e</code> / PID <code>067d</code> with
+<code>bDeviceClass = 0xFF</code> (vendor-specific), so no OS class driver claims
+it. <code>embassy_usb::Config</code> defaults <code>bcdUSB</code> to <code>0x0210</code>, which is what
+makes hosts request the BOS descriptor at all.</p>
+<h3 id="interfaces"><a class="header" href="#interfaces">Interfaces</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>#</th><th>Class</th><th>Endpoints</th><th>Purpose</th></tr>
+</thead>
+<tbody>
+<tr><td>0</td><td><code>0xFF</code></td><td>bulk IN + bulk OUT</td><td>The postcard-rpc transport</td></tr>
+<tr><td>1</td><td><code>0xFF</code></td><td>none</td><td>Carries the WebUSB capability only</td></tr>
+</tbody>
+</table>
+</div>
+<p>Interface 0 <strong>must</strong> stay first. The two interfaces share an identical
+class/subclass/protocol triple, so ordering is the only thing that
+distinguishes them. On Linux and macOS the host claims the first
+class-<code>0xFF</code> interface it finds; on Windows it claims interface 0
+outright, because interfaces cannot be enumerated through WinUSB.
+Interface 1 exists because
+<code>WebUsb::configure()</code> cannot append a capability to an existing
+interface — <code>bos_capability()</code> is only reachable through an
+<code>InterfaceAltBuilder</code>, and embassy-usb exposes no public
+<code>Builder::bos_writer()</code>.</p>
+<h3 id="bos-capabilities"><a class="header" href="#bos-capabilities">BOS capabilities</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Capability</th><th style="text-align: right">Bytes</th><th>Written by</th></tr>
+</thead>
+<tbody>
+<tr><td>BOS header</td><td style="text-align: right">5</td><td>embassy-usb, automatically</td></tr>
+<tr><td><code>USB_2_0_EXTENSION</code></td><td style="text-align: right">7</td><td>embassy-usb, automatically</td></tr>
+<tr><td><code>PLATFORM</code> — Microsoft OS 2.0</td><td style="text-align: right">28</td><td>postcard-rpc</td></tr>
+<tr><td><code>PLATFORM</code> — WebUSB</td><td style="text-align: right">24</td><td>firmware, via <code>WebUsb::configure()</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Listed by size, not by wire order: the WebUSB capability is appended
+during builder setup, while the Microsoft OS 2.0 one is written later,
+inside <code>Builder::build()</code>.</p>
+<p>Those sizes are as of embassy-usb 0.5.1 and postcard-rpc 0.12.1. That
+is 64 bytes of the 256-byte BOS buffer sized by the <code>WireStorage</code> type
+alias in <code>main.rs</code>. Overflowing that buffer, or the configuration
+descriptor buffer, is a <code>"Descriptor buffer full"</code> panic raised at the
+point the descriptor is written.</p>
+<p>The MS OS 2.0 capability is what makes Windows bind WinUSB without an
+INF file. The WebUSB capability advertises the landing page described
+in <a href="#usb--os-notes">USB &amp; OS Notes</a>.</p>
+<h3 id="vendor-codes"><a class="header" href="#vendor-codes">Vendor codes</a></h3>
+<p>Both platform capabilities reserve a <code>bRequest</code> value for
+vendor-specific control transfers on the device:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Descriptor</th><th>Vendor code</th></tr>
+</thead>
+<tbody>
+<tr><td>Microsoft OS 2.0</td><td><code>0x00</code> (set by postcard-rpc)</td></tr>
+<tr><td>WebUSB</td><td><code>0x01</code> (<code>WEBUSB_VENDOR_CODE</code> in <code>main.rs</code>)</td></tr>
+</tbody>
+</table>
+</div>
+<p>They are kept distinct deliberately, though not out of strict necessity.
+embassy-usb answers a vendor request as an MS OS 2.0 descriptor request
+only when the <code>bRequest</code> matches <strong>and</strong> <code>wIndex</code> is <code>7</code>; WebUSB’s
+<code>GET_URL</code> uses <code>wIndex</code> <code>2</code>, so the two would not actually collide even
+if they shared a code. Using separate codes avoids relying on that
+disambiguation.</p>
 <h2 id="no_std-and-logging"><a class="header" href="#no_std-and-logging"><code>no_std</code> and logging</a></h2>
 <p>This crate is <code>no_std</code>. Logging uses <code>defmt</code> over RTT.</p>
 <blockquote class="blockquote-tag blockquote-tag-important">
@@ -5956,9 +6073,10 @@ device, the firmware <strong>is not</strong> running — see
 <li><strong>Linux</strong>: install the udev rule from
 <a href="#usb--os-notes">USB &amp; OS Notes</a>. Without it,
 <code>nusb</code> can’’t claim the interface as a regular user.</li>
-<li><strong>Windows</strong>: install the WinUSB driver via Zadig. The default
-Windows USB driver does not expose vendor-specific endpoints
-to user space.</li>
+<li><strong>Windows</strong>: install the WinUSB driver via Zadig, selecting
+<strong>interface 0</strong>. The default Windows USB driver does not expose
+vendor-specific endpoints to user space, and Pico de Gallo’s
+second interface exists only for WebUSB descriptors.</li>
 <li>Check <code>dmesg</code> (Linux), Device Manager (Windows), or
 <code>system_profiler SPUSBDataType</code> (macOS) for VID <code>045E</code> and
 PID <code>067D</code>.</li>
