@@ -1,7 +1,7 @@
 +++
 title = "Tamal: The Instruction Set"
 date = 2026-08-05T09:00:00
-draft = true
+draft = false
 description = "The first shut box, opened: Tamal's instruction set, the Instr ADT and the total encode and decode that every road out of Exec began by calling. The 32-bit word and its six fields --- group, sub, rd, rs1, rs2, imm --- split and joined by bitCoerce; thirty-six constructors across three groups and a reserved fourth; encode as the easy direction, a total case that lays each opcode's operands into their fields and zeroes the rest; decode as the hard one, dispatching on the group and rebuilding an instruction only when every reserved field is zero, so a junk word gets a defined rejection instead of undefined behaviour; the two laws that fall out --- decode after encode is the identity, and every one of the four billion possible words that decode accepts re-encodes to itself --- which together make the encoding canonical, one word per instruction and one instruction per word; the folded Config, a decode within the decode that turns six bits into a role, an I/O width, a clock, and an alert source and rejects every selection v1 does not implement; and the property test that checks totality not on a handful of samples but across the entire word space."
 [taxonomies]
 tags = ["haskell", "clash", "fpga", "tamal", "engine", "isa"]
