@@ -38,7 +38,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-8777e747.js";
+            window.path_to_searchindex_js = "searchindex-6b728ee3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-2de855f1.js"></script>
@@ -4058,8 +4058,12 @@ make itself.</li>
 so it is meant to be launched by an MCP client rather than run
 interactively.</p>
 <ul>
-<li><code>-s, --serial-number &lt;SN&gt;</code> selects a specific board by USB serial when
-more than one is attached.</li>
+<li><code>-s, --serial-number &lt;SN&gt;</code> <strong>pins</strong> the server to one board. A pinned
+server cannot address any other board: a tool call naming a different
+serial is refused. This is the way to scope an agent session to a
+single board. If the pinned serial is not among the attached boards at
+startup, the server logs a warning naming the serials it did find, and
+starts anyway — see below.</li>
 <li><strong>Per-call connection:</strong> the server holds no persistent USB claim. Each
 tool call opens the board, runs, and releases it when the call completes,
 so the device is free for the <code>gallo</code> CLI or other host processes between
@@ -4068,6 +4072,129 @@ fixed per-call connection cost. The server starts even with no board
 attached and tools begin working as soon as a Pico de Gallo is present;
 you can plug the board in mid-session.</li>
 </ul>
+<p>The pin is checked once at startup, and an unusable one is a <strong>warning</strong>
+rather than a startup failure — starting with no board attached has to
+keep working, so the server cannot treat “pin not attached” as fatal:</p>
+<pre><code class="language-text">WARN gallo_mcp: This server is pinned to serial number 'BOGUSSERIAL' (--serial-number), which is not attached.
+Available: 5256657D8A5D7F03
+</code></pre>
+<p>Nothing is logged when the pin resolves, when no pin was given, or when
+no board is attached at all — that last case is indistinguishable from
+“not plugged in yet”, which is supported. So the warning firing means a
+board <em>is</em> attached and the pin does not match it, which in practice
+means a typo. Without it a mistyped pin starts a server that looks
+healthy and then fails every device call for the rest of the session.</p>
+<p>This warning is on <strong>by default</strong> — it has to be, because MCP clients
+launch the server with whatever environment they have and rarely set
+<code>RUST_LOG</code>. Logs go to stderr, so they never disturb the JSON-RPC stream
+on stdout. <code>RUST_LOG</code> still controls verbosity when you set it, and
+overrides the default entirely: <code>RUST_LOG=error</code> silences the warning,
+<code>RUST_LOG=gallo_mcp=debug</code> adds the per-call board-lock tracing.</p>
+<h2 id="choosing-a-board"><a class="header" href="#choosing-a-board">Choosing a board</a></h2>
+<p>Every tool except <code>list_devices</code> takes an optional <code>serial_number</code>, and
+every response that came from a board names the board it came from:</p>
+<pre><code class="language-json">// i2c_scan {"serial_number":"5256657D8A5D7F03"}
+{
+  "serial_number": "5256657D8A5D7F03",
+  "result": { "addresses": ["0x48"], "raw": [72] }
+}
+</code></pre>
+<p>That <code>{ "serial_number", "result" }</code> envelope wraps every device tool
+response but two. <code>list_devices</code> opens no board at all, and <code>status</code>
+reports its serial as a top-level field of its own result rather than
+nesting a serial under a serial.</p>
+<p>The envelope’s <code>serial_number</code> is <code>null</code> in exactly one case: the sole
+attached board reports no USB serial number. The field is always
+present, so <code>null</code> there means “a board that has no serial answered” —
+never “this response was not enveloped”. <code>status</code>’s <code>available</code> list
+carries <code>null</code> entries for the same reason.</p>
+<p>How the target is chosen:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Boards attached</th><th><code>serial_number</code></th><th>Result</th></tr>
+</thead>
+<tbody>
+<tr><td>0</td><td>—</td><td>error: no device attached</td></tr>
+<tr><td>1</td><td>omitted</td><td>that board</td></tr>
+<tr><td>1</td><td>given</td><td>that board, if it matches</td></tr>
+<tr><td>≥2</td><td>omitted</td><td><strong>error</strong>, listing the available serials</td></tr>
+<tr><td>≥2</td><td>given</td><td>the named board, if exactly one matches</td></tr>
+</tbody>
+</table>
+</div>
+<p>With one board attached nothing changes — omit <code>serial_number</code> and it
+just works. With two or more, omitting it is an error rather than a
+guess:</p>
+<pre><code class="language-text">Multiple Pico de Gallo devices attached; `serial_number` is required.
+Available: 5256657D8A5D7F03, 568E9AAEC72B0D49
+</code></pre>
+<p>That is deliberate. Guessing turns a recoverable mistake into a
+confident wrong answer with no signal that anything went wrong; the
+error names the serials, so the next call succeeds.</p>
+<p>Two boards can also report the <em>same</em> serial, which is refused for the
+same reason — naming it no longer identifies a board:</p>
+<pre><code class="language-text">2 attached Pico de Gallo devices report serial number '0000000000000000'; they cannot be told apart. Detach all but one and retry.
+</code></pre>
+<p>That is reachable rather than hypothetical. The firmware derives the USB
+serial from the RP2350 chip ID and falls back to all-zeros when the OTP
+read fails, which its own comment notes happens on some dev boards, so
+two such boards collide. No argument fixes it; detach one.</p>
+<p>A server started with <code>-s</code> is <strong>pinned</strong>, and the two <code>≥2</code> rows above no
+longer apply: <code>serial_number</code> is optional again however many boards are
+attached. An omitted argument uses the pinned board, a matching one is
+accepted, and a different one is refused:</p>
+<pre><code class="language-text">This server is pinned to serial number '5256657D8A5D7F03' (--serial-number); it cannot address '568E9AAEC72B0D49'. Omit serial_number, or pass '5256657D8A5D7F03'.
+</code></pre>
+<p>Device state is <strong>per board</strong> — bus configuration, GPIO direction, PWM
+enable, and 1-Wire search progress all live on the board you addressed —
+so a follow-up call must repeat the <code>serial_number</code> of the call that set
+it up.</p>
+<p><code>list_devices</code> tells you which case you are in without connecting:</p>
+<pre><code class="language-json">// list_devices {}
+{
+  "devices": [
+    { "serial_number": "5256657D8A5D7F03", "manufacturer": null,
+      "product": "Pico de Gallo", "pinned": false, "default_target": false },
+    { "serial_number": "568E9AAEC72B0D49", "manufacturer": null,
+      "product": "Pico de Gallo", "pinned": false, "default_target": false }
+  ],
+  "pinned": null,
+  "serial_number_required": true,
+  "note": "2 devices attached and this server is not pinned; pass serial_number on every device tool call."
+}
+</code></pre>
+<p><code>note</code> is present only when <code>serial_number_required</code> is true.</p>
+<p><code>status</code> never errors, so it stays answerable even when the target is
+ambiguous:</p>
+<pre><code class="language-json">// status {}
+{
+  "attached": true,
+  "serial_number": null,
+  "ambiguous": true,
+  "available": ["5256657D8A5D7F03", "568E9AAEC72B0D49"],
+  "pinned": null,
+  "reason": "Multiple Pico de Gallo devices attached; `serial_number` is required.\nAvailable: 5256657D8A5D7F03, 568E9AAEC72B0D49",
+  "firmware_version": null,
+  "schema_major": null,
+  "schema_minor": null
+}
+</code></pre>
+<p><code>ambiguous</code> answers “would a call that omits <code>serial_number</code> be
+<em>ambiguous</em>?” — not “would it fail?”. A bare call also fails with no
+board attached, and when the server is pinned to a board that is not
+attached; <code>ambiguous</code> is <code>false</code> in both. It stays true even when this
+particular <code>status</code> call named a board. <code>reason</code> is present only when
+no board was reached.</p>
+<h2 id="concurrency"><a class="header" href="#concurrency">Concurrency</a></h2>
+<p>The connection lock is keyed on the <strong>board</strong>, not on the server. Calls
+to different boards run concurrently; calls to the same board queue. A
+long-running tool — a <code>gpio_wait_*</code> sitting on its full <code>timeout_ms</code> —
+holds only the board it addressed, so traffic to every other board keeps
+flowing.</p>
+<p><code>list_devices</code> connects to nothing and always answers immediately.
+<code>status</code> does open the board it names, so it queues behind a call that is
+still holding that board.</p>
 <h2 id="using-it-with-an-mcp-client"><a class="header" href="#using-it-with-an-mcp-client">Using it with an MCP client</a></h2>
 <p>Add <code>gallo-mcp</code> as a local (stdio) server in your client’s config. These
 files are safe to commit per-project, so the tools appear only in repos
@@ -4089,13 +4216,18 @@ that opt in.</p>
 <h2 id="byte-conventions"><a class="header" href="#byte-conventions">Byte conventions</a></h2>
 <p>Byte payloads go in as <strong>hex strings</strong> and come back as both hex and a
 decimal array. Input accepts comma-separated or bare hex (<code>"0x00,0x10"</code>
-or <code>"0010"</code>); reads return <code>{ "hex": ..., "bytes": ... }</code>.</p>
+or <code>"0010"</code>); reads return <code>{ "hex": ..., "bytes": ... }</code> inside the
+response envelope.</p>
 <pre><code class="language-json">// i2c_write_read {"address":72,"data":"0x00","count":2}
-{ "hex": "0x0B,0xCF", "bytes": [11, 207] }
+{
+  "serial_number": "5256657D8A5D7F03",
+  "result": { "hex": "0x0B,0x8E", "bytes": [11, 142] }
+}
 </code></pre>
 <h2 id="tool-catalog"><a class="header" href="#tool-catalog">Tool catalog</a></h2>
-<p>35 tools, grouped by peripheral. Read-only tools carry the
-<code>readOnlyHint</code> annotation; write/actuation tools carry <code>destructiveHint</code>.</p>
+<p>43 tools, grouped by peripheral. Read-only tools carry the
+<code>readOnlyHint</code> annotation; write/actuation tools carry <code>destructiveHint</code>.
+Every tool except <code>list_devices</code> accepts an optional <code>serial_number</code>.</p>
 <h3 id="device-read-only"><a class="header" href="#device-read-only">device (read-only)</a></h3>
 <div class="table-wrapper">
 <table>
@@ -4104,7 +4236,7 @@ or <code>"0010"</code>); reads return <code>{ "hex": ..., "bytes": ... }</code>.
 </thead>
 <tbody>
 <tr><td><code>list_devices</code></td><td>List connected Pico de Gallo boards</td></tr>
-<tr><td><code>status</code></td><td>Report attach state and firmware/schema version</td></tr>
+<tr><td><code>status</code></td><td>Which board is reachable, why not when none is, plus firmware/schema version</td></tr>
 <tr><td><code>device_info</code></td><td>Firmware version, schema version, capabilities</td></tr>
 <tr><td><code>version</code></td><td>Firmware version</td></tr>
 <tr><td><code>ping</code></td><td>Echo a value (liveness check)</td></tr>
@@ -4225,6 +4357,16 @@ tools requires a non-zero <code>timeout_ms</code>. This release deliberately doe
 <strong>not</strong> expose infinite/no-timeout waits or push-based edge
 subscriptions — a wait that never returns would stall the stdio session,
 and event streaming is out of scope for v1.</p>
+<p><code>uart_read</code>’s <code>timeout_ms</code> is <strong>not</strong> covered by that rule: there <code>0</code> is
+legal and means a non-blocking poll that returns whatever is already
+buffered. The asymmetry is deliberate — for an edge wait, <code>0</code> would mean
+an unbounded wait.</p>
+<p><code>uart_read</code> is also one of the twelve tools that hard-fail on a
+<code>hw-rev1</code> board: that revision supports only I<sup>2</sup>C, SPI, GPIO,
+and PWM, so every <code>uart_*</code>, <code>adc_*</code>, and <code>onewire_*</code> call returns
+<code>Unsupported</code> there. Two boards on one bench can be different
+revisions, so call <code>device_info</code> per board rather than assuming they
+are interchangeable.</p>
 <h2 id="security"><a class="header" href="#security">Security</a></h2>
 <p><code>gallo-mcp</code> does <strong>not</strong> gate writes itself. Write approval is delegated
 to the MCP client through tool annotations:</p>
@@ -4242,28 +4384,72 @@ hardware — drive pins, write buses, change configuration — without
 confirmation. If the board is wired to anything you care about, run the
 server behind a client that honors <code>destructiveHint</code>.</p>
 </blockquote>
+<h3 id="every-call-resets-that-boards-gpio-subscriptions"><a class="header" href="#every-call-resets-that-boards-gpio-subscriptions">Every call resets that board’s GPIO subscriptions</a></h3>
+<p>Opening a board tears down <strong>every</strong> GPIO edge subscription on it,
+including ones owned by other host processes. A <code>gallo</code> CLI session or a
+user program watching a pin loses that watch the moment a tool call
+touches the same board.</p>
+<p>That is the documented host protocol rather than a bug — it is how a
+host recovers pins stranded by a previous host that died mid-watch — but
+two things about it are easy to miss:</p>
+<ul>
+<li><strong><code>readOnlyHint</code> does not cover it.</strong> <code>status</code>, <code>device_info</code>,
+<code>version</code>, <code>ping</code>, and <code>i2c_scan</code> are annotated read-only and appear
+in the read-only rows of the catalog below, yet each opens a board and
+so each resets its subscriptions. A client gating on <code>destructiveHint</code>
+will not prompt for any of them.</li>
+<li><strong>Per-call selection widened the blast radius.</strong> It used to reach only
+the single board the server was bound to. Now any call can name any
+attached board, so on a multi-board bench a call carrying
+<code>serial_number</code> for board B disturbs board B — even if every previous
+call in the session went to board A.</li>
+</ul>
+<p><code>list_devices</code> is the one exception: it opens no board, so it disturbs
+nothing.</p>
+<p>If a long-lived watch matters, pin the server with <code>-s</code> to keep it away
+from the board running the watch.</p>
 <h2 id="validation"><a class="header" href="#validation">Validation</a></h2>
 <p>The server was validated on real hardware: a Pico de Gallo (serial
-<code>5256657D8A5D7F03</code>, firmware v0.10.0, schema v0.6.0, HW rev2) with a
+<code>5256657D8A5D7F03</code>, firmware v0.10.1, schema v0.6.1, HW rev2) with a
 TMP108 temperature sensor on I<sup>2</sup>C.</p>
 <p>Over stdio, <code>status</code> reports the attached board:</p>
-<pre><code class="language-json">{ "attached": true, "firmware_version": "0.10.0", "schema_major": 0, "schema_minor": 6 }
+<pre><code class="language-json">// status {}
+{
+  "attached": true,
+  "serial_number": "5256657D8A5D7F03",
+  "ambiguous": false,
+  "available": ["5256657D8A5D7F03"],
+  "pinned": null,
+  "firmware_version": "0.10.1",
+  "schema_major": 0,
+  "schema_minor": 6
+}
 </code></pre>
 <p><code>i2c_scan</code> finds the sensor at address <code>0x48</code>:</p>
 <pre><code class="language-json">// i2c_scan {"include_reserved":false}
-{ "addresses": ["0x48"], "raw": [72] }
+{
+  "serial_number": "5256657D8A5D7F03",
+  "result": { "addresses": ["0x48"], "raw": [72] }
+}
 </code></pre>
 <p>And <code>i2c_write_read</code> reads its two temperature bytes:</p>
 <pre><code class="language-json">// i2c_write_read {"address":72,"data":"0x00","count":2}
-{ "hex": "0x0B,0xCF", "bytes": [11, 207] }
+{
+  "serial_number": "5256657D8A5D7F03",
+  "result": { "hex": "0x0B,0x8E", "bytes": [11, 142] }
+}
 </code></pre>
 <p>Those bytes are <strong>byte-for-byte identical</strong> to the <code>gallo</code> CLI:</p>
 <pre><code class="language-console">$ gallo i2c write-read -a 0x48 -b 0x00 -c 2
-0b cf
+0b 8e
 </code></pre>
+<p>Board selection was validated on the same bench with a second board
+attached (<code>568E9AAEC72B0D49</code>, bare bus): a bare <code>i2c_scan</code> is refused
+rather than answered from an arbitrary board, and naming either serial
+reaches that board. See <a href="#choosing-a-board">Choosing a board</a>.</p>
 <blockquote class="blockquote-tag blockquote-tag-note">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p>Decoding <code>0x0BCF</code> into degrees Celsius is left to the reader and the
+<p>Decoding <code>0x0B8E</code> into degrees Celsius is left to the reader and the
 TMP108 datasheet — it is not asserted here. The point of this
 walkthrough is that the MCP round-trip returns exactly what the CLI
 does, so an agent driving the board through <code>gallo-mcp</code> sees the same
