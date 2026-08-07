@@ -1,7 +1,7 @@
 +++
 title = "Tamal: Add, And, and the Taken Branch"
 date = 2026-08-07T09:00:00
-draft = true
+draft = false
 description = "The two shut boxes of the dispatch post, opened together: Tamal.Alu and Tamal.Branch, the pure combinational compute layer that turns two register values into the one written back or the one bit that decides a jump; the ALU's two layers, a thin total alu core dispatched by an eight-constructor AluOp over register values, and dataResult, the wrapper that places the Lui, Mov and LoadImm constants and resolves operand B --- a register value or a sign-extended immediate --- so the register/immediate opcode pairs collapse to eight operations; the two import lines that are both scars from naming collisions, Clash.Prelude hiding And and Xor because base already owns those newtype names and Tamal.Isa imported qualified because Instr's own Add and Sub would clash; the shift amount masked to five bits so a shift past the word is well-defined, the logical Srl and the arithmetic Sra that reinterprets its operand as Signed to borrow a sign; the total case's documented-unreachable zero default; the branch comparator, four lines returning only taken-or-not, its unsigned Bltu and Bgeu free from BitVector's own Ord while the PC math stays in the engine; and the tests that pin the subtle corners --- two's complement, shift masking, sign-fill, the unsigned boundary --- against reference models the derived Enum lets them run over every op."
 [taxonomies]
 tags = ["haskell", "clash", "fpga", "tamal", "engine", "alu"]
