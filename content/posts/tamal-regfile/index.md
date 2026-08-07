@@ -1,7 +1,7 @@
 +++
 title = "Tamal: Sixteen Registers and a Hardwired Zero"
 date = 2026-08-06T09:00:00
-draft = true
+draft = false
 description = "The last pure leaf before the engine, opened: Tamal.RegFile, the sixteen registers the datapath read its operands from and wrote its results to; a four-name door that exports one opaque newtype and three functions, its Vec 16 of BitVector 32 sealed behind the wall so the engine touches it only through initRegs, readReg and writeReg; a single import --- Tamal.Isa, for the name of a five-bit selector --- and never the engine whose registers it holds, the same discipline the memories promised would be familiar; the power-up bank of sixteen zeros that is the reset value of a machine with no reset port; the private regIndex that truncates a five-bit name to a four-bit slot so the index type is total by construction and out-of-window x16..x31 alias their low-four twin; readReg's hole at x0, the hardwired zero that made no operand free back in the dispatch post; writeReg's discarded write and its functional update, a fresh bank returned rather than a cell mutated; the read-old, write-new hazard-freedom that falls out of a pure Mealy step; and a test file that builds every bank through the public door and pins the bijection, the hole, and the aliasing from six directions at once."
 [taxonomies]
 tags = ["haskell", "clash", "fpga", "tamal", "engine", "registers"]
