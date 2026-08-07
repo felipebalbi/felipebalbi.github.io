@@ -1,4 +1,4 @@
-{% macro post_entry(page) %}
+{% component post_entry(page) %}
 {% set excerpt = page.summary | default(value="") | striptags | trim %}
 <li>
   <time datetime="{{ page.date }}">{{ page.date | date(format='%Y-%m-%d') }}</time>
@@ -8,9 +8,9 @@
     <a class="post-more" href="{{ page.permalink }}">Read more &rarr;</a>
   </div>
 </li>
-{% endmacro post_entry %}
+{% endcomponent post_entry %}
 
 {# Inline "N post(s)" with correct pluralization. Kept on ONE line on
-   purpose: this renders inside <p>/<time>, so any newline in the macro
+   purpose: this renders inside <p>/<time>, so any newline in the component
    body would leak whitespace into the surrounding text. #}
-{% macro post_count(count) %}{{ count }} post{% if count != 1 %}s{% endif %}{% endmacro post_count %}
+{% component post_count(count) %}{{ count }} post{% if count != 1 %}s{% endif %}{% endcomponent post_count %}

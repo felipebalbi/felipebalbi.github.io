@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% import "macros.html" as macros %}
 
 {% block title %}{{ section.title }} &middot; {{ config.title }}{% endblock %}
 
@@ -9,7 +8,7 @@
 
 <ul class="post-list" style="margin-top:2rem">
   {% for page in section.pages %}
-    {{ macros::post_entry(page=page) }}
+    {{<post_entry page={page} />}}
   {% endfor %}
 </ul>
 {% endblock %}

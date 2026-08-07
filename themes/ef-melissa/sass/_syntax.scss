@@ -1,22 +1,26 @@
 // ============================================================
 // ef-melissa  --  syntax highlighting integration.
 //
-// We use Zola's class-based syntax highlighting
-// (markdown.highlighting.style = "class" with light_theme +
-// dark_theme). Zola emits two stylesheets in the static root:
-//   * giallo-light.css
-//   * giallo-dark.css
-// Each contains rules like:
-//   .z-comment { color: #93a1a1; }
+// Zola 0.23 / giallo dual-theme class mode puts BOTH the light
+// and dark classes on every span:
+//   <pre class="giallo z-l-code z-d-code">
+//     <span class="z-l-5 z-d-5">...</span>
+// i.e. z-l-* = light-theme classes, z-d-* = dark-theme classes.
 //
-// Both stylesheets are linked from base.html; the inactive
-// one is `disabled` based on data-theme by the toggle script,
-// so only one rule-set applies at a time. The required
-// per-line layout classes documented at
-// https://www.getzola.org/documentation/content/syntax-highlighting/
-// live here so they don't depend on the swap.
+// Giallo's generated giallo-light.css / giallo-dark.css define
+// *unprefixed* .z-* rules, which match none of the emitted
+// prefixed classes, so we do not use them. Instead we define
+// the prefixed rules here, scoped by [data-theme] so the site's
+// existing toggle (which sets data-theme on <html>) drives which
+// palette is visible. Both palettes ship in one stylesheet; only
+// the active theme's rules apply.
+//
+// Palettes below are giallo's solarized-light / solarized-dark
+// output, transcribed to the z-l-* / z-d-* prefixes.
 // ============================================================
 
+// Required per-line layout classes (theme-independent).
+// https://www.getzola.org/documentation/content/syntax-highlighting/
 .giallo-l {
   display: inline-block;
   min-height: 1lh;
@@ -30,4 +34,54 @@
   min-width: 3ch;
   text-align: right;
   opacity: 0.8;
+}
+
+// ---- Light palette (solarized-light) -> z-l-* -----------------
+[data-theme="light"] {
+  .z-l-code {
+    color: #657b83;
+    background-color: #fdf6e3;
+  }
+  .z-l-hl { background-color: #eee8d5; }
+
+  .z-l-1  { color: #268bd2; }
+  .z-l-2  { color: #2aa198; }
+  .z-l-3  { color: #586e75; }
+  .z-l-4  { color: #6c71c4; }
+  .z-l-5  { color: #859900; }
+  .z-l-6  { color: #93a1a1; }
+  .z-l-7  { color: #b58900; }
+  .z-l-8  { color: #cb4b16; }
+  .z-l-9  { color: #d33682; }
+  .z-l-10 { color: #dc322f; }
+  .z-l-b  { font-weight: bold; }
+  .z-l-i  { font-style: italic; }
+  .z-l-u  { text-decoration: underline; }
+  .z-l-s  { text-decoration: line-through; }
+  .z-l-us { text-decoration: underline line-through; }
+}
+
+// ---- Dark palette (solarized-dark) -> z-d-* -------------------
+[data-theme="dark"] {
+  .z-d-code {
+    color: #839496;
+    background-color: #002b36;
+  }
+  .z-d-hl { background-color: #073642; }
+
+  .z-d-1  { color: #268bd2; }
+  .z-d-2  { color: #2aa198; }
+  .z-d-3  { color: #586e75; }
+  .z-d-4  { color: #6c71c4; }
+  .z-d-5  { color: #859900; }
+  .z-d-6  { color: #93a1a1; }
+  .z-d-7  { color: #b58900; }
+  .z-d-8  { color: #cb4b16; }
+  .z-d-9  { color: #d33682; }
+  .z-d-10 { color: #dc322f; }
+  .z-d-b  { font-weight: bold; }
+  .z-d-i  { font-style: italic; }
+  .z-d-u  { text-decoration: underline; }
+  .z-d-s  { text-decoration: line-through; }
+  .z-d-us { text-decoration: underline line-through; }
 }

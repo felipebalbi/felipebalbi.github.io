@@ -20,9 +20,8 @@ bottom_footnotes = true
 
 # Class-based highlighting so the light + dark stylesheets can
 # be swapped at runtime by the ef-melissa theme switcher.
-# Zola emits static/giallo-light.css + static/giallo-dark.css.
+# Zola emits giallo-light.css + giallo-dark.css into the output dir.
 [markdown.highlighting]
-enabled = true
 style = "class"
 light_theme = "solarized-light"
 dark_theme  = "solarized-dark"

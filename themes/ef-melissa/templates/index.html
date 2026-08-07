@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% import "macros.html" as macros %}
 
 {% block content %}
 <section class="intro">
@@ -13,8 +12,8 @@
 <section>
   <h2 class="section-title">Recent posts</h2>
   <ul class="post-list">
-    {% for page in posts_section.pages | slice(end=10) %}
-      {{ macros::post_entry(page=page) }}
+    {% for page in posts_section.pages[:10] %}
+      {{<post_entry page={page} />}}
     {% endfor %}
   </ul>
   {% if posts_section.pages | length > 10 %}

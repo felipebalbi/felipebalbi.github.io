@@ -46,15 +46,10 @@
 
   <link rel="stylesheet" href="{{ get_url(path='style.css', cachebust=true) }}">
 
-  {# Class-based syntax highlight stylesheets. Both are loaded
-     so the swap is instant. Zola emits both into the static
-     root when [markdown.highlighting].style = "class". The
-     end-of-body script disables the inactive one based on
-     data-theme. cachebust is intentionally omitted here:
-     these files are generated during the build, so
-     get_url(cachebust=true) cannot stat them yet. #}
-  <link id="hl-light" rel="stylesheet" href="{{ get_url(path='giallo-light.css') }}">
-  <link id="hl-dark"  rel="stylesheet" href="{{ get_url(path='giallo-dark.css')  }}" disabled>
+  {# Syntax highlighting is class-based (giallo dual-theme mode). The
+     prefixed z-l-* / z-d-* rules live in style.css (_syntax.scss),
+     scoped by [data-theme], so they follow the toggle automatically
+     and need no separate stylesheet swap. #}
 
   {% if config.generate_feeds %}
   <link rel="alternate" type="application/atom+xml" title="{{ config.title }} (Atom)" href="{{ get_url(path='atom.xml', trailing_slash=false) }}">
@@ -81,7 +76,7 @@
       <a class="site-name" href="{{ config.base_url }}">{{ config.title }}</a>
       <nav class="site-nav" aria-label="Primary">
         {% for item in config.extra.nav %}
-          <a href="{{ item.url }}"{% if current_path and current_path is starting_with(item.url) %} class="active"{% endif %}>{{ item.name }}</a>
+          <a href="{{ item.url }}"{% if current_path and current_path is starting_with(pat=item.url) %} class="active"{% endif %}>{{ item.name }}</a>
         {% endfor %}
         {# ---- Light/dark theme toggle ----
              Two icons live inside the button; CSS shows the one
@@ -125,18 +120,18 @@
   </div>
 
   {# ----------------------------------------------------------
-       Theme behavior (button click + syntax stylesheet swap).
+       Theme behavior (button click).
 
        The bootstrap script in <head> has already set
        data-theme from sessionStorage or prefers-color-scheme.
-       This script:
+       Syntax highlighting is CSS-only: the z-l-* / z-d-* rules
+       are scoped by [data-theme], so flipping the attribute is
+       all that is needed. This script:
 
-         1. Syncs the syntax-highlight stylesheets to the
-            current data-theme.
-         2. On button click, flips data-theme and writes
+         1. On button click, flips data-theme and writes
             the new value to sessionStorage so it survives
             navigation within this tab.
-         3. Tracks OS theme changes ONLY while no value is
+         2. Tracks OS theme changes ONLY while no value is
             stored in sessionStorage (i.e. the user hasn't
             made a manual choice on this tab yet).
      ---------------------------------------------------------- #}
@@ -144,8 +139,6 @@
     (function () {
       var root = document.documentElement;
       var btn  = document.getElementById('theme-toggle');
-      var hlL  = document.getElementById('hl-light');
-      var hlD  = document.getElementById('hl-dark');
       var mql  = window.matchMedia('(prefers-color-scheme: dark)');
 
       function userChose() {
@@ -155,22 +148,12 @@
         } catch (_) { return false; }
       }
 
-      function applyHighlight() {
-        var t = root.getAttribute('data-theme');
-        if (hlL) hlL.disabled = (t !== 'light');
-        if (hlD) hlD.disabled = (t !== 'dark');
-      }
-
       function setTheme(t, persist) {
         root.setAttribute('data-theme', t);
         if (persist) {
           try { sessionStorage.setItem('theme', t); } catch (_) {}
         }
-        applyHighlight();
       }
-
-      // Initial sync.
-      applyHighlight();
 
       if (btn) {
         btn.addEventListener('click', function () {
