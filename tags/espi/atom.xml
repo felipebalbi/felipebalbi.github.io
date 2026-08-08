@@ -1,0 +1,832 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+  <title>Felipe Balbi</title>
+  <subtitle>Notes on embedded systems, Rust, and the craft of writing software.</subtitle>
+  <link href="https://balbi.sh/tags/espi/atom.xml" rel="self" type="application/atom+xml"/>
+  <link href="https://balbi.sh"/>
+  <generator uri="https://www.getzola.org/">Zola</generator>
+  <updated>2026-08-04T09:00:00+00:00</updated>
+  <id>https://balbi.sh/tags/espi/atom.xml</id>
+  
+  <entry xml:lang="en">
+    <title>Tamal: The Wire and the Record</title>
+    <published>2026-08-04T09:00:00+00:00</published>
+    <updated>2026-08-04T09:00:00+00:00</updated>
+    <author><name>Felipe Balbi</name></author>
+    <link rel="alternate" href="https://balbi.sh/posts/tamal-engine-bus/" type="text/html"/>
+    <id>https://balbi.sh/posts/tamal-engine-bus/</id>
+    <summary type="html">&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;last post&lt;/a&gt; ended four instructions mid-gesture. &lt;code&gt;PUT&lt;/code&gt;, &lt;code&gt;GET&lt;/code&gt;,
+&lt;code&gt;TAR&lt;/code&gt;, &lt;code&gt;MARK&lt;/code&gt;, and &lt;code&gt;WAIT_ON&lt;/code&gt; each spent their one cycle in &lt;code&gt;Exec&lt;/code&gt; not
+finishing but &lt;em&gt;arming&lt;/em&gt; — a shifter loaded, a beat count set, a write
+recorded in &lt;code&gt;pending&lt;/code&gt;, a phase changed — and then the cycle ended and
+they handed off to a longer phase. This post is the other side of that
+handoff: &lt;code&gt;BusBeat&lt;/code&gt;, &lt;code&gt;TraceEmit&lt;/code&gt;, and &lt;code&gt;WaitAlert&lt;/code&gt;, the three phases where
+the arming is spent. It is where the engine finally touches the wire.&lt;/p&gt;
+&lt;p&gt;Everything until now has been decision. The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;shape&lt;/a&gt; was the map;
+&lt;code&gt;Exec&lt;/code&gt; was the choice of what to do. Here the engine &lt;em&gt;does&lt;/em&gt; it: it drives
+and samples two-and-a-half wires on a clock it makes itself, and records
+what happened into a ring the host will later read back. Two subjects,
+then — the wire and the record — and they meet in the one phase that
+runs the bus.&lt;/p&gt;</summary>
+    
+    <content type="html">&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;last post&lt;/a&gt; ended four instructions mid-gesture. &lt;code&gt;PUT&lt;/code&gt;, &lt;code&gt;GET&lt;/code&gt;,
+&lt;code&gt;TAR&lt;/code&gt;, &lt;code&gt;MARK&lt;/code&gt;, and &lt;code&gt;WAIT_ON&lt;/code&gt; each spent their one cycle in &lt;code&gt;Exec&lt;/code&gt; not
+finishing but &lt;em&gt;arming&lt;/em&gt; — a shifter loaded, a beat count set, a write
+recorded in &lt;code&gt;pending&lt;/code&gt;, a phase changed — and then the cycle ended and
+they handed off to a longer phase. This post is the other side of that
+handoff: &lt;code&gt;BusBeat&lt;/code&gt;, &lt;code&gt;TraceEmit&lt;/code&gt;, and &lt;code&gt;WaitAlert&lt;/code&gt;, the three phases where
+the arming is spent. It is where the engine finally touches the wire.&lt;/p&gt;
+&lt;p&gt;Everything until now has been decision. The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;shape&lt;/a&gt; was the map;
+&lt;code&gt;Exec&lt;/code&gt; was the choice of what to do. Here the engine &lt;em&gt;does&lt;/em&gt; it: it drives
+and samples two-and-a-half wires on a clock it makes itself, and records
+what happened into a ring the host will later read back. Two subjects,
+then — the wire and the record — and they meet in the one phase that
+runs the bus.&lt;/p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;/span&gt;&lt;h2 id=&quot;sck-is-the-fabric-clock-divided-by-five&quot;&gt;SCK is the fabric clock, divided by five&lt;/h2&gt;
+&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-introducing/&quot;&gt;introduction&lt;/a&gt; made a point of insisting that Tamal is not a
+throughput problem but a &lt;em&gt;timing-alignment&lt;/em&gt; problem — that the engine
+does not need to be fast, it needs to be precise about &lt;em&gt;when&lt;/em&gt; it drives,
+samples, and lets go. All of that precision lives in one small counter
+and the function that reads it:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;sckOf&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Index&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 5&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bit&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;sckOf &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; boolToBit &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;$&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;gt;=&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 3&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;SCK&lt;/code&gt;, the serial clock, is the fabric clock divided by five. The
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;shape&lt;/a&gt; post named the field that does the dividing: &lt;code&gt;busPhase :: Index 5&lt;/code&gt;, a counter that walks &lt;code&gt;0, 1, 2, 3, 4&lt;/code&gt; and wraps, one step per
+100 MHz fabric cycle. &lt;code&gt;sckOf&lt;/code&gt; turns that counter into a clock level with
+a single comparison — &lt;code&gt;(&amp;gt;= 3)&lt;/code&gt; is true for phases three and four, false
+for zero, one, two, and &lt;code&gt;boolToBit&lt;/code&gt; maps that to a &lt;code&gt;Bit&lt;/code&gt;.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-sckof-1&quot;&gt;&lt;a href=&quot;#fn-sckof&quot;&gt;[1]&lt;/a&gt;&lt;/sup&gt; So
+&lt;code&gt;SCK&lt;/code&gt; is &lt;strong&gt;low across phases {0, 1, 2}&lt;/strong&gt; and &lt;strong&gt;high across phases {3, 4}&lt;/strong&gt;:
+three cycles low, two cycles high, five to a beat, one bit of eSPI per
+beat.&lt;/p&gt;
+&lt;p&gt;The duty cycle is lopsided — three-fifths low — and that is a
+deliberate, honest compromise. A clean fifty-percent clock at this divisor
+would need a hardware clocking primitive; a plain counter cannot split
+five evenly. Rather than spend an MMCM to make the clock pretty, the
+engine takes the asymmetry, which at 20 MHz an eSPI target does not care
+about: what it cares about is that the edges are where the spec says, and
+they are. The rising edge — the one that matters — falls at the &lt;strong&gt;two-
+to-three boundary&lt;/strong&gt;, and both directions of the transfer are pinned to
+it.&lt;/p&gt;
+&lt;figure class=&quot;sck-fig&quot; style=&quot;margin:2rem 0&quot;&gt;
+&lt;svg class=&quot;sck&quot; viewBox=&quot;0 0 760 232&quot; role=&quot;img&quot; aria-labelledby=&quot;sck-t sck-d&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot;&gt;
+&lt;title id=&quot;sck-t&quot;&gt;SCK as the fabric clock divided by five, with the drive and sample points&lt;/title&gt;
+&lt;desc id=&quot;sck-d&quot;&gt;Two bus beats are shown side by side, each five fabric cycles wide, the cycles numbered by busPhase zero through four. SCK is low across phases zero, one and two, and high across phases three and four, so each beat is three cycles low then two high. The rising edge falls at the two-to-three boundary. A driven PUT bit is placed at phase zero at the start of each beat; a GET bit is sampled from IO1 at phase three, on the rising edge.&lt;/desc&gt;
+&lt;style&gt;
+.sck{max-width:760px;width:100%;height:auto;display:block;margin:0 auto}
+.sck .grid{stroke:var(--fg-dim);stroke-width:1;opacity:.32}
+.sck .beat{stroke:var(--fg-main);stroke-width:1.5}
+.sck .sckw{stroke:var(--accent);stroke-width:2.5;fill:none}
+.sck .edge{stroke:var(--accent);stroke-width:1.5;stroke-dasharray:4 4}
+.sck .rlbl{fill:var(--fg-main);font-family:var(--mono);font-size:12.5px}
+.sck .ph{fill:var(--fg-main);font-family:var(--mono);font-size:12px}
+.sck .beatlbl{fill:var(--fg-dim);font-family:var(--sans);font-size:12.5px}
+.sck .ev{fill:var(--fg-dim);font-family:var(--sans);font-size:11px}
+.sck .evA{fill:var(--accent);font-family:var(--sans);font-size:11px}
+.sck .node{fill:var(--accent)}
+&lt;/style&gt;
+&lt;!-- beat labels --&gt;
+&lt;text class=&quot;beatlbl&quot; x=&quot;290&quot; y=&quot;24&quot; text-anchor=&quot;middle&quot;&gt;beat 1 (bit 7)&lt;/text&gt;
+&lt;text class=&quot;beatlbl&quot; x=&quot;590&quot; y=&quot;24&quot; text-anchor=&quot;middle&quot;&gt;beat 2 (bit 6)&lt;/text&gt;
+&lt;!-- gridlines --&gt;
+&lt;line class=&quot;grid&quot; x1=&quot;200&quot; y1=&quot;38&quot; x2=&quot;200&quot; y2=&quot;150&quot;/&gt;
+&lt;line class=&quot;grid&quot; x1=&quot;260&quot; y1=&quot;38&quot; x2=&quot;260&quot; y2=&quot;150&quot;/&gt;
+&lt;line class=&quot;grid&quot; x1=&quot;320&quot; y1=&quot;38&quot; x2=&quot;320&quot; y2=&quot;150&quot;/&gt;
+&lt;line class=&quot;grid&quot; x1=&quot;380&quot; y1=&quot;38&quot; x2=&quot;380&quot; y2=&quot;150&quot;/&gt;
+&lt;line class=&quot;grid&quot; x1=&quot;500&quot; y1=&quot;38&quot; x2=&quot;500&quot; y2=&quot;150&quot;/&gt;
+&lt;line class=&quot;grid&quot; x1=&quot;560&quot; y1=&quot;38&quot; x2=&quot;560&quot; y2=&quot;150&quot;/&gt;
+&lt;line class=&quot;grid&quot; x1=&quot;620&quot; y1=&quot;38&quot; x2=&quot;620&quot; y2=&quot;150&quot;/&gt;
+&lt;line class=&quot;grid&quot; x1=&quot;680&quot; y1=&quot;38&quot; x2=&quot;680&quot; y2=&quot;150&quot;/&gt;
+&lt;!-- beat boundaries --&gt;
+&lt;line class=&quot;beat&quot; x1=&quot;140&quot; y1=&quot;34&quot; x2=&quot;140&quot; y2=&quot;205&quot;/&gt;
+&lt;line class=&quot;beat&quot; x1=&quot;440&quot; y1=&quot;34&quot; x2=&quot;440&quot; y2=&quot;205&quot;/&gt;
+&lt;line class=&quot;beat&quot; x1=&quot;740&quot; y1=&quot;34&quot; x2=&quot;740&quot; y2=&quot;205&quot;/&gt;
+&lt;!-- row labels --&gt;
+&lt;text class=&quot;rlbl&quot; x=&quot;128&quot; y=&quot;60&quot; text-anchor=&quot;end&quot;&gt;busPhase&lt;/text&gt;
+&lt;text class=&quot;rlbl&quot; x=&quot;128&quot; y=&quot;115&quot; text-anchor=&quot;end&quot;&gt;SCK&lt;/text&gt;
+&lt;!-- busPhase numbers --&gt;
+&lt;text class=&quot;ph&quot; x=&quot;170&quot; y=&quot;60&quot; text-anchor=&quot;middle&quot;&gt;0&lt;/text&gt;
+&lt;text class=&quot;ph&quot; x=&quot;230&quot; y=&quot;60&quot; text-anchor=&quot;middle&quot;&gt;1&lt;/text&gt;
+&lt;text class=&quot;ph&quot; x=&quot;290&quot; y=&quot;60&quot; text-anchor=&quot;middle&quot;&gt;2&lt;/text&gt;
+&lt;text class=&quot;ph&quot; x=&quot;350&quot; y=&quot;60&quot; text-anchor=&quot;middle&quot;&gt;3&lt;/text&gt;
+&lt;text class=&quot;ph&quot; x=&quot;410&quot; y=&quot;60&quot; text-anchor=&quot;middle&quot;&gt;4&lt;/text&gt;
+&lt;text class=&quot;ph&quot; x=&quot;470&quot; y=&quot;60&quot; text-anchor=&quot;middle&quot;&gt;0&lt;/text&gt;
+&lt;text class=&quot;ph&quot; x=&quot;530&quot; y=&quot;60&quot; text-anchor=&quot;middle&quot;&gt;1&lt;/text&gt;
+&lt;text class=&quot;ph&quot; x=&quot;590&quot; y=&quot;60&quot; text-anchor=&quot;middle&quot;&gt;2&lt;/text&gt;
+&lt;text class=&quot;ph&quot; x=&quot;650&quot; y=&quot;60&quot; text-anchor=&quot;middle&quot;&gt;3&lt;/text&gt;
+&lt;text class=&quot;ph&quot; x=&quot;710&quot; y=&quot;60&quot; text-anchor=&quot;middle&quot;&gt;4&lt;/text&gt;
+&lt;!-- SCK waveform: low {0,1,2}, high {3,4} --&gt;
+&lt;path class=&quot;sckw&quot; d=&quot;M140,132 H320 V90 H440 V132 H620 V90 H740&quot;/&gt;
+&lt;!-- rising-edge markers --&gt;
+&lt;circle class=&quot;node&quot; cx=&quot;320&quot; cy=&quot;90&quot; r=&quot;4&quot;/&gt;
+&lt;circle class=&quot;node&quot; cx=&quot;620&quot; cy=&quot;90&quot; r=&quot;4&quot;/&gt;
+&lt;line class=&quot;edge&quot; x1=&quot;320&quot; y1=&quot;94&quot; x2=&quot;320&quot; y2=&quot;166&quot;/&gt;
+&lt;line class=&quot;edge&quot; x1=&quot;620&quot; y1=&quot;94&quot; x2=&quot;620&quot; y2=&quot;166&quot;/&gt;
+&lt;!-- events --&gt;
+&lt;text class=&quot;ev&quot; x=&quot;170&quot; y=&quot;182&quot; text-anchor=&quot;middle&quot;&gt;drive @ φ0&lt;/text&gt;
+&lt;text class=&quot;ev&quot; x=&quot;470&quot; y=&quot;182&quot; text-anchor=&quot;middle&quot;&gt;drive @ φ0&lt;/text&gt;
+&lt;text class=&quot;evA&quot; x=&quot;320&quot; y=&quot;182&quot; text-anchor=&quot;middle&quot;&gt;sample @ φ3&lt;/text&gt;
+&lt;text class=&quot;evA&quot; x=&quot;620&quot; y=&quot;182&quot; text-anchor=&quot;middle&quot;&gt;sample @ φ3&lt;/text&gt;
+&lt;/svg&gt;
+&lt;figcaption style=&quot;text-align:center;color:var(--fg-dim);font-size:.9rem;margin-top:.85rem;font-family:var(--sans)&quot;&gt;&lt;code&gt;SCK&lt;/code&gt; is the fabric clock ÷ 5. Each beat is &lt;code&gt;busPhase&lt;/code&gt; 0–4: three cycles low, two high, one eSPI bit. A &lt;code&gt;PUT&lt;/code&gt; places its bit on &lt;code&gt;IO0&lt;/code&gt; at the start of the beat (φ0); a &lt;code&gt;GET&lt;/code&gt; samples &lt;code&gt;IO1&lt;/code&gt; at the rising edge (the 2→3 boundary, φ3). Eight beats make a byte, forty fabric cycles. The waveform is the whole of the engine&#39;s timing discipline --- a counter, a comparison, and one edge everything is pinned to.&lt;/figcaption&gt;
+&lt;/figure&gt;
+&lt;h2 id=&quot;one-beat-five-cycles&quot;&gt;One beat, five cycles&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;stepBusBeat&lt;/code&gt; runs once per fabric cycle while a transfer is in flight,
+and its whole logic is a three-way guard — am I mid-beat, between
+beats, or done?&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;stepBusBeat&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; State&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BusIn&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;State&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BusOut&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Maybe&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Ring&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;stepBusBeat s inp&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span&gt; busPhase s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 4&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;tick s&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; busOut &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;tick s&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; mid-beat: advance phase&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span&gt; beatIx s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;+&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;lt;&lt;/span&gt;&lt;span&gt; beatTot s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;nextBeat s&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; busOut &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;nextBeat s&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; more beats&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span&gt; otherwise &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; complete s&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Read the three arms as the life of a beat. While &lt;code&gt;busPhase &amp;lt; 4&lt;/code&gt; the beat
+is still running, so &lt;code&gt;tick&lt;/code&gt; advances it one phase. Once &lt;code&gt;busPhase&lt;/code&gt; reaches
+&lt;code&gt;4&lt;/code&gt; the beat is over, and the question becomes whether there is another:
+if &lt;code&gt;beatIx + 1 &amp;lt; beatTot&lt;/code&gt; — more bits to go — &lt;code&gt;nextBeat&lt;/code&gt; starts the
+next one; otherwise the transfer is finished and &lt;code&gt;complete&lt;/code&gt; closes it out.
+&lt;code&gt;beatIx&lt;/code&gt; is the bit we are on, &lt;code&gt;beatTot&lt;/code&gt; the total the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;&lt;code&gt;Exec&lt;/code&gt;
+setup&lt;/a&gt; wrote (eight for a byte). The whole of a &lt;code&gt;PUT&lt;/code&gt;, a &lt;code&gt;GET&lt;/code&gt;, or a
+turnaround is this guard, iterated: five cycles a beat, &lt;code&gt;beatTot&lt;/code&gt; beats,
+then done.&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;tick&lt;/code&gt; is where a single fabric cycle of a beat happens:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  tick t &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    let&lt;/span&gt;&lt;span&gt; p &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; busPhase t &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;+&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        t1 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; t&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;busPhase&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; p&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; sck&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; sckOf p&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;     in&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; if&lt;/span&gt;&lt;span&gt; p &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 3&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; then&lt;/span&gt;&lt;span&gt; sampleGet t1 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;else&lt;/span&gt;&lt;span&gt; t1&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;It steps &lt;code&gt;busPhase&lt;/code&gt; up by one and sets &lt;code&gt;sck&lt;/code&gt; to &lt;code&gt;sckOf&lt;/code&gt; of the new phase
+— the waveform, generated one cycle at a time. And it carries the one
+event that has to happen on the rising edge: &lt;code&gt;if p == 3 then sampleGet&lt;/code&gt;.
+Phase three is the first high phase, the tick that crosses the two-to-
+three boundary, and that is exactly when a &lt;code&gt;GET&lt;/code&gt; must read the wire. So
+&lt;code&gt;tick&lt;/code&gt; samples there and nowhere else.&lt;/p&gt;
+&lt;p&gt;Between beats, &lt;code&gt;nextBeat&lt;/code&gt; resets the phase counter and sets up the next
+bit:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  nextBeat t &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    let&lt;/span&gt;&lt;span&gt; bi &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; beatIx t &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;+&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;     in&lt;/span&gt;&lt;span&gt; t&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;busPhase&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; beatIx&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; bi&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; sck&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; lanes&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; beatLanes t bi&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;busPhase&lt;/code&gt; back to zero, &lt;code&gt;beatIx&lt;/code&gt; up by one, &lt;code&gt;SCK&lt;/code&gt; back to idle-low, and
+— the important part — &lt;code&gt;lanes = beatLanes t bi&lt;/code&gt;, the drive for the new
+bit placed &lt;em&gt;now&lt;/em&gt;, at the start of the beat, at phase zero. That is the
+“drive @ φ0” the diagram marks: each bit’s value goes onto the lanes as
+its beat begins, and holds for the whole five cycles while &lt;code&gt;SCK&lt;/code&gt; pulses
+once beneath it.&lt;/p&gt;
+&lt;h2 id=&quot;what-each-beat-drives&quot;&gt;What each beat drives&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;beatLanes&lt;/code&gt; is the function that decides what the lanes carry, and it is a
+three-way case on the one thing that distinguishes a &lt;code&gt;PUT&lt;/code&gt; from a &lt;code&gt;GET&lt;/code&gt;
+from a turnaround — the &lt;code&gt;pending&lt;/code&gt; field:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;beatLanes&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; State&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Unsigned&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 4&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Lanes&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;beatLanes t bi &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; case&lt;/span&gt;&lt;span&gt; pending t &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;of&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  PendGet&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; hiZ&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  PendTar&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; tarBeat bi&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  _ &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span&gt; serializeX1 &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;shifter t&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; !!&lt;/span&gt;&lt;span&gt; bi&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Three directions, one field. A &lt;code&gt;GET&lt;/code&gt; has &lt;code&gt;pending = PendGet …&lt;/code&gt;, so its
+lanes are &lt;code&gt;hiZ&lt;/code&gt; — all drivers released, the bus handed to the other side
+to drive, because on a read &lt;em&gt;we&lt;/em&gt; are the one sampling. A turnaround has
+&lt;code&gt;PendTar&lt;/code&gt;, so its lanes are &lt;code&gt;tarBeat bi&lt;/code&gt; — the turnaround waveform for
+bit &lt;code&gt;bi&lt;/code&gt;, which drives the first clock and releases the rest, the
+handover choreography an eSPI bus does between command and response.
+Anything else — a &lt;code&gt;PUT&lt;/code&gt;, whose &lt;code&gt;pending&lt;/code&gt; is &lt;code&gt;PendNone&lt;/code&gt; — serialises:
+&lt;code&gt;serializeX1 (shifter t) !! bi&lt;/code&gt; takes the byte in the shifter and picks
+out bit &lt;code&gt;bi&lt;/code&gt;, MSB-first, to drive on &lt;code&gt;IO0&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;Two of those three — &lt;code&gt;serializeX1&lt;/code&gt; and &lt;code&gt;tarBeat&lt;/code&gt;, along with &lt;code&gt;hiZ&lt;/code&gt; and
+the &lt;code&gt;Lanes&lt;/code&gt; type itself — are the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;last shut box&lt;/a&gt; in this arc,
+&lt;code&gt;Tamal.Bus.Serdes&lt;/code&gt;, the serialiser. We are using it exactly as before:
+&lt;code&gt;serializeX1&lt;/code&gt; turns a byte into per-bit lane drives, &lt;code&gt;tarBeat&lt;/code&gt; turns a
+clock index into a turnaround drive, &lt;code&gt;hiZ&lt;/code&gt; means “release.” &lt;em&gt;How&lt;/em&gt; they do
+it is the final post. Here it is enough that &lt;code&gt;beatLanes&lt;/code&gt; reads the
+&lt;code&gt;pending&lt;/code&gt; field and asks the serialiser for the right drive, and the fact
+that all three eSPI directions fall out of one three-way case is the
+whole shape of the thing.&lt;/p&gt;
+&lt;h2 id=&quot;sampling-a-get&quot;&gt;Sampling a GET&lt;/h2&gt;
+&lt;p&gt;The other half of a transfer is reading, and it is the &lt;code&gt;sampleGet&lt;/code&gt; that
+&lt;code&gt;tick&lt;/code&gt; fires at phase three:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  sampleGet t &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; case&lt;/span&gt;&lt;span&gt; pending t &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;of&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;    PendGet&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; t&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;shifter&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; shifter t &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;`&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;shiftL&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;`&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; .|.&lt;/span&gt;&lt;span&gt; zeroExtend &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;pack &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;ioIn inp &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;!!&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Index&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 4&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    _ &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span&gt; t&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Only a &lt;code&gt;GET&lt;/code&gt; samples — the guard is &lt;code&gt;PendGet{}&lt;/code&gt;, and everything else
+passes the state through untouched. When it is a &lt;code&gt;GET&lt;/code&gt;, the move is the
+classic serial-in shift: &lt;code&gt;shifter &amp;lt;&amp;lt; 1&lt;/code&gt; makes room at the bottom, and
+&lt;code&gt;.|. … (ioIn inp !! 1)&lt;/code&gt; drops the sampled bit of &lt;code&gt;IO1&lt;/code&gt; — the eSPI
+response lane — into that new low bit. Do that once per beat, at each
+rising edge, and after eight beats the shifter holds the byte that came
+back, assembled MSB-first: the first bit sampled has been shifted left
+seven times to the top, the last sits at the bottom. It is the mirror of
+the &lt;code&gt;PUT&lt;/code&gt;’s serialise — one drives a byte out a bit at a time, the other
+shifts a byte in a bit at a time, both pinned to the same phase-three
+edge.&lt;/p&gt;
+&lt;h2 id=&quot;completing-the-transfer&quot;&gt;Completing the transfer&lt;/h2&gt;
+&lt;p&gt;When the last beat’s &lt;code&gt;busPhase&lt;/code&gt; reaches four with no beats left,
+&lt;code&gt;complete&lt;/code&gt; closes the op — and this is where a &lt;code&gt;GET&lt;/code&gt; finally pays out
+everything it recorded as &lt;code&gt;pending&lt;/code&gt; back in &lt;code&gt;Exec&lt;/code&gt;:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;complete&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; State&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;State&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BusOut&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Maybe&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Ring&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;complete s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; case&lt;/span&gt;&lt;span&gt; pending s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;of&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  PendGet&lt;/span&gt;&lt;span&gt; rd nbits crc &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    let&lt;/span&gt;&lt;span&gt; byte &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; shifter s&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        crc&amp;#39; &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; if&lt;/span&gt;&lt;span&gt; crc &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;then&lt;/span&gt;&lt;span&gt; crc8Update &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;rxCrc s&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; byte &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;else&lt;/span&gt;&lt;span&gt; rxCrc s&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        capW &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; captureWord &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;pack nbits&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; byte&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        (&lt;/span&gt;&lt;span&gt;ptr&amp;#39;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; ovf&amp;#39;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; mw&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; pushWord &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;ringPtr s&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;ovf s&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; capW&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        s&amp;#39; &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;          (&lt;/span&gt;&lt;span&gt;advance s&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;            {&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; sck&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; busPhase&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; beatIx&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; pending&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; PendNone&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;            ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; rxCrc&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; crc&amp;#39;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;            ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; regs&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; writeReg &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;regs s&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; rd &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;resize byte&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;            ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; ringPtr&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; ptr&amp;#39;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; ovf&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; ovf&amp;#39;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;            }&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;     in&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;s&amp;#39;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; busOut s&amp;#39;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; mw&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  _ &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    let&lt;/span&gt;&lt;span&gt; s&amp;#39; &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;advance s&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;sck&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; busPhase&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; beatIx&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; pending&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; PendNone&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;     in&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;s&amp;#39;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; busOut s&amp;#39;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The second arm is the easy one: a &lt;code&gt;PUT&lt;/code&gt; or &lt;code&gt;TAR&lt;/code&gt; has nothing to hand back,
+so completion just idles &lt;code&gt;SCK&lt;/code&gt;, clears the beat scratch, and &lt;code&gt;advance&lt;/code&gt;s to
+the next instruction. The first arm is where a &lt;code&gt;GET&lt;/code&gt;’s three recorded
+promises — the &lt;code&gt;rd&lt;/code&gt;, the &lt;code&gt;nbits&lt;/code&gt;, the &lt;code&gt;crc&lt;/code&gt; flag it wrote into &lt;code&gt;PendGet&lt;/code&gt;
+— come due at once.&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;byte = shifter s&lt;/code&gt; is the assembled result. Three things happen to it.
+It is written to the register: &lt;code&gt;writeReg (regs s) rd (resize byte)&lt;/code&gt;,
+the &lt;code&gt;rd&lt;/code&gt; the instruction named, widened to the register’s width. It is
+folded into the CRC residue — but &lt;em&gt;only if&lt;/em&gt; &lt;code&gt;crc&lt;/code&gt;: &lt;code&gt;if crc then crc8Update (rxCrc s) byte else rxCrc s&lt;/code&gt;. That flag is the difference
+between &lt;code&gt;GET_BYTE&lt;/code&gt;, which advances the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-crc/&quot;&gt;CRC&lt;/a&gt; so a program can check a
+packet’s residue, and &lt;code&gt;GET_BITS&lt;/code&gt;, which is CRC-neutral and leaves the
+residue alone. &lt;code&gt;crc8Update&lt;/code&gt; is the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-crc/&quot;&gt;CRC block&lt;/a&gt; we read whole, called
+here on the byte just sampled — the residue the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;last post&lt;/a&gt;’s
+&lt;code&gt;RDSR&lt;/code&gt; reads is &lt;em&gt;built&lt;/em&gt; right here, one received byte at a time. And it is
+recorded into the trace: &lt;code&gt;captureWord&lt;/code&gt; and &lt;code&gt;pushWord&lt;/code&gt;, which are the
+record half of the post.&lt;/p&gt;
+&lt;p&gt;Notice what completion never does: stall. The register write, the CRC
+fold, and the &lt;code&gt;advance&lt;/code&gt; happen unconditionally; only the trace push can
+fail, and when it does it drops the record and sets a flag rather than
+holding the bus. That is the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-introducing/&quot;&gt;introduction&lt;/a&gt;’s load-bearing rule —
+&lt;em&gt;never block the bus on trace backpressure&lt;/em&gt; — and it is enforced here,
+in the order of these bindings: the bus work is done before the trace is
+even attempted, so the trace can never delay it.&lt;/p&gt;
+&lt;h2 id=&quot;the-trace-ring&quot;&gt;The trace ring&lt;/h2&gt;
+&lt;p&gt;A &lt;code&gt;GET&lt;/code&gt;’s completion writes one record — a &lt;code&gt;CAPTURE&lt;/code&gt; — and the two
+functions that build and place it are the whole of how the engine writes
+to the trace. First the word:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;captureWord&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 4&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;captureWord nbits byte &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; bitCoerce &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0b00&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 2&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 18&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; nbits&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; byte&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;A &lt;code&gt;CAPTURE&lt;/code&gt; is thirty-two bits: a two-bit &lt;strong&gt;tag&lt;/strong&gt; &lt;code&gt;00&lt;/code&gt;, eighteen zero bits
+of padding, the four-bit &lt;code&gt;nbits&lt;/code&gt; (how many bits this capture holds), and
+the eight-bit &lt;code&gt;byte&lt;/code&gt;. &lt;code&gt;bitCoerce&lt;/code&gt; packs that tuple into a single word by
+laying its fields end to end — &lt;code&gt;2 + 18 + 4 + 8 = 32&lt;/code&gt;, exactly full. The
+tag in the top two bits is how the host, reading the ring back later,
+tells one kind of record from another.&lt;/p&gt;
+&lt;p&gt;Then placement, which is the ring’s one interesting decision:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;pushWord&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Unsigned&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; RW&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bool&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Unsigned&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; RW&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bool&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Maybe&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Ring&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;pushWord ptr ov w&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span&gt; ov &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;ptr&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; True&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span&gt; ptr &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;=&lt;/span&gt;&lt;span&gt; termAddr &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;ptr &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;+&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Just&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Ring&lt;/span&gt;&lt;span&gt; ptr w&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span&gt; otherwise &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;ptr&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; True&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Three cases, and they are the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-mem/&quot;&gt;trace ring’s&lt;/a&gt; whole contract. If
+the overflow flag &lt;code&gt;ov&lt;/code&gt; is already set, the ring has given up: drop the
+word, keep the flag high, write nothing. If there is room — &lt;code&gt;ptr &amp;lt;= termAddr - 1&lt;/code&gt;, at or below the last usable slot — write the word at
+&lt;code&gt;ptr&lt;/code&gt; and bump the pointer. Otherwise the ring is full: set overflow,
+drop the word, and — the important part — write &lt;em&gt;nothing&lt;/em&gt;, so the
+pointer never climbs onto &lt;code&gt;termAddr&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;That last slot is reserved on purpose. The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-mem/&quot;&gt;memories post&lt;/a&gt; noticed it
+from the other side: the ring is 4096 words, &lt;code&gt;termAddr = maxBound&lt;/code&gt;, and
+the top slot is kept empty so a terminator always has somewhere
+guaranteed to land. &lt;code&gt;pushWord&lt;/code&gt; is the code that keeps the promise —
+records fill from the bottom up to &lt;code&gt;termAddr - 1&lt;/code&gt; and stop, dropping
+themselves with a sticky flag rather than ever clobbering the slot the
+&lt;code&gt;HALT&lt;/code&gt; word is going to need. &lt;strong&gt;Drop on overflow, never wrap, never stall,
+never touch the terminator.&lt;/strong&gt; A compliance transcript wants an honest
+ordered prefix and a flag that says “there was more,” not a silently
+overwritten tail.&lt;/p&gt;
+&lt;h2 id=&quot;mark-a-two-word-record&quot;&gt;MARK: a two-word record&lt;/h2&gt;
+&lt;p&gt;Most records are one word and are written in the cycle that produces
+them. &lt;code&gt;MARK&lt;/code&gt; is the exception — it is two words, a label and a payload
+— and it is the reason the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;shape post&lt;/a&gt;’s lifecycle had a phase
+called &lt;code&gt;TraceEmit&lt;/code&gt; that did nothing but “write a MARK’s second word.” Back
+in &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;&lt;code&gt;Exec&lt;/code&gt;&lt;/a&gt;, a &lt;code&gt;MARK&lt;/code&gt; wrote its &lt;em&gt;first&lt;/em&gt; word (the label) and set
+&lt;code&gt;pending = PendMark payload&lt;/code&gt;; &lt;code&gt;TraceEmit&lt;/code&gt; is where the second word lands:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;stepTraceEmit&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; State&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BusIn&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;State&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BusOut&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Maybe&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Ring&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;stepTraceEmit s _ &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; case&lt;/span&gt;&lt;span&gt; pending s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;of&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  PendMark&lt;/span&gt;&lt;span&gt; payload &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    let&lt;/span&gt;&lt;span&gt; s&amp;#39; &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;advance s&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;ringPtr&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; ringPtr s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;+&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; pending&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; PendNone&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;     in&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;s&amp;#39;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; busOut s&amp;#39;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Just&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Ring&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;ringPtr s&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; payload&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  _ &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;advance s&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; busOut s&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;It spills the &lt;code&gt;payload&lt;/code&gt; the &lt;code&gt;Exec&lt;/code&gt; cycle stashed in &lt;code&gt;pending&lt;/code&gt; to the next
+ring slot, bumps the pointer, and advances. The label word it followed was
+built by a sibling of &lt;code&gt;captureWord&lt;/code&gt;:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;markLabelWord&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 14&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;markLabelWord lbl &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; bitCoerce &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0b10&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 2&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 16&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; lbl&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Tag &lt;code&gt;10&lt;/code&gt;, sixteen zeros, a fourteen-bit label. Then the payload word,
+whole and untagged, in the cycle after. Splitting the write across two
+cycles is why the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;&lt;code&gt;Exec&lt;/code&gt;&lt;/a&gt; side checked that &lt;em&gt;two&lt;/em&gt; slots were free
+before committing to either — a half-written &lt;code&gt;MARK&lt;/code&gt;, a label with no
+payload, would be a corrupt record, so the engine writes both or neither.
+The two cycles are one atomic act stretched over a phase boundary, and
+&lt;code&gt;TraceEmit&lt;/code&gt; is the second half of it.&lt;/p&gt;
+&lt;h2 id=&quot;wait-on-blocking-on-the-alert&quot;&gt;WAIT_ON: blocking on the alert&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;WaitAlert&lt;/code&gt; is the last of the three deferred phases, and the only one
+that can spend more than a fixed number of cycles. It is where a &lt;code&gt;WAIT_ON&lt;/code&gt;
+sits and watches the alert line:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;stepWaitAlert&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; State&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BusIn&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;State&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BusOut&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Maybe&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Ring&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;stepWaitAlert s inp &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; case&lt;/span&gt;&lt;span&gt; pending s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;of&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  PendWait&lt;/span&gt;&lt;span&gt; rd&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    |&lt;/span&gt;&lt;span&gt; asserted &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span&gt; done rd &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;1&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    |&lt;/span&gt;&lt;span&gt; waitTimer s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; done rd &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    |&lt;/span&gt;&lt;span&gt; otherwise &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;s&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;waitTimer&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; waitTimer s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; busOut s&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  _ &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;advance s&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; busOut s&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; where&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  b &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    if&lt;/span&gt;&lt;span&gt; cfgAlertSource &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;cfg s&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ==&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; AlertPin&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;      then&lt;/span&gt;&lt;span&gt; alertIn inp&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;      else&lt;/span&gt;&lt;span&gt; ioIn inp &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;!!&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Index&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 4&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  asserted &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; b &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; ALERT#/IO[1] are both active low (§6.5)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  done rd v &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    let&lt;/span&gt;&lt;span&gt; s&amp;#39; &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;advance s&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;regs&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; writeReg &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;regs s&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; rd v&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; pending&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; PendNone&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;     in&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;s&amp;#39;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; busOut s&amp;#39;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Each cycle in &lt;code&gt;WaitAlert&lt;/code&gt; asks one question in priority order. Is the
+alert &lt;strong&gt;asserted&lt;/strong&gt;? The alert is active-low — &lt;code&gt;b == 0&lt;/code&gt; — and &lt;code&gt;b&lt;/code&gt; is
+chosen the same way &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;&lt;code&gt;GET_ALERT&lt;/code&gt;&lt;/a&gt; chose it, the configured pin or
+in-band &lt;code&gt;IO[1]&lt;/code&gt;. If asserted, the wait is satisfied: &lt;code&gt;done rd 1&lt;/code&gt; writes a
+one into the result register and moves on. Otherwise, has the timer run
+out? &lt;code&gt;waitTimer == 0&lt;/code&gt; means it has, and &lt;code&gt;done rd 0&lt;/code&gt; falls through with a
+zero — timed out, no alert. Otherwise, decrement &lt;code&gt;waitTimer&lt;/code&gt; and wait
+another cycle. The register ends up holding a one if the alert came and a
+zero if the clock beat it, so the program can branch on which happened.
+&lt;code&gt;WAIT_ON&lt;/code&gt; armed the timer in &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;&lt;code&gt;Exec&lt;/code&gt;&lt;/a&gt;; &lt;code&gt;WaitAlert&lt;/code&gt; counts it down.&lt;/p&gt;
+&lt;h2 id=&quot;halt-and-the-record-a-run-ends-on&quot;&gt;HALT, and the record a run ends on&lt;/h2&gt;
+&lt;p&gt;Every run ends by writing one last record, and every trap in the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;last
+post&lt;/a&gt; — the decode error, the config trap, the reserved status
+register — ended by calling this:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;haltWith&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bool&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 3&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; State&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;State&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BusOut&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Maybe&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Ring&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;haltWith trap reason status s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  let&lt;/span&gt;&lt;span&gt; s&amp;#39; &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; s&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;phase&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Halted&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;      w &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; bitCoerce &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0b11&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 2&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 17&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; reason&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; trap&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;ovf s&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; status&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;   in&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;s&amp;#39;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; busOut s&amp;#39;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Just&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Ring&lt;/span&gt;&lt;span&gt; termAddr w&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;haltWith&lt;/code&gt; builds the &lt;strong&gt;terminator&lt;/strong&gt; and drops the machine into &lt;code&gt;Halted&lt;/code&gt;.
+The word is the third record shape: tag &lt;code&gt;11&lt;/code&gt;, seventeen zeros, a three-bit
+&lt;code&gt;reason&lt;/code&gt;, a one-bit &lt;code&gt;trap&lt;/code&gt; flag, the sticky &lt;code&gt;ovf&lt;/code&gt; bit, and an eight-bit
+&lt;code&gt;status&lt;/code&gt;. A plain &lt;code&gt;HALT&lt;/code&gt; calls it with &lt;code&gt;trap = False, reason = 0&lt;/code&gt; and the
+program’s own status byte; a trap calls it with &lt;code&gt;trap = True&lt;/code&gt;, one of the
+five reasons, and — crucially — on a state that has been run through
+&lt;code&gt;safePins&lt;/code&gt; first:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;safePins&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; State&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; State&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;safePins s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; s&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;csN&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; sck&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; rstN&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; lanes&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; hiZ&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;CS#&lt;/code&gt; high, &lt;code&gt;SCK&lt;/code&gt; low, &lt;code&gt;RESET#&lt;/code&gt; released, lanes &lt;code&gt;hiZ&lt;/code&gt; — the bus put back
+to idle before the machine stops, so a program that dies mid-frame leaves
+nothing driving. And the terminator goes to &lt;code&gt;Ring termAddr&lt;/code&gt; — the
+reserved top slot &lt;code&gt;pushWord&lt;/code&gt; guarded so carefully. That guarding pays off
+exactly here: no matter how many records overflowed, the slot the &lt;code&gt;HALT&lt;/code&gt;
+word needs is free, so a run &lt;em&gt;always&lt;/em&gt; ends with a readable terminator that
+carries its overflow bit along. A truncated trace still says, in its last
+word, that it was truncated.&lt;/p&gt;
+&lt;p&gt;That is the fourth and last record shape, and it completes a small
+taxonomy. Every word the ring ever holds is one of four:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;REVISION&lt;/code&gt;&lt;/strong&gt; at slot zero — &lt;code&gt;[major | minor | patch]&lt;/code&gt;, the version
+stamp the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;shape post&lt;/a&gt;’s &lt;code&gt;Preamble&lt;/code&gt; wrote on the first cycle.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;CAPTURE&lt;/code&gt;&lt;/strong&gt;, tag &lt;code&gt;00&lt;/code&gt; — one word, a sampled byte and its bit count.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;MARK&lt;/code&gt;&lt;/strong&gt;, tag &lt;code&gt;10&lt;/code&gt; — two words, a label then a payload.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;HALT&lt;/code&gt;&lt;/strong&gt;, tag &lt;code&gt;11&lt;/code&gt; — the terminator, with &lt;code&gt;trap&lt;/code&gt;, &lt;code&gt;reason&lt;/code&gt;, &lt;code&gt;ovf&lt;/code&gt;,
+and &lt;code&gt;status&lt;/code&gt;.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;And there is a quiet honesty in how they are built. Every one of these
+words is assembled inline with &lt;code&gt;bitCoerce&lt;/code&gt;, right here in the engine,
+because &lt;code&gt;step&lt;/code&gt; has to be synthesizable — it emits at most one word a
+cycle, and it cannot call the list-returning encoder that would be the
+natural way to describe a record. So the &lt;em&gt;layouts&lt;/em&gt; live twice: once here,
+as &lt;code&gt;bitCoerce&lt;/code&gt; tuples in &lt;code&gt;captureWord&lt;/code&gt;, &lt;code&gt;markLabelWord&lt;/code&gt;, and &lt;code&gt;haltWith&lt;/code&gt;,
+and once in &lt;code&gt;Tamal.Trace&lt;/code&gt;, as an &lt;code&gt;encodeRecord&lt;/code&gt; that the tests use as the
+reference model. Every comment in this file that says &lt;em&gt;mirrors
+Trace.encodeRecord&lt;/em&gt; is a promise that the two agree — the engine’s fast
+inline form and the trace module’s readable canonical form, checked
+against each other so the bytes the host reads back are the bytes the
+format says. &lt;code&gt;Tamal.Trace&lt;/code&gt; never runs on the fabric; it exists so the
+engine’s inline packing has something to be proven equal to.&lt;/p&gt;
+&lt;h2 id=&quot;what-we-read&quot;&gt;What we read&lt;/h2&gt;
+&lt;p&gt;The wire and the record, both. On the wire: &lt;code&gt;SCK&lt;/code&gt; is the fabric clock over
+five, low three, high two, and every edge that matters is the rising one
+at the two-to-three boundary. &lt;code&gt;stepBusBeat&lt;/code&gt; is a three-way guard that
+ticks a beat, starts the next, or completes; &lt;code&gt;beatLanes&lt;/code&gt; reads one
+&lt;code&gt;pending&lt;/code&gt; field and gets all three eSPI directions — release for a
+&lt;code&gt;GET&lt;/code&gt;, turn around for a &lt;code&gt;TAR&lt;/code&gt;, serialise for a &lt;code&gt;PUT&lt;/code&gt; — out of the
+still-shut serialiser; &lt;code&gt;sampleGet&lt;/code&gt; shifts the response in MSB-first on the
+rising edge; and &lt;code&gt;complete&lt;/code&gt; writes the register, folds the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-crc/&quot;&gt;CRC&lt;/a&gt;
+residue that &lt;code&gt;RDSR&lt;/code&gt; will read, and pushes the capture — bus work first,
+so the trace can never stall it.&lt;/p&gt;
+&lt;p&gt;And the record: a ring that fills from the bottom, drops on overflow with
+a sticky flag, and never touches the terminator slot the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-mem/&quot;&gt;memories&lt;/a&gt;
+kept empty; a &lt;code&gt;MARK&lt;/code&gt; whose two words are written across a phase boundary
+or not at all; a &lt;code&gt;WAIT_ON&lt;/code&gt; that counts down against an active-low alert;
+and a &lt;code&gt;HALT&lt;/code&gt; that ends every run with a status, a reason, and, on a trap,
+a bus set safe — four record shapes, built fast inline but pinned to
+&lt;code&gt;Tamal.Trace&lt;/code&gt;’s readable encoder so the two can be checked equal.&lt;/p&gt;
+&lt;p&gt;With that, the engine is whole &lt;em&gt;as a map.&lt;/em&gt; The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;shape&lt;/a&gt; drew it, the
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;dispatch&lt;/a&gt; chose within it, and this post ran its wire and wrote its
+trace. Across three posts we have used — and never opened — every leaf
+it composes: &lt;code&gt;decode&lt;/code&gt;, &lt;code&gt;dataResult&lt;/code&gt;, &lt;code&gt;branchTaken&lt;/code&gt;, &lt;code&gt;readReg&lt;/code&gt; and
+&lt;code&gt;writeReg&lt;/code&gt;, &lt;code&gt;decodeConfig&lt;/code&gt;, &lt;code&gt;serializeX1&lt;/code&gt;, and &lt;code&gt;tarBeat&lt;/code&gt;. That was the
+whole wager of reading &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;outside in&lt;/a&gt;: hold the pieces as one-line
+promises long enough to understand the machine that spends them, and only
+then open them.&lt;/p&gt;
+&lt;p&gt;Now we open them, in the order the engine first reaches for each. And the
+engine’s very first act on any word — before compute, before the bus,
+before anything — was &lt;code&gt;decode&lt;/code&gt;. So that is where we go next: down into
+&lt;code&gt;Tamal.Isa&lt;/code&gt;, the instruction set itself, the box every road out of &lt;code&gt;Exec&lt;/code&gt;
+began by opening.&lt;/p&gt;
+&lt;section class=&quot;footnotes&quot;&gt;
+&lt;ol class=&quot;footnotes-list&quot;&gt;
+&lt;li id=&quot;fn-sckof&quot;&gt;
+&lt;p&gt;The point-free spelling &lt;code&gt;boolToBit &amp;lt;$&amp;gt; (&amp;gt;= 3)&lt;/code&gt; reads oddly the
+first time. &lt;code&gt;(&amp;gt;= 3)&lt;/code&gt; is a function &lt;code&gt;Index 5 -&amp;gt; Bool&lt;/code&gt;; &lt;code&gt;&amp;lt;$&amp;gt;&lt;/code&gt; over the
+function “functor” is ordinary composition, so &lt;code&gt;boolToBit &amp;lt;$&amp;gt; (&amp;gt;= 3)&lt;/code&gt; is
+&lt;code&gt;\p -&amp;gt; boolToBit (p &amp;gt;= 3)&lt;/code&gt; — take a phase, test whether it is three or
+four, turn the answer into a &lt;code&gt;Bit&lt;/code&gt;. It is the same &lt;code&gt;fmap&lt;/code&gt;-is-composition
+trick the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-haskell-primer/&quot;&gt;primer&lt;/a&gt; noted, used to write a one-liner that would otherwise
+need a lambda. Clash lowers it to a comparator and nothing else. &lt;a href=&quot;#fr-sckof-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/section&gt;
+</content>
+  </entry>
+  
+  <entry xml:lang="en">
+    <title>Tamal: an eSPI exerciser</title>
+    <published>2026-07-13T09:00:00+00:00</published>
+    <updated>2026-07-13T09:00:00+00:00</updated>
+    <author><name>Felipe Balbi</name></author>
+    <link rel="alternate" href="https://balbi.sh/posts/tamal-introducing/" type="text/html"/>
+    <id>https://balbi.sh/posts/tamal-introducing/</id>
+    <summary type="html">&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https://github.com/felipebalbi/mole&quot;&gt;mole&lt;/a&gt; is an FPGA bit-cycle engine for exercising I²C and I³C — you
+write a little program, it drives the bus edge by edge, legal or
+illegal, and hands you back a structured trace of what happened.
+&lt;em&gt;Tamal&lt;/em&gt; is that same idea aimed at a different, meaner bus: Intel’s
+&lt;a rel=&quot;external&quot; href=&quot;https://www.intel.com/content/www/us/en/support/articles/000020952/software/chipset-software.html&quot;&gt;Enhanced Serial Peripheral Interface&lt;/a&gt; (eSPI, base spec
+rev 1.0).&lt;/p&gt;</summary>
+    
+    <content type="html">&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https://github.com/felipebalbi/mole&quot;&gt;mole&lt;/a&gt; is an FPGA bit-cycle engine for exercising I²C and I³C — you
+write a little program, it drives the bus edge by edge, legal or
+illegal, and hands you back a structured trace of what happened.
+&lt;em&gt;Tamal&lt;/em&gt; is that same idea aimed at a different, meaner bus: Intel’s
+&lt;a rel=&quot;external&quot; href=&quot;https://www.intel.com/content/www/us/en/support/articles/000020952/software/chipset-software.html&quot;&gt;Enhanced Serial Peripheral Interface&lt;/a&gt; (eSPI, base spec
+rev 1.0).&lt;/p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;/span&gt;
+&lt;p&gt;The one-line pitch, which is the vision more than the current state:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;A programmable eSPI controller/target that turns compliance testing
+into a reproducible, fully-observable, byte-for-byte deterministic
+exercise.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;Read that as the destination, not the odometer. Tamal is
+&lt;strong&gt;experimental&lt;/strong&gt; — I’m keeping that adjective on it until it has
+withstood considerable real-world load, at which point I’ll drop it.
+Today it plays eSPI &lt;strong&gt;controller&lt;/strong&gt; only (target role is designed but
+not built), at a &lt;strong&gt;single 20 MHz clock&lt;/strong&gt; (all eSPI speeds are on the
+roadmap), and everything below the honesty line near the end of this
+post runs in &lt;em&gt;simulation&lt;/em&gt;, not on silicon.&lt;/p&gt;
+&lt;p&gt;This post is what Tamal is, why it’s shaped the way it is, why the
+gateware is written in Haskell of all things, what I’ve learned
+building it — and, honestly, how early it still is. The repo is
+&lt;a rel=&quot;external&quot; href=&quot;https://github.com/felipebalbi/tamal&quot;&gt;github.com/felipebalbi/tamal&lt;/a&gt;, public and split-licensed. Read
+on before you clone it expecting a finished product; it isn’t one yet.&lt;/p&gt;
+&lt;h2 id=&quot;the-problem&quot;&gt;The problem&lt;/h2&gt;
+&lt;p&gt;eSPI is the bus that replaced LPC on modern platforms: a short,
+fast-ish serial link between a chipset/SoC and an embedded controller,
+flash device, or BMC. It’s more capable than it looks. A single eSPI
+link multiplexes four logical channels — &lt;strong&gt;Peripheral&lt;/strong&gt;, &lt;strong&gt;Virtual
+Wire&lt;/strong&gt;, &lt;strong&gt;OOB&lt;/strong&gt; (tunneled SMBus), and &lt;strong&gt;Runtime Flash Access&lt;/strong&gt; — over
+one set of pins, with command/response framing, turnaround phases,
+CRC, alerts, and a status register that gates who’s allowed to talk.&lt;/p&gt;
+&lt;p&gt;That density is exactly what makes it hard to test. “Does my eSPI
+target behave correctly?” is not one question. It’s: does it honour
+turnaround timing, does it respect CRC when enabled, does it track the
+status register, does it tolerate a WAIT STATE, does it drive alerts
+correctly, does it decode each channel’s packets, and — the part
+almost nothing can produce on demand — &lt;em&gt;does it do the right thing
+when the other side does the wrong thing?&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;Producing a legal transaction is the easy 20%. Producing a specific
+&lt;em&gt;illegal&lt;/em&gt; one — a deliberately short turnaround, a corrupted CRC, a
+truncated packet, a cycle on a channel that isn’t enabled yet — at a
+precise moment, reproducibly, over and over, is the 80% that a real
+device or a canned test fixture can’t give you. That’s the gap Tamal
+is built to fill: an exerciser that will drive &lt;em&gt;any&lt;/em&gt; cycle, correct or
+malformed, with deterministic timing, and capture everything the bus
+did in response.&lt;/p&gt;
+&lt;h2 id=&quot;the-name&quot;&gt;The name&lt;/h2&gt;
+&lt;p&gt;eSPI wraps four logical channels into one serial packet stream. A
+&lt;em&gt;tamal&lt;/em&gt; is a wrapped, layered dish — masa and filling folded inside a
+husk. The mapping wrote itself: eSPI wraps Peripheral, Virtual Wire,
+OOB, and Runtime Flash Access into one stream of bytes on the wire;
+Tamal is the thing that unwraps every layer and checks it against the
+spec. Naming projects is one of the few unambiguous joys of this line
+of work, and the &lt;em&gt;mole&lt;/em&gt; → &lt;em&gt;tamal&lt;/em&gt; lineage (both wrapped, both
+Mesoamerican, both about what’s hidden inside) was too good to pass
+up.&lt;/p&gt;
+&lt;h2 id=&quot;the-key-insight&quot;&gt;The key insight&lt;/h2&gt;
+&lt;p&gt;The temptation with an FPGA bus tool is to think of it as a throughput
+problem — get the bytes on and off the wire fast enough. eSPI defeats
+that framing immediately, and in a useful way:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;This is &lt;strong&gt;not&lt;/strong&gt; a throughput problem. It is an &lt;strong&gt;external timing
+alignment&lt;/strong&gt; problem.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;eSPI tops out at 66 MHz. On an Artix-7 that’s &lt;em&gt;slow&lt;/em&gt;; the fabric runs
+at 100 MHz and never breaks a sweat pushing bits. The danger isn’t
+speed. It’s that in &lt;strong&gt;target&lt;/strong&gt; role — which Tamal is designed for but
+does not yet play — you are not the clock master: the eSPI clock is
+driven by the device under test, and you must respond &lt;em&gt;relative to
+it&lt;/em&gt;. The parts that will actually hurt you are turnaround/tri-state
+timing, setup and hold against an external clock, and getting IO
+direction control exactly right on a shared, bidirectional data bus.
+None of that is about going fast. All of it is about being aligned.&lt;/p&gt;
+&lt;p&gt;Internalizing that reframed the whole design. The engine doesn’t need
+to be clever or quick. It needs to be &lt;em&gt;precise&lt;/em&gt; about when it drives,
+when it samples, and when it lets go of the pins.&lt;/p&gt;
+&lt;h2 id=&quot;the-shape-three-planes&quot;&gt;The shape: three planes&lt;/h2&gt;
+&lt;p&gt;Tamal has a clean split into three planes, and almost every design
+decision falls out of which plane it belongs to:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;Control plane&lt;/strong&gt; (host → FPGA): load a compiled test program,
+select role (controller today; target is designed but not yet built),
+IO mode (single/dual/quad), CRC on or off, and triggers. Error
+injection isn’t a knob here — it lives &lt;em&gt;in the program&lt;/em&gt;, where the
+test author writes the malformed cycle directly (more on that below).&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Bus plane&lt;/strong&gt; (FPGA ↔ DUT): the eSPI link itself — &lt;code&gt;CS#&lt;/code&gt;, &lt;code&gt;CLK&lt;/code&gt;,
+&lt;code&gt;IO[3:0]&lt;/code&gt;, &lt;code&gt;ALERT#&lt;/code&gt;, &lt;code&gt;RESET#&lt;/code&gt; — driven or sampled against the device
+under test.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Trace / result plane&lt;/strong&gt; (FPGA → host): observed transactions,
+channel decode, captured cycles, and verdicts.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;There’s one load-bearing rule that spans the planes: &lt;strong&gt;never block the
+bus on trace backpressure.&lt;/strong&gt; If the host can’t keep up draining the
+trace, the bus plane does not stall waiting for it — events get
+dropped with an overflow marker instead. A test rig that perturbs the
+timing of the thing it’s measuring is worse than useless, so the trace
+plane is always allowed to lose data before the bus plane is allowed
+to hesitate.&lt;/p&gt;
+&lt;p&gt;On the FPGA, that shape is deliberately boring:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;plain&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt; host ──UART──► loader ──► instr BRAM ──► engine (mealy step) ──► eSPI pads&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;      ◄─UART──── drain  ◄──── ring BRAM ◄──────┘   (IO[3:0], CS#, SCK,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;                                                     RESET#, ALERT#)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The host ships a compiled program over UART; the loader writes it into
+an instruction block RAM; the engine executes it as a Mealy machine,
+driving and sampling the eSPI pads; every transaction lands in a trace
+ring (another block RAM); on &lt;code&gt;HALT&lt;/code&gt; the drainer sweeps the ring back
+out over the same UART.&lt;/p&gt;
+&lt;p&gt;The whole thing is &lt;strong&gt;one clock domain&lt;/strong&gt; — &lt;code&gt;Dom100&lt;/code&gt;, 100 MHz — with no
+clock-domain crossings and no FIFOs. The trace ring BRAM &lt;em&gt;is&lt;/em&gt; the
+buffer, and UART is roughly 500× slower than the fabric, so there’s
+nothing to gain from a FIFO in front of it. (On the Cyclone V board a
+50 MHz oscillator is multiplied up to 100 MHz by an Altera PLL, but
+it’s still a single design domain.) Fewer moving parts, less to get
+wrong, and — this matters later — a design that simulates end to end
+without any special-casing.&lt;/p&gt;
+&lt;h2 id=&quot;the-repo&quot;&gt;The repo&lt;/h2&gt;
+&lt;p&gt;Two toolchains, cleanly separated:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;plain&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;crates/                 Rust host tooling (Cargo workspace)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  tamal-abi/            bytecode/ISA encoding + COBS/CRC-8 wire format + typed trace decode&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  tamal-asm/            assembler: RISC-V-flavored source -&amp;gt; tamal bytecode&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  tamal-asm-cli/        `tamal-asm` binary (clap front-end)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  tamal-loader/         host-side loader: load -&amp;gt; trigger -&amp;gt; drain over a transport&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  tamal-loader-cli/     `tamal-loader` binary&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;hdl/                    Clash gateware + Vivado/Quartus build (self-contained)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;docs/                   design specs + implementation plans&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;tamal-abi&lt;/code&gt; is the crate that matters most: it’s the ABI, the single
+source of truth for the bytecode encoding, the COBS/CRC-8 wire format,
+and the typed trace decode. Everything else — assembler, loader,
+gateware — agrees with &lt;code&gt;tamal-abi&lt;/code&gt; byte for byte or it’s a bug. It is
+deliberately &lt;strong&gt;transport-agnostic&lt;/strong&gt;: v1 speaks UART because that’s
+what the Arty’s FT2232 gives you (USB-UART plus JTAG, not a USB3
+SuperSpeed FIFO), but the wire format doesn’t know or care, so a
+future EZ-USB FX3 (GPIF II slave-FIFO) shield can be bolted on as
+another backend without touching the ABI.&lt;/p&gt;
+&lt;p&gt;The licensing follows the &lt;code&gt;crates/&lt;/code&gt; ↔ &lt;code&gt;hdl/&lt;/code&gt; seam. The Rust host
+tooling is &lt;strong&gt;MIT&lt;/strong&gt;. The Clash gateware is &lt;strong&gt;CERN-OHL-W-2.0&lt;/strong&gt; (CERN
+Open Hardware Licence v2, Weakly Reciprocal), because an open-hardware
+licence fits a hardware description better than a software licence
+does. Every &lt;code&gt;.hs&lt;/code&gt; file under &lt;code&gt;hdl/&lt;/code&gt; carries a REUSE-style SPDX header
+to make that boundary machine-checkable.&lt;/p&gt;
+&lt;h2 id=&quot;a-risc-v-flavored-isa-and-a-very-dumb-engine&quot;&gt;A RISC-V-flavored ISA, and a very dumb engine&lt;/h2&gt;
+&lt;p&gt;Tamal’s on-FPGA engine is programmable, and the instruction set is
+&lt;strong&gt;inspired by — but not compatible with — the RISC-V 32-bit (RV32I)
+ISA.&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;From RV32I it borrows the ergonomics: 32-bit fixed-width instructions;
+a 32-name register space &lt;code&gt;x0&lt;/code&gt;..&lt;code&gt;x31&lt;/code&gt; with &lt;code&gt;x0&lt;/code&gt; hardwired to zero (v1
+implements 16 physical registers, with &lt;code&gt;x16&lt;/code&gt;..&lt;code&gt;x31&lt;/code&gt; aliasing their
+low-4 twin); the R/I/S/B/U/J instruction formats; and the ABI register
+names (&lt;code&gt;zero&lt;/code&gt;, &lt;code&gt;ra&lt;/code&gt;, &lt;code&gt;sp&lt;/code&gt;, &lt;code&gt;t0&lt;/code&gt;, &lt;code&gt;s0&lt;/code&gt;, &lt;code&gt;a0&lt;/code&gt;, …). The assembler follows
+the &lt;a rel=&quot;external&quot; href=&quot;https://github.com/riscv-non-isa/riscv-asm-manual&quot;&gt;riscv-asm-manual&lt;/a&gt; conventions for directives, labels,
+and pseudo-instructions — but &lt;em&gt;follows&lt;/em&gt; is doing real work in that
+sentence. What’s implemented today is the subset the examples exercise
+(&lt;code&gt;.text&lt;/code&gt;, &lt;code&gt;.globl&lt;/code&gt;, &lt;code&gt;.equ&lt;/code&gt;, the &lt;code&gt;li&lt;/code&gt; pseudo-instruction, symbolic
+labels, the branch mnemonics). The rest of the RISC-V surface I’d like
+to have — &lt;code&gt;.align&lt;/code&gt;, &lt;code&gt;.macro&lt;/code&gt;, numeric local labels (&lt;code&gt;1f&lt;/code&gt;/&lt;code&gt;1b&lt;/code&gt;),
+&lt;code&gt;mv&lt;/code&gt;/&lt;code&gt;j&lt;/code&gt;/&lt;code&gt;call&lt;/code&gt;/&lt;code&gt;ret&lt;/code&gt;/&lt;code&gt;beqz&lt;/code&gt; and friends — is intended but not written
+yet. If you’ve used RISC-V assembly the current subset will read like
+home; just don’t assume the whole manual works.&lt;/p&gt;
+&lt;p&gt;Where it diverges is the opcode space: Tamal repurposes and extends it
+with bus-domain instructions for eSPI work — driving and sampling
+cycles, per-channel operations, deterministic timing, author-written
+error injection, and capture/verdict. The upshot is a hard rule: Tamal
+bytecode is &lt;strong&gt;not&lt;/strong&gt; interchangeable with a stock RISC-V toolchain, and
+the project never claims otherwise. It’s RISC-V-&lt;em&gt;flavored&lt;/em&gt;, not
+RISC-V.&lt;/p&gt;
+&lt;p&gt;The design decision I’m happiest with is how little the engine knows.
+&lt;strong&gt;The engine is a nearly-dumb SPI shifter with almost no eSPI
+knowledge.&lt;/strong&gt; There is no “PUT_IORD” opcode and no notion of a channel.
+The one concession is a CRC-8 unit that runs over &lt;em&gt;incoming&lt;/em&gt; bytes, so
+a program can read the residue and decide whether a packet from the
+link partner was valid — but even it has no idea what a “packet” &lt;em&gt;is&lt;/em&gt;,
+and every &lt;em&gt;outbound&lt;/em&gt; CRC byte is still computed by the host. The host
+builds every byte that goes on the wire — command, header, payload, TX
+CRC — and the engine just shifts them out and shifts responses back.
+All the eSPI semantics live in the program, in software, where they’re
+easy to read, easy to change, and easy to get deliberately wrong.&lt;/p&gt;
+&lt;h2 id=&quot;the-shape-of-a-program&quot;&gt;The shape of a program&lt;/h2&gt;
+&lt;p&gt;The smallest interesting program reads one byte from an eSPI
+Peripheral-channel I/O port. Here’s the real &lt;code&gt;peripheral_io_read.s&lt;/code&gt;
+from the repo, reading I/O port &lt;code&gt;0x64&lt;/code&gt; — the classic 8042
+keyboard-controller status port:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;asm&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    .&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;equ&lt;/span&gt;&lt;span&gt;  PUT_IORD1,      &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0x44&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;    # PUT_IORD_SHORT, length = 1 byte&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    .&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;equ&lt;/span&gt;&lt;span&gt;  RSP_WAIT_STATE, &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0x0F&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;    # eSPI WAIT_STATE response code&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    .&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;equ&lt;/span&gt;&lt;span&gt;  VERDICT_OK,     &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0x00&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;    # host verdict codes (written by halt)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    .&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;equ&lt;/span&gt;&lt;span&gt;  VERDICT_CRC,    &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0x11&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    .text&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    .globl _start&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;_start&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;:&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    set_config CONTROLLER, X1, SCK20, ALERT_PIN  &lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; # controller, x1 IO, 20 MHz&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    cs_assert                      &lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; # begin frame: CS# low&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;    # --- command phase: host-built eSPI packet ---&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    put_byte PUT_IORD1             &lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; # CMD:  PUT_IORD_SHORT (1 byte)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    put_byte &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0x00&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;                   # addr [15:8]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    put_byte &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0x64&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;                   # addr [7:0]  -&amp;gt; I/O port 0x64&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    put_byte &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0x16&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;                   # TX CRC-8 over the 3 bytes above (poly 0x07)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    tar &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;                           # legal turnaround; tar 3 / tar 1 = deliberate violation&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;    # --- response phase: WAIT_STATE poll + RX CRC residue verdict ---&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;poll&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;:&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    crc_reset                      &lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; # drop any prior WAIT_STATE byte from the residue&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    get_byte t0                    &lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; # response code (auto-updates RX CRC-8)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    li   t1, RSP_WAIT_STATE&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    beq  t0, t1, poll              &lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; # WAIT_STATE -&amp;gt; keep polling&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    get_byte t0                    &lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; # read data byte (port 0x64 value)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    get_byte t0                    &lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; # status [7:0]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    get_byte t0                    &lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; # status [15:8]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    get_byte t0                    &lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; # trailing CRC byte -&amp;gt; drives residue to 0&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    rdsr t2, CRC                   &lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; # RX CRC-8 residue (0 == good packet)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    cs_deassert                    &lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; # end frame: CS# high&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    bnez t2, bad_crc&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    halt VERDICT_OK&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;bad_crc&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;:&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    halt VERDICT_CRC&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Read it top to bottom and the whole model is visible. &lt;code&gt;set_config&lt;/code&gt;
+picks controller role, single (x1) IO, a 20 MHz clock (&lt;code&gt;SCK20&lt;/code&gt; — the
+only rate wired up today, though the ISA reserves the field for the
+faster eSPI speeds still to come), and pin-based alerts. &lt;code&gt;cs_assert&lt;/code&gt;
+pulls &lt;code&gt;CS#&lt;/code&gt; low. Then a run of &lt;code&gt;put_byte&lt;/code&gt;s spells out the eSPI command
+packet a byte at a time — opcode, address, and a TX CRC-8 the &lt;em&gt;program&lt;/em&gt;
+computed, not the engine. &lt;code&gt;tar 2&lt;/code&gt; performs a legal turnaround;
+swapping in &lt;code&gt;tar 3&lt;/code&gt; or &lt;code&gt;tar 1&lt;/code&gt; is how you inject a deliberate
+turnaround violation — that’s the whole error-injection story, a test
+author spelling out the malformed cycle by hand, not a probabilistic
+“corrupt 10% of packets” knob. The response phase polls for
+WAIT_STATE, reads the data and status bytes, and checks that the RX
+CRC residue drove to zero — the eSPI-idiomatic way to validate a
+packet. Finally &lt;code&gt;halt&lt;/code&gt; writes a verdict code the host reads back from
+the trace.&lt;/p&gt;
+&lt;p&gt;The load-bearing observation: &lt;strong&gt;only the command-phase &lt;code&gt;put_byte&lt;/code&gt;s are
+channel-specific.&lt;/strong&gt; The CS framing, the WAIT_STATE poll, and the CRC
+residue check are byte-for-byte identical across the Peripheral I/O
+read, the &lt;a rel=&quot;external&quot; href=&quot;https://github.com/felipebalbi/tamal/blob/main/examples/virtual_wire_pltrst.s&quot;&gt;Virtual Wire&lt;/a&gt; example that deasserts &lt;code&gt;PLTRST#&lt;/code&gt;,
+and every other per-channel program in &lt;code&gt;examples/&lt;/code&gt;. The channel is
+just a different run of bytes in the middle. That’s the payoff of a
+dumb engine: the interesting part of each test is a handful of lines,
+and everything around it is boilerplate you can read once and stop
+thinking about.&lt;/p&gt;
+&lt;h2 id=&quot;why-clash-why-haskell&quot;&gt;Why Clash, why Haskell&lt;/h2&gt;
+&lt;p&gt;The gateware is written in &lt;a rel=&quot;external&quot; href=&quot;https://clash-lang.org&quot;&gt;Clash&lt;/a&gt; — a Haskell-to-RTL compiler — and
+that’s the choice people ask about first. It looks exotic next to
+Verilog or even the SpinalHDL that drives mole. The reasons are
+entirely practical, and they all come back to one thing: &lt;strong&gt;iteration
+speed&lt;/strong&gt; — how fast the edit-test loop closes. (Not to be confused with
+eSPI’s turnaround; this is developer seconds, not bus cycles.)&lt;/p&gt;
+&lt;p&gt;The Tamal test suite runs in &lt;strong&gt;under a second.&lt;/strong&gt; Not the synthesis —
+the &lt;em&gt;tests&lt;/em&gt;. Every pure leaf of the design (&lt;code&gt;stepM&lt;/code&gt;, &lt;code&gt;ringWrite&lt;/code&gt;,
+&lt;code&gt;rigState&lt;/code&gt;, &lt;code&gt;ledPattern&lt;/code&gt;) is a plain Haskell function, and I test them
+the way I’d test any Haskell function: &lt;a rel=&quot;external&quot; href=&quot;https://hedgehog.qa&quot;&gt;hedgehog&lt;/a&gt; property tests and
+HUnit unit tests, each pure leaf and the engine keystone checked
+against a reference model. No simulator to spin up, no waveform to
+eyeball, no four-minute Vivado round-trip to find out I got a mux
+backwards. &lt;code&gt;cabal test&lt;/code&gt;, a second later I know.&lt;/p&gt;
+&lt;p&gt;It gets better at the top. Because the whole integration is wired over
+plain Clash &lt;code&gt;Signal&lt;/code&gt;s — no &lt;code&gt;BiSignal&lt;/code&gt; in the core, the tri-state only
+appears in the thin board shell — the &lt;em&gt;entire system&lt;/em&gt; simulates in
+Haskell. There’s a whole-system cosim (&lt;code&gt;Test.Top&lt;/code&gt;) that serializes a
+real &lt;code&gt;LOAD_PROGRAM&lt;/code&gt; + &lt;code&gt;TRIGGER&lt;/code&gt; onto a modeled UART line, runs the
+actual load → run → drain path, decodes the UART output, and asserts
+the drained trace (revision header, records, &lt;code&gt;HALT&lt;/code&gt; terminator) &lt;em&gt;and&lt;/em&gt;
+the eSPI pin activity — UART → loader → engine → eSPI → ring → drain,
+end to end, in one test, in the same language as the design, in
+milliseconds. I can refactor the engine and know within a second
+whether the full pipeline still behaves. That feedback loop is the
+single biggest force multiplier on the project.&lt;/p&gt;
+&lt;p&gt;The type system pulls its weight too. eSPI is a bidirectional,
+tri-state, direction-controlled bus, which is precisely where hardware
+bugs love to hide. Having the compiler track widths, states, and pad
+directions catches a whole class of “which way is this pin pointing
+this cycle” mistakes before simulation, let alone before silicon.&lt;/p&gt;
+&lt;p&gt;And the discipline of a single clock domain with no CDC and no FIFOs
+means the design is small enough to hold in your head — which is what
+makes the sub-second property testing tractable in the first place.
+Fast tests and a simple design reinforce each other.&lt;/p&gt;
+&lt;p&gt;The trade is real and worth stating: Clash is a smaller ecosystem, the
+error messages can be a wall of type, and the toolchain (GHC 9.10.3 +
+&lt;code&gt;cabal&lt;/code&gt; + Vivado/Quartus) is more to stand up than &lt;code&gt;verilator&lt;/code&gt;. For
+this project, on this bus, that sub-second feedback loop won the
+argument easily.&lt;/p&gt;
+&lt;h2 id=&quot;lessons-learned&quot;&gt;Lessons learned&lt;/h2&gt;
+&lt;p&gt;A few things I didn’t know going in, in case they save you some time:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;The bus is not the hard part; the pins are.&lt;/strong&gt; I spent the early
+design energy worrying about eSPI’s channel matrix and almost none
+on tri-state timing. That was backwards. Reframing the whole thing
+as an &lt;em&gt;external timing alignment&lt;/em&gt; problem — especially for the
+not-yet-built target role — is what made the architecture click.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;A dumb engine is a feature.&lt;/strong&gt; Every time I was tempted to teach the
+engine more eSPI (“just let it build the TX CRC too”, “just add a
+channel register”), pushing it back up into the host program made the
+design smaller &lt;em&gt;and&lt;/em&gt; made illegal-cycle injection trivial. Malformed
+packets are free when the host builds every byte. (The one place I
+gave in — an RX-side CRC-8 so a program can check an inbound residue —
+earns its keep precisely because it stops at &lt;em&gt;checking&lt;/em&gt; and never
+learns what a packet is.)&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Clash’s tri-state lowering has sharp edges.&lt;/strong&gt; Four scalar &lt;code&gt;inout&lt;/code&gt;
+lanes (&lt;code&gt;io0&lt;/code&gt;..&lt;code&gt;io3&lt;/code&gt;) exist instead of a tidy &lt;code&gt;Vec&lt;/code&gt; because Clash
+fuses a per-lane &lt;code&gt;BiSignalIn&lt;/code&gt;/&lt;code&gt;BiSignalOut&lt;/code&gt; pair into one &lt;code&gt;inout&lt;/code&gt;
+port — but a &lt;code&gt;Vec&lt;/code&gt; of BiSignals does &lt;em&gt;not&lt;/em&gt;; it silently lowers to a
+plain input. That one cost me an afternoon.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;The no-reset power-up design is deliberate.&lt;/strong&gt; The top ties reset
+permanently de-asserted and relies on power-up &lt;code&gt;init&lt;/code&gt;, so Clash emits
+no reset port at all — matching the sibling Clash examples. Fighting
+that to add a “proper” reset is a trap.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Some ghc-options are load-bearing.&lt;/strong&gt; The &lt;code&gt;common-options&lt;/code&gt; in
+&lt;code&gt;tamal.cabal&lt;/code&gt; aren’t optional style — Clash needs them. Trimming them
+to tidy up breaks codegen in non-obvious ways.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id=&quot;what-s-running-today-and-what-isn-t&quot;&gt;What’s running today — and what isn’t&lt;/h2&gt;
+&lt;p&gt;Now the honest part, because this is the whole reason for the
+&lt;strong&gt;experimental&lt;/strong&gt; label I put on it up top.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Gateware: v1 complete, in &lt;em&gt;simulation&lt;/em&gt;.&lt;/strong&gt; The full pipeline exists
+and is tested in Clash — the RISC-V-flavored cycle engine, the
+instruction and trace-ring block RAMs, the COBS/CRC-8 wire format, the
+UART load/drain loader, the tri-state eSPI pad boundary, and the
+&lt;code&gt;topEntity&lt;/code&gt; that wires it all to the Arty A7 pins. The whole-system
+cosim streams a program in and checks the drained trace end to end.
+&lt;code&gt;cabal run clash -- Tamal.Board.ArtyA7 --verilog&lt;/code&gt; emits a
+synthesizable top, and &lt;code&gt;cd hdl &amp;amp;&amp;amp; make&lt;/code&gt; builds a bitstream. But &lt;strong&gt;v1
+is controller role, single (x1) IO, one 20 MHz clock rate, UART
+transport, and it has not yet been brought up on real hardware.&lt;/strong&gt;
+Simulation-complete is a real milestone; it is not the same as “works
+on the bench.”&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Host tooling: v1 implemented and tested.&lt;/strong&gt; The Rust ABI, assembler,
+and loader are built and mirror the gateware’s wire and bytecode
+contract byte for byte. The live serial path is exercised on hardware
+rather than in CI, and the pass/fail &lt;em&gt;conformance verdict engine&lt;/em&gt; — the
+thing that would let Tamal actually render a compliance judgment —
+does not exist yet. Today a program ends in a &lt;code&gt;HALT&lt;/code&gt;/&lt;code&gt;TRAP&lt;/code&gt; with a
+host-defined verdict code; a real conformance catalog is a later
+phase.&lt;/p&gt;
+&lt;p&gt;So, plainly: &lt;strong&gt;Tamal is early.&lt;/strong&gt; What it most needs next is validation
+against &lt;em&gt;real&lt;/em&gt; eSPI scenarios — on real silicon, against real targets,
+with a logic analyzer confirming the timing the simulator promises.
+Until on-hardware bring-up lands, every claim in this post about what
+the bus does is a claim the &lt;em&gt;model&lt;/em&gt; makes, and models are exactly the
+thing an exerciser exists to distrust.&lt;/p&gt;
+&lt;p&gt;The roadmap is four phases:&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;Link + transaction bring-up.&lt;/strong&gt; SPI-style framing,
+command/response/turnaround, Get Status / Get Configuration, CRC;
+controller role over single IO. &lt;em&gt;(This is where v1 sits — done in
+sim, next on hardware.)&lt;/em&gt;&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;The four channels.&lt;/strong&gt; Peripheral, Virtual Wire, OOB (tunneled
+SMBus), Runtime Flash Access; the ISA, assembler, and loader path;
+result streaming.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Target role, alerts, dual/quad IO, faster clocks.&lt;/strong&gt; The
+external-timing-alignment problem in full: responding to a clock you
+don’t own, and driving the higher eSPI speeds beyond today’s 20 MHz.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Determinism and verdicts.&lt;/strong&gt; The error-injection model stays what
+it is today — the test author writes the malformed cycle by hand, so
+a program is byte-for-byte reproducible by construction — joined by
+the verdict engine and a conformance catalog that turn a captured
+trace into an actual pass/fail judgment.&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h2 id=&quot;where-to-look&quot;&gt;Where to look&lt;/h2&gt;
+&lt;p&gt;The source is &lt;a rel=&quot;external&quot; href=&quot;https://github.com/felipebalbi/tamal&quot;&gt;on GitHub&lt;/a&gt;. The gateware’s story is in
+&lt;a rel=&quot;external&quot; href=&quot;https://github.com/felipebalbi/tamal/blob/main/hdl/README.md&quot;&gt;&lt;code&gt;hdl/README.md&lt;/code&gt;&lt;/a&gt; and &lt;code&gt;hdl/PLAN.md&lt;/code&gt;; the design specs live
+under &lt;code&gt;docs/&lt;/code&gt;; &lt;code&gt;AGENTS.md&lt;/code&gt; is the fastest orientation to how the
+pieces fit. The &lt;code&gt;examples/&lt;/code&gt; directory is the best way to get the feel
+of the ISA — start with &lt;code&gt;smoke_halt.s&lt;/code&gt;, then &lt;code&gt;peripheral_io_read.s&lt;/code&gt;,
+then the per-channel programs.&lt;/p&gt;
+&lt;p&gt;It’s early, it’s promising, and it’s exactly the stage where design
+critiques are most useful. If you know eSPI — especially its nastier
+corners — I’d love to hear where this is wrong before it meets
+silicon.&lt;/p&gt;
+</content>
+  </entry>
+  
+</feed>

@@ -1,0 +1,385 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"
+     xmlns:atom="http://www.w3.org/2005/Atom"
+     xmlns:content="http://purl.org/rss/1.0/modules/content/"
+     xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Felipe Balbi</title>
+    <link>https://balbi.sh</link>
+    <description>Notes on embedded systems, Rust, and the craft of writing software.</description>
+    <generator>Zola</generator>
+    <language>en</language>
+    <lastBuildDate>Wed, 29 Jul 2026 09:00:00 +0000</lastBuildDate>
+    <atom:link href="https://balbi.sh/tags/memory/rss.xml" rel="self" type="application/rss+xml"/>
+    
+    <item>
+      <title>Tamal: Four Lines and Three Promises</title>
+      <link>https://balbi.sh/posts/tamal-mem/</link>
+      <guid isPermaLink="true">https://balbi.sh/posts/tamal-mem/</guid>
+      <pubDate>Wed, 29 Jul 2026 09:00:00 +0000</pubDate>
+      <dc:creator>Felipe Balbi</dc:creator>
+      <description>&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-loader/&quot;&gt;loader&lt;/a&gt; spent its entire length driving two memories. It
+wrote instruction words into one of them, four bytes at a time, straight
+through as they came off the wire. It swept the other one out after
+&lt;code&gt;HALT&lt;/code&gt; in seven patient phases, dancing with a one-cycle read latency
+that it never stopped to explain. Both memories were named, used, and
+leaned on — and neither was ever opened.&lt;/p&gt;
+&lt;p&gt;This post opens them. &lt;code&gt;Tamal.Mem&lt;/code&gt; is forty-one lines including the
+licence header and the doc-comments, and the part that becomes gateware
+is four. You can read it in less time than it takes to read this
+paragraph, and you would be forgiven for wondering why it gets a post at
+all.&lt;/p&gt;
+&lt;p&gt;It gets one because the four lines are not the module. The module is a
+&lt;strong&gt;contract&lt;/strong&gt; — a set of promises about latency, about ordering, and
+about what a memory says before it has been told anything — and the
+four lines are only where those promises get pinned to a width and given
+a name. The file that holds them down is a hundred and forty-seven lines
+of tests, three and a half times the module it checks. That ratio is not
+an over-test. It is the honest shape of a module whose entire content is
+contract.&lt;/p&gt;</description>
+      
+      <content:encoded>&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-loader/&quot;&gt;loader&lt;/a&gt; spent its entire length driving two memories. It
+wrote instruction words into one of them, four bytes at a time, straight
+through as they came off the wire. It swept the other one out after
+&lt;code&gt;HALT&lt;/code&gt; in seven patient phases, dancing with a one-cycle read latency
+that it never stopped to explain. Both memories were named, used, and
+leaned on — and neither was ever opened.&lt;/p&gt;
+&lt;p&gt;This post opens them. &lt;code&gt;Tamal.Mem&lt;/code&gt; is forty-one lines including the
+licence header and the doc-comments, and the part that becomes gateware
+is four. You can read it in less time than it takes to read this
+paragraph, and you would be forgiven for wondering why it gets a post at
+all.&lt;/p&gt;
+&lt;p&gt;It gets one because the four lines are not the module. The module is a
+&lt;strong&gt;contract&lt;/strong&gt; — a set of promises about latency, about ordering, and
+about what a memory says before it has been told anything — and the
+four lines are only where those promises get pinned to a width and given
+a name. The file that holds them down is a hundred and forty-seven lines
+of tests, three and a half times the module it checks. That ratio is not
+an over-test. It is the honest shape of a module whose entire content is
+contract.&lt;/p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;/span&gt;&lt;h2 id=&quot;the-entire-source&quot;&gt;The entire source&lt;/h2&gt;
+&lt;p&gt;Minus the SPDX header and the doc-comments:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;module&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Tamal.Mem&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; instrRam&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; ringRam&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  )&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; where&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;import&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Clash.Prelude&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;import&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Tamal.Params&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;AW&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; RW&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;instrRam&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  forall&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;HiddenClockResetEnable&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;  Signal&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Unsigned&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; AW&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;  Signal&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Maybe&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Unsigned&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; AW&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;  Signal&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;instrRam &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; blockRamPow2 &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;repeat &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;ringRam&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;HiddenClockResetEnable&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;  Signal&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Unsigned&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; RW&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;  Signal&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Maybe&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Unsigned&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; RW&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;  Signal&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;ringRam &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; blockRamPow2 &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;repeat &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Two signatures, two identical bodies, one import that is a pair of type
+aliases. The instruction store and the trace ring — the two halves of
+the machine’s memory, one that the engine reads from and one that it
+writes to — are the same expression twice, differing only in the width
+of the number you address them with.&lt;/p&gt;
+&lt;h2 id=&quot;what-isn-t-here&quot;&gt;What isn’t here&lt;/h2&gt;
+&lt;p&gt;There is no &lt;code&gt;data&lt;/code&gt; declaration. There is no state record, no &lt;code&gt;where&lt;/code&gt;
+clause, no &lt;code&gt;mealy&lt;/code&gt;. The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-crc/&quot;&gt;CRC&lt;/a&gt; computed a residue; the
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-loader/&quot;&gt;loader&lt;/a&gt; remembered where it stood in a frame. Nothing in this
+file computes and nothing in this file remembers.&lt;/p&gt;
+&lt;p&gt;That is worth sitting with, because it makes &lt;code&gt;Tamal.Mem&lt;/code&gt; the second kind
+of nothing the series has met. The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-uart-top/&quot;&gt;UART top&lt;/a&gt; was the first: a
+module with no behaviour of its own, whose whole content was
+&lt;em&gt;composition&lt;/em&gt; — three blocks that each own an idea, wired into one
+block that owns none. &lt;code&gt;Tamal.Mem&lt;/code&gt; does not even compose. It applies a
+library function to a constant, twice. Its content is neither
+computation nor wiring but &lt;strong&gt;naming&lt;/strong&gt;: it takes a primitive that already
+exists, fixes the two parameters that make it &lt;em&gt;this machine’s&lt;/em&gt; memory,
+and gives the result a name that the rest of the design can say out
+loud.&lt;/p&gt;
+&lt;p&gt;So if the code is four lines, what is the module for? The answer is the
+rest of this post, and it comes in two halves that say the same thing
+twice — once in English, once in a language a machine can check.&lt;/p&gt;
+&lt;h2 id=&quot;one-decision-made-once-and-reused&quot;&gt;One decision, made once and reused&lt;/h2&gt;
+&lt;p&gt;There is exactly one engineering decision in the file, and it is
+&lt;em&gt;which primitive&lt;/em&gt;, not &lt;em&gt;which code&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https://clash-lang.org&quot;&gt;Clash&lt;/a&gt; offers several block-RAM shapes. &lt;code&gt;blockRam&lt;/code&gt; takes an
+&lt;code&gt;Enum&lt;/code&gt;-addressed vector and wants an &lt;code&gt;Index n&lt;/code&gt;. &lt;code&gt;blockRamU&lt;/code&gt; starts with
+undefined contents; &lt;code&gt;blockRam1&lt;/code&gt; starts with one repeated value.
+&lt;code&gt;blockRamPow2&lt;/code&gt; takes a &lt;code&gt;Vec (2^n)&lt;/code&gt; and addresses it with an
+&lt;code&gt;Unsigned n&lt;/code&gt;. The engine already carries its program counter as an
+&lt;code&gt;Unsigned AW&lt;/code&gt; and its ring pointer as an &lt;code&gt;Unsigned RW&lt;/code&gt;, and both depths
+are exact powers of two, so &lt;code&gt;blockRamPow2&lt;/code&gt; maps onto them &lt;strong&gt;one to one&lt;/strong&gt;
+— no &lt;code&gt;Unsigned&lt;/code&gt;-to-&lt;code&gt;Index&lt;/code&gt; conversion at the call site, and no
+out-of-range case to guard, because at these widths there are no
+out-of-range addresses to have — the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-haskell-primer/&quot;&gt;primer&lt;/a&gt;’s point about widths
+living in the type, cashed in as a branch that does not need to
+exist.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-reset-1&quot;&gt;&lt;a href=&quot;#fn-reset&quot;&gt;[1]&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;p&gt;The initial contents, &lt;code&gt;repeat 0&lt;/code&gt;, do double duty. On hardware Clash
+lowers the vector into the block RAM’s &lt;code&gt;INIT&lt;/code&gt; strings, which is what
+makes Vivado infer a real BRAM rather than scattering the array across
+LUTs. In simulation it means every address is &lt;em&gt;defined&lt;/em&gt; from the first
+cycle onward, which is what makes randomised testing possible at all —
+a generator that reads an address nobody has written yet gets a zero
+rather than an exception.&lt;/p&gt;
+&lt;p&gt;The widths themselves live somewhere else. &lt;code&gt;AW&lt;/code&gt; and &lt;code&gt;RW&lt;/code&gt; come from
+&lt;code&gt;Tamal.Params&lt;/code&gt;, a leaf that imports nothing but &lt;code&gt;Clash.Prelude&lt;/code&gt; and
+exists so that the engine, the memories, the loader, and the trace model
+can all name the same number without importing one another. Resizing the
+instruction space becomes one edit in one file instead of a hunt for
+hand-copied &lt;code&gt;Unsigned 10&lt;/code&gt; literals.&lt;/p&gt;
+&lt;p&gt;The write port is the last piece of the decision, and the most
+deliberate. The engine emits its trace writes as &lt;code&gt;Maybe Ring&lt;/code&gt;, a proper
+record with named fields. The obvious signature would take that type.
+This one takes a bare &lt;code&gt;Maybe (Unsigned n, BitVector 32)&lt;/code&gt; instead —
+because accepting &lt;code&gt;Ring&lt;/code&gt; would mean importing &lt;code&gt;Tamal.Engine&lt;/code&gt;, and a
+memory that imports the engine is a memory that knows what a trace
+record is. The unpacking is one line, and it lives up in the topEntity
+where the two are already being wired together:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;ringWrite&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Maybe&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Ring&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Maybe&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Unsigned&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; RW&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;ringWrite &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; fmap &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;\&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Ring&lt;/span&gt;&lt;span&gt; a d&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;a&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; d&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;One &lt;code&gt;fmap&lt;/code&gt; is the entire price of keeping the memory ignorant. It is the
+same discipline that produced &lt;code&gt;Tamal.RegFile&lt;/code&gt;, built before &lt;code&gt;Engine.step&lt;/code&gt;
+existed to use it and never importing the engine whose registers it
+holds. We have not opened that one yet — it is waiting for a later post
+— but by the time we do, the shape will be familiar.&lt;/p&gt;
+&lt;p&gt;What falls out of the two widths is the geometry:&lt;/p&gt;
+&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Memory&lt;/th&gt;&lt;th&gt;Depth&lt;/th&gt;&lt;th&gt;Address&lt;/th&gt;&lt;th&gt;Data&lt;/th&gt;&lt;th&gt;≈ BRAM36&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;
+&lt;tr&gt;&lt;td&gt;instruction&lt;/td&gt;&lt;td&gt;1024 = 2^10&lt;/td&gt;&lt;td&gt;&lt;code&gt;Unsigned AW&lt;/code&gt;&lt;/td&gt;&lt;td&gt;&lt;code&gt;BitVector 32&lt;/code&gt;&lt;/td&gt;&lt;td&gt;1&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;trace ring&lt;/td&gt;&lt;td&gt;4096 = 2^12&lt;/td&gt;&lt;td&gt;&lt;code&gt;Unsigned RW&lt;/code&gt;&lt;/td&gt;&lt;td&gt;&lt;code&gt;BitVector 32&lt;/code&gt;&lt;/td&gt;&lt;td&gt;4&lt;/td&gt;&lt;/tr&gt;
+&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;Five block RAMs out of the 135 an xc7a100t carries, which is a rounding
+error. And one small gift: with the ring at 4096 words, the engine’s
+reserved terminator slot at &lt;code&gt;maxBound :: Unsigned RW&lt;/code&gt; is exactly the last
+address that exists. &lt;code&gt;termAddr = maxBound&lt;/code&gt; and &lt;code&gt;termAddr = D - 1&lt;/code&gt; are the
+same constant, so choosing the full width of the address type made the
+overflow-proof terminator free. What that slot is &lt;em&gt;for&lt;/em&gt; is the engine’s
+business, and stays behind its door.&lt;/p&gt;
+&lt;h2 id=&quot;three-promises&quot;&gt;Three promises&lt;/h2&gt;
+&lt;p&gt;Here is the part that actually matters. &lt;code&gt;blockRamPow2&lt;/code&gt; comes with three
+semantics, and &lt;code&gt;Tamal.Mem&lt;/code&gt; implements none of them — it &lt;strong&gt;inherits&lt;/strong&gt;
+all three, and its contribution is to pin them at a width where the rest
+of the design can rely on them.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;One cycle, not zero and not two.&lt;/strong&gt; The output at cycle &lt;em&gt;t&lt;/em&gt; is the value
+read at cycle &lt;em&gt;t-1&lt;/em&gt;. Write &lt;code&gt;0xDEAD_BEEF&lt;/code&gt; to address 5 on cycle 0 and read
+address 5 from then on:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;let&lt;/span&gt;&lt;span&gt; addrs    &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 5&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 5&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 5&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    writes   &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Just&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;5&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0xDEAD_BEEF&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    expected &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0xDEAD_BEEF&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0xDEAD_BEEF&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0xDEAD_BEEF&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The value appears one output later than the read that asked for it, and
+then stays. The leading zero is the load-bearing part of that
+expectation: it is the cycle-0 read of address 0, surfacing on cycle 1
+while the write to address 5 is still in flight. Drop it and the very
+same test would pass against a memory with no latency at all, because
+everything after it would still line up. Pinning a delay means pinning
+where the trace &lt;em&gt;starts&lt;/em&gt;, not only what it settles to.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Reads see the memory as it was.&lt;/strong&gt; Read and write the same address in
+the same cycle and the read wins; the new value shows up on the cycle
+after. Write &lt;code&gt;0x1111&lt;/code&gt; to address 3, then on the very next cycle write
+&lt;code&gt;0x2222&lt;/code&gt; to address 3 while reading it:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;simInstr&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  [&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 3&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 3&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 3&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  [&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Just&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;3&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0x1111&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Just&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;3&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0x2222&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  @?=&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0x1111&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0x2222&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0x2222&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;This one is not a convention that Clash picked and could change its mind
+about. It is a fact about the silicon.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-rbw-1&quot;&gt;&lt;a href=&quot;#fn-rbw&quot;&gt;[2]&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;The first output is a lie you must not read.&lt;/strong&gt; At cycle 0 the memory
+has not yet been asked anything, and &lt;code&gt;blockRamPow2&lt;/code&gt; reports
+&lt;code&gt;deepErrorX&lt;/code&gt; — an undefined value that explodes if you force it. Every
+sampler in the test file therefore drops sample 0 before comparing
+anything. That is not defensive tidying; it is the third promise, and
+ignoring it is how you get a test suite that fails with a stack trace
+instead of a diff.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-outzero-1&quot;&gt;&lt;a href=&quot;#fn-outzero&quot;&gt;[3]&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;p&gt;None of those three sentences is about code that lives in &lt;code&gt;Tamal.Mem&lt;/code&gt;.
+All three are about code that lives in &lt;code&gt;Clash.Prelude&lt;/code&gt;. What
+&lt;code&gt;Tamal.Mem&lt;/code&gt; does is make them &lt;em&gt;this machine’s&lt;/em&gt; promises, at 10 bits and
+at 12 bits, so that the loader and the engine can be written against
+them.&lt;/p&gt;
+&lt;h2 id=&quot;the-same-three-promises-in-haskell&quot;&gt;The same three promises, in Haskell&lt;/h2&gt;
+&lt;p&gt;Prose promises do not fail a build. So the test file states the same
+three things again, as an executable oracle — a pure model of a block
+RAM in eight lines of ordinary &lt;a rel=&quot;external&quot; href=&quot;https://www.haskell.org/&quot;&gt;Haskell&lt;/a&gt;, with no &lt;code&gt;Signal&lt;/code&gt; and no clock
+anywhere in sight:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;refRam&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;KnownNat&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; n&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  [&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Unsigned&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; n&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  [&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Maybe&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Unsigned&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; n&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  [&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;refRam addrs writes &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; go &lt;/span&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt;]&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;L.&lt;/span&gt;&lt;span&gt;zip addrs writes&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; where&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  go _ &lt;/span&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt;]&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt;]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  go mem &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;a&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; w&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; :&lt;/span&gt;&lt;span&gt; zs&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; fromMaybe &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;L.&lt;/span&gt;&lt;span&gt;lookup a mem&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; :&lt;/span&gt;&lt;span&gt; go &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;push w mem&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; zs&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  push &lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Nothing&lt;/span&gt;&lt;span&gt; m &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; m&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  push &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Just&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;wa&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; wd&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; m &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;wa&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; wd&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; :&lt;/span&gt;&lt;span&gt; m&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Read it against the list above and the three promises are all sitting
+there, one per detail.&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;fromMaybe 0&lt;/code&gt; is the &lt;strong&gt;zero-initialisation&lt;/strong&gt;: an address that appears in
+no prior write reads as zero, exactly as &lt;code&gt;repeat 0&lt;/code&gt; guarantees on the
+hardware side.&lt;/p&gt;
+&lt;p&gt;The order of the two expressions in &lt;code&gt;go&lt;/code&gt; is the &lt;strong&gt;read-before-write&lt;/strong&gt;
+rule. The cons cell emits &lt;code&gt;L.lookup a mem&lt;/code&gt; — a lookup in the memory as
+it stands &lt;em&gt;before&lt;/em&gt; this cycle — and only then recurses on &lt;code&gt;push w mem&lt;/code&gt;,
+the memory with this cycle’s write applied. Swap those and the model
+would describe a write-first RAM, and every collision test would fail.
+The rule is not commented; it is structural, which is the better place
+for it.&lt;/p&gt;
+&lt;p&gt;The shape of &lt;code&gt;go&lt;/code&gt; is the &lt;strong&gt;one-cycle latency&lt;/strong&gt;. Each step consumes one
+&lt;code&gt;(address, write)&lt;/code&gt; pair and produces one output, but the output it
+produces is the read taken before that step’s write landed — so the
+list &lt;code&gt;refRam&lt;/code&gt; returns is &lt;code&gt;[out 1, out 2, ...]&lt;/code&gt;, offset by exactly one
+from the stimulus that produced it. The undefined &lt;code&gt;out 0&lt;/code&gt; is not in the
+list because the model never had a reason to invent it.&lt;/p&gt;
+&lt;p&gt;Two smaller things earn their place. The assoc list is kept
+most-recent-first, so &lt;code&gt;L.lookup&lt;/code&gt; — which returns the first match —
+naturally yields the newest write to an address, and a slot that has been
+written five times reads back the fifth value with no bookkeeping. And
+the whole thing is polymorphic in the address width &lt;code&gt;n&lt;/code&gt;, so a single
+oracle serves a 1024-word instruction store and a 4096-word ring without
+a line of duplication. One model, both memories.&lt;/p&gt;
+&lt;h2 id=&quot;getting-a-clock-into-a-test&quot;&gt;Getting a clock into a test&lt;/h2&gt;
+&lt;p&gt;The oracle is pure; the thing it is checked against is not. Bridging them
+takes a sampler:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;simInstr&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Unsigned&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 10&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Maybe&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Unsigned&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 10&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;simInstr addrs writes &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  L.&lt;/span&gt;&lt;span&gt;drop &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;1&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    $&lt;/span&gt;&lt;span&gt; sampleN&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;      (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;L.&lt;/span&gt;&lt;span&gt;length addrs &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;+&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;      (&lt;/span&gt;&lt;span&gt; instrRam &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;fromList &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;addrs &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; L.&lt;/span&gt;&lt;span&gt;repeat &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;fromList &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;writes &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; L.&lt;/span&gt;&lt;span&gt;repeat &lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Nothing&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;          Signal&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Dom100&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;      )&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Three things are load-bearing here, and each of them is the kind of
+detail that costs an afternoon the first time.&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;sampleN&lt;/code&gt; is what supplies the clock, reset, and enable that
+&lt;code&gt;HiddenClockResetEnable&lt;/code&gt; is asking for. Crucially, the RAM has to be
+applied &lt;strong&gt;directly inside&lt;/strong&gt; &lt;code&gt;sampleN&lt;/code&gt;’s argument. You cannot factor
+&lt;code&gt;instrRam&lt;/code&gt; out into a parameter and write one generic sampler for both
+memories, because the constraint can only be discharged inside that
+rank-2 position. Hence two nearly identical samplers — &lt;code&gt;simInstr&lt;/code&gt; here,
+&lt;code&gt;simRing&lt;/code&gt; the same shape at width 12 — rather than one clever one. The
+duplication is not a failure of imagination; it is where the type system
+draws the line.&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;fromList (addrs &amp;lt;&amp;gt; L.repeat 0)&lt;/code&gt; makes the stimulus infinite. A &lt;code&gt;Signal&lt;/code&gt;
+has no end, so a finite input list would run out and force an exception
+on some cycle you never meant to look at. Padding with a harmless tail
+means the signal is total and only the prefix is ever compared.&lt;/p&gt;
+&lt;p&gt;And &lt;code&gt;sampleN (n + 1)&lt;/code&gt; followed by &lt;code&gt;L.drop 1&lt;/code&gt; is the third promise,
+operationalised. Take one more sample than you have stimulus for, throw
+the undefined one away, and what remains is &lt;code&gt;[out 1 .. out n]&lt;/code&gt; — the
+same length as &lt;code&gt;refRam&lt;/code&gt;’s output, index-aligned with it. That alignment
+is what earns the right to write &lt;code&gt;===&lt;/code&gt; between them. Get it wrong by one
+and the property still typechecks; it just compares the wrong cycles and
+tells you a lie.&lt;/p&gt;
+&lt;h2 id=&quot;what-the-properties-buy&quot;&gt;What the properties buy&lt;/h2&gt;
+&lt;p&gt;With a model and a sampler, the &lt;a rel=&quot;external&quot; href=&quot;https://hedgehog.qa&quot;&gt;hedgehog&lt;/a&gt; properties are short. The main
+one feeds random interleaved sequences of read addresses and optional
+writes to both, at both widths, and demands they agree. Addresses are
+drawn from a deliberately tiny window — 0 to 15 — so that random
+reads frequently land on addresses that were recently written. A
+generator ranging over all 4096 ring slots would produce a beautiful
+stream of zeros and test nothing; the small window is what makes
+collisions and read-after-write hits common enough to matter.&lt;/p&gt;
+&lt;p&gt;The second property is more interesting, because it declines to reuse
+&lt;code&gt;refRam&lt;/code&gt;. It writes a random pile of values into the window, sweeps the
+whole window, and checks the result against a &lt;em&gt;different&lt;/em&gt; oracle
+computed on the spot — a lookup over the reversed write list:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;oracle &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; fmap &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;\&lt;/span&gt;&lt;span&gt;a &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span&gt; fromMaybe &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;L.&lt;/span&gt;&lt;span&gt;lookup a &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;L.&lt;/span&gt;&lt;span&gt;reverse ws&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; win&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Same answer, arrived at independently: last write wins, everything else
+is zero. Checking &lt;code&gt;refRam&lt;/code&gt; against the hardware proves they agree, which
+is worth a lot — but two implementations that share an idea can share a
+misunderstanding of it. A second oracle written a different way is a
+second opinion. It is also the same two-implementations habit the
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-loader-cobs/&quot;&gt;COBS&lt;/a&gt; post named as the house style, applied to a model rather
+than a codec.&lt;/p&gt;
+&lt;h2 id=&quot;why-test-a-primitive-you-didn-t-write&quot;&gt;Why test a primitive you didn’t write&lt;/h2&gt;
+&lt;p&gt;The obvious objection is that all of this tests Clash. It does not.
+&lt;code&gt;blockRamPow2&lt;/code&gt; is correct, and its correctness was never the question.&lt;/p&gt;
+&lt;p&gt;What is under test is &lt;strong&gt;the reading&lt;/strong&gt; of it — the three promises, at
+these two widths, in this domain, written down somewhere that fails
+loudly rather than somewhere that fails quietly. If a Clash release ever
+changes the collision behaviour, one unit test goes red with a two-value
+diff instead of the engine mysteriously fetching a stale instruction on
+one path in one program. If someone swaps &lt;code&gt;blockRamPow2&lt;/code&gt; for &lt;code&gt;blockRamU&lt;/code&gt;
+to save an &lt;code&gt;INIT&lt;/code&gt; string, the zero-initialisation property catches it
+immediately, rather than the loader catching it three modules later as an
+intermittent bad word after power-up.&lt;/p&gt;
+&lt;p&gt;That is why a hundred and forty-seven lines of test sit on top of four
+lines of module without any embarrassment. The four lines are not the
+deliverable. The contract is the deliverable, and the tests are the only
+form in which a contract can be enforced rather than merely intended.&lt;/p&gt;
+&lt;h2 id=&quot;the-door&quot;&gt;The door&lt;/h2&gt;
+&lt;p&gt;There is one promise left to spend.&lt;/p&gt;
+&lt;p&gt;The one-cycle read latency has been, for this entire post, a nuisance —
+something to drop a sample for, to align a list around, to pin with a
+test so it does not drift. On the other side of the door it stops being a
+nuisance and becomes a design.&lt;/p&gt;
+&lt;p&gt;The engine’s program counter is a register inside its state, projected
+out as &lt;code&gt;pcOut&lt;/code&gt;. That signal feeds &lt;code&gt;instrRam&lt;/code&gt;, whose output feeds the
+instruction word back into the engine, which computes the next PC. A
+loop — but a loop containing &lt;em&gt;two&lt;/em&gt; registers, the PC and the block
+RAM’s own output register, so there is no combinational path anywhere in
+it and nothing for a synthesiser to complain about. The memory’s one-cycle
+delay does not have to be worked around, hidden, or paid for out of the
+clock period. It is absorbed whole, as a phase, and the engine’s own
+source calls that phase by name: &lt;code&gt;Fetch&lt;/code&gt; is documented as &lt;em&gt;the 1-cycle
+instruction-BRAM bubble&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;The cost this post spent eight sections testing around is, one level up,
+a pipeline stage the engine spends on purpose.&lt;/p&gt;
+&lt;p&gt;Both memories are known quantities now. The instruction store holds 1024
+words and hands back what you asked for one cycle later. The ring holds
+4096, the top one reserved, and behaves identically. Neither knows what a
+program is, what a trace record means, or which of its neighbours is
+writing. They are four lines and three promises, and everything above
+them is now allowed to depend on that.&lt;/p&gt;
+&lt;p&gt;Which leaves the engine. We have circled it since the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-introducing/&quot;&gt;first post&lt;/a&gt;
+— the machine the loader loads, triggers, and drains; the thing that
+turns the words in one memory into the records in the other. It is the
+last door in the series, and there is nothing left standing in front of
+it.&lt;/p&gt;
+&lt;p&gt;Next, we walk through.&lt;/p&gt;
+&lt;section class=&quot;footnotes&quot;&gt;
+&lt;ol class=&quot;footnotes-list&quot;&gt;
+&lt;li id=&quot;fn-reset&quot;&gt;
+&lt;p&gt;&lt;code&gt;blockRam&lt;/code&gt; uses only the clock and the enable — it has no
+content reset, and cannot have one, because a block RAM’s array is not
+resettable silicon. The wrappers still carry the broader
+&lt;code&gt;HiddenClockResetEnable&lt;/code&gt; constraint rather than the precise
+&lt;code&gt;(HiddenClock dom, HiddenEnable dom)&lt;/code&gt;, which is technically looser than
+necessary; GHC simply discharges the two it needs and ignores the third.
+Uniformity with every other block in the codebase won that trade, and it
+costs nothing here, because &lt;a rel=&quot;external&quot; href=&quot;https://github.com/felipebalbi/tamal&quot;&gt;Tamal&lt;/a&gt;’s top has no reset port anyway — the
+no-reset power-up design is deliberate, and a memory that cannot be reset
+fits it exactly rather than fighting it. &lt;a href=&quot;#fr-reset-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id=&quot;fn-rbw&quot;&gt;
+&lt;p&gt;A synchronous RAM latches the read address at the clock edge, and
+the array is read before that same edge’s write commits. Xilinx names the
+three possible port behaviours &lt;code&gt;READ_FIRST&lt;/code&gt;, &lt;code&gt;WRITE_FIRST&lt;/code&gt;, and
+&lt;code&gt;NO_CHANGE&lt;/code&gt;; Clash’s &lt;code&gt;blockRam&lt;/code&gt; models &lt;code&gt;READ_FIRST&lt;/code&gt;. That makes
+read-before-write a property of the hardware you are going to get, not a
+convention you are free to choose — which is precisely the sort of
+thing that belongs in an assertion rather than a comment. A comment
+describing the behaviour of silicon is a comment that will one day be
+describing the behaviour of &lt;em&gt;different&lt;/em&gt; silicon. &lt;a href=&quot;#fr-rbw-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id=&quot;fn-outzero&quot;&gt;
+&lt;p&gt;&lt;code&gt;deepErrorX&lt;/code&gt; is &lt;a rel=&quot;external&quot; href=&quot;https://clash-lang.org&quot;&gt;Clash&lt;/a&gt; declining to lie. A real block RAM’s
+output register powers up holding whatever it powers up holding, and
+there is no honest 32-bit value to report for the cycle before the first
+read completes — so Clash reports a value that is fine to carry around
+and fatal to inspect. This is why Clash’s own &lt;code&gt;blockRam&lt;/code&gt; doctests begin
+with &lt;code&gt;L.tail&lt;/code&gt;, and why &lt;code&gt;L.drop 1&lt;/code&gt; appears in both samplers here. A test
+that forces sample 0 has asked the simulator a question about hardware
+that has not happened yet, and deserves the exception it gets. &lt;a href=&quot;#fr-outzero-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/section&gt;
+</content:encoded>
+    </item>
+    
+  </channel>
+</rss>

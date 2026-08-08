@@ -1,0 +1,563 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+  <title>Felipe Balbi</title>
+  <subtitle>Notes on embedded systems, Rust, and the craft of writing software.</subtitle>
+  <link href="https://balbi.sh/tags/registers/atom.xml" rel="self" type="application/atom+xml"/>
+  <link href="https://balbi.sh"/>
+  <generator uri="https://www.getzola.org/">Zola</generator>
+  <updated>2026-08-06T09:00:00+00:00</updated>
+  <id>https://balbi.sh/tags/registers/atom.xml</id>
+  
+  <entry xml:lang="en">
+    <title>Tamal: Sixteen Registers and a Hardwired Zero</title>
+    <published>2026-08-06T09:00:00+00:00</published>
+    <updated>2026-08-06T09:00:00+00:00</updated>
+    <author><name>Felipe Balbi</name></author>
+    <link rel="alternate" href="https://balbi.sh/posts/tamal-regfile/" type="text/html"/>
+    <id>https://balbi.sh/posts/tamal-regfile/</id>
+    <summary type="html">&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-isa/&quot;&gt;instruction set&lt;/a&gt; closed on a name it declined to open. &lt;code&gt;decode&lt;/code&gt;
+had turned a word into an &lt;code&gt;Instr&lt;/code&gt;, pulled the operands out as five-bit
+&lt;code&gt;Reg&lt;/code&gt; fields, and handed them on — and the very next thing the
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;dispatch post&lt;/a&gt; watched &lt;code&gt;execInstr&lt;/code&gt; do was read the registers those
+fields named: &lt;code&gt;readReg (regs s) (operandRs1 i)&lt;/code&gt;. But a &lt;code&gt;Reg&lt;/code&gt; was only ever
+a &lt;em&gt;name&lt;/em&gt;, five bits wide, not yet an index into anything. The thing it
+names is this post: &lt;code&gt;Tamal.RegFile&lt;/code&gt;, the sixteen registers, the register
+hardwired to zero, and the two ports the datapath read and wrote through
+the whole arc while we held them shut.&lt;/p&gt;
+&lt;p&gt;This is a leaf again, read whole the way the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-crc/&quot;&gt;CRC&lt;/a&gt; and the
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-mem/&quot;&gt;memories&lt;/a&gt; were — small enough to hold entire, fifty-one lines with
+nothing left closed when the post ends. And it is a leaf the series has
+already promised. The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-mem/&quot;&gt;memories&lt;/a&gt; kept their write port ignorant of
+the engine — a block RAM that will not import &lt;code&gt;Tamal.Engine&lt;/code&gt;, because “a
+memory that imports the engine is a memory that knows what a trace record
+is” — and pointed here as its sibling: &lt;em&gt;the same discipline that
+produced &lt;code&gt;Tamal.RegFile&lt;/code&gt;, built before &lt;code&gt;Engine.step&lt;/code&gt; existed to use it and
+never importing the engine whose registers it holds.&lt;/em&gt; By the time we
+opened it, that post said, the shape would be familiar. Here it is.&lt;/p&gt;</summary>
+    
+    <content type="html">&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-isa/&quot;&gt;instruction set&lt;/a&gt; closed on a name it declined to open. &lt;code&gt;decode&lt;/code&gt;
+had turned a word into an &lt;code&gt;Instr&lt;/code&gt;, pulled the operands out as five-bit
+&lt;code&gt;Reg&lt;/code&gt; fields, and handed them on — and the very next thing the
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;dispatch post&lt;/a&gt; watched &lt;code&gt;execInstr&lt;/code&gt; do was read the registers those
+fields named: &lt;code&gt;readReg (regs s) (operandRs1 i)&lt;/code&gt;. But a &lt;code&gt;Reg&lt;/code&gt; was only ever
+a &lt;em&gt;name&lt;/em&gt;, five bits wide, not yet an index into anything. The thing it
+names is this post: &lt;code&gt;Tamal.RegFile&lt;/code&gt;, the sixteen registers, the register
+hardwired to zero, and the two ports the datapath read and wrote through
+the whole arc while we held them shut.&lt;/p&gt;
+&lt;p&gt;This is a leaf again, read whole the way the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-crc/&quot;&gt;CRC&lt;/a&gt; and the
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-mem/&quot;&gt;memories&lt;/a&gt; were — small enough to hold entire, fifty-one lines with
+nothing left closed when the post ends. And it is a leaf the series has
+already promised. The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-mem/&quot;&gt;memories&lt;/a&gt; kept their write port ignorant of
+the engine — a block RAM that will not import &lt;code&gt;Tamal.Engine&lt;/code&gt;, because “a
+memory that imports the engine is a memory that knows what a trace record
+is” — and pointed here as its sibling: &lt;em&gt;the same discipline that
+produced &lt;code&gt;Tamal.RegFile&lt;/code&gt;, built before &lt;code&gt;Engine.step&lt;/code&gt; existed to use it and
+never importing the engine whose registers it holds.&lt;/em&gt; By the time we
+opened it, that post said, the shape would be familiar. Here it is.&lt;/p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;/span&gt;&lt;h2 id=&quot;the-door-again&quot;&gt;The door, again&lt;/h2&gt;
+&lt;p&gt;A &lt;a rel=&quot;external&quot; href=&quot;https://github.com/felipebalbi/tamal&quot;&gt;Tamal&lt;/a&gt; module opens by naming itself and listing what leaves through
+the wall, and after the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;engine’s&lt;/a&gt; eleven-name sprawl this one is a
+return to the narrow doors of the leaves:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;module&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Tamal.RegFile&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Regs&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; initRegs&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; readReg&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; writeReg&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  )&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; where&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Four names. We have read this shape before, and the aphorism the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-crc/&quot;&gt;CRC&lt;/a&gt;
+gave it still holds:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;A module is a wall with a door in it, and the export list is the door.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;But look at &lt;em&gt;what&lt;/em&gt; the four names are, because the split is the whole
+design in miniature. One is a noun — &lt;code&gt;Regs&lt;/code&gt;, the type of the register
+bank — and three are verbs: &lt;code&gt;initRegs&lt;/code&gt; makes one, &lt;code&gt;readReg&lt;/code&gt; inspects one,
+&lt;code&gt;writeReg&lt;/code&gt; evolves one. The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;engine&lt;/a&gt; had to export six types
+because something one level up assembles it and must name its plugs; a leaf
+like the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-crc/&quot;&gt;CRC&lt;/a&gt; exported only a verb and hid its types entirely.
+&lt;code&gt;Tamal.RegFile&lt;/code&gt; sits between: it publishes &lt;em&gt;one&lt;/em&gt; type, because its callers
+must be able to hold a &lt;code&gt;Regs&lt;/code&gt; and pass it around, but it publishes that
+type &lt;strong&gt;opaquely&lt;/strong&gt; — the name &lt;code&gt;Regs&lt;/code&gt; crosses the wall, and its constructor
+does not. You will not find &lt;code&gt;Regs (..)&lt;/code&gt; on that list, the way the engine
+wrote &lt;code&gt;State (..)&lt;/code&gt; to export a record and all its fields. Just &lt;code&gt;Regs&lt;/code&gt;, the
+bare name, a handle to a thing whose insides stay home.&lt;/p&gt;
+&lt;p&gt;That is a deliberate choice, and it is the same choice that kept &lt;code&gt;step&lt;/code&gt;
+private inside the CRC: the export list is a place to say less than you
+could. Everything a caller is allowed to do to a register bank is on those
+four lines, and the shape of the bank behind them is not. Hold that; it is
+about to matter twice.&lt;/p&gt;
+&lt;h2 id=&quot;the-prelude-and-the-only-import&quot;&gt;The prelude, and the only import&lt;/h2&gt;
+&lt;p&gt;Two lines sit under the header, and the first is the one every block in
+this series has carried:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;import&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Clash.Prelude&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;import&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Tamal.Isa&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Reg&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-crc/&quot;&gt;prelude swap&lt;/a&gt; is old news by now — the line that throws out
+ordinary Haskell’s furniture and moves in the &lt;code&gt;Bit&lt;/code&gt;, &lt;code&gt;BitVector&lt;/code&gt;, &lt;code&gt;Vec&lt;/code&gt;,
+and &lt;code&gt;Signal&lt;/code&gt; that lower to gates, the line that says &lt;em&gt;compile me to
+hardware&lt;/em&gt;. I will not re-derive it a seventh time. It is the &lt;em&gt;second&lt;/em&gt;
+import that repays a look, and it repays it precisely because of how
+little it says.&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;import Tamal.Isa (Reg)&lt;/code&gt; reaches across the wall for exactly one name, and
+that name is a type synonym: &lt;code&gt;Reg&lt;/code&gt;, which &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-isa/&quot;&gt;we met&lt;/a&gt; as &lt;code&gt;BitVector 5&lt;/code&gt;,
+the five-bit register selector &lt;code&gt;decode&lt;/code&gt; carves out of an instruction word.
+The register file imports the &lt;em&gt;name of a selector&lt;/em&gt; — and nothing else.
+It does not import &lt;code&gt;Tamal.Engine&lt;/code&gt;. It does not import the &lt;code&gt;State&lt;/code&gt; that will
+hold it, or the &lt;code&gt;step&lt;/code&gt; that will call it, or the ALU whose results it will
+store. It imports one width-carrying synonym from the instruction set and
+stops.&lt;/p&gt;
+&lt;p&gt;This is the discipline the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-mem/&quot;&gt;memories&lt;/a&gt; named when they refused to let
+their write port learn what a trace record was, and it is worth stating as
+its own rule now that we are standing inside the leaf it promised:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;A leaf that holds the engine’s registers has never heard of the engine.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;The dependency arrow runs one way only. &lt;code&gt;Tamal.Isa&lt;/code&gt; knows nothing of
+&lt;code&gt;Tamal.RegFile&lt;/code&gt;; &lt;code&gt;Tamal.RegFile&lt;/code&gt; knows only the name &lt;code&gt;Reg&lt;/code&gt;; and
+&lt;code&gt;Tamal.Engine&lt;/code&gt;, one level up, imports &lt;em&gt;both&lt;/em&gt; and wires them together. The
+register file was, as the mem post said, “built before &lt;code&gt;Engine.step&lt;/code&gt;
+existed to use it” — a small, &lt;a rel=&quot;external&quot; href=&quot;https://hedgehog.qa&quot;&gt;hedgehog&lt;/a&gt;-tested warm-up written
+so that when the keystone &lt;code&gt;step&lt;/code&gt; finally landed, its operand-fetch and
+writeback path would be &lt;em&gt;wiring&lt;/em&gt;, not &lt;em&gt;invention&lt;/em&gt;. And importing &lt;code&gt;Reg&lt;/code&gt;
+rather than re-declaring a bare &lt;code&gt;BitVector 5&lt;/code&gt; is the small courtesy that
+makes that wiring seamless: &lt;code&gt;readReg&lt;/code&gt; and &lt;code&gt;writeReg&lt;/code&gt; take the &lt;em&gt;exact&lt;/em&gt; type
+&lt;code&gt;decode&lt;/code&gt; produces, so the engine can pass &lt;code&gt;rs1&lt;/code&gt;, &lt;code&gt;rs2&lt;/code&gt;, and &lt;code&gt;rd&lt;/code&gt; straight
+through with no conversion at the seam.&lt;/p&gt;
+&lt;h2 id=&quot;the-bank-sealed&quot;&gt;The bank, sealed&lt;/h2&gt;
+&lt;p&gt;Here is the type the whole module exists to serve, and the reason its
+constructor stayed off the door:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;newtype&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Regs&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Regs&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Vec&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 16&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  deriving&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; stock&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Generic&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Show&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Eq&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  deriving&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; anyclass&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;NFDataX&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;A &lt;code&gt;Regs&lt;/code&gt; is a &lt;code&gt;Vec 16 (BitVector 32)&lt;/code&gt; — sixteen thirty-two-bit words, a
+fixed-length vector, five hundred and twelve bits of architectural state
+— wrapped in a &lt;code&gt;newtype&lt;/code&gt; whose constructor is also called &lt;code&gt;Regs&lt;/code&gt;. The
+wrapper is the wall. Because the constructor does not leave the module,
+nothing outside can write &lt;code&gt;Regs someVector&lt;/code&gt; to forge a bank, or pattern-
+match &lt;code&gt;Regs v&lt;/code&gt; to reach the raw vector inside; the &lt;code&gt;Vec 16&lt;/code&gt; never leaks.
+The outside world holds a &lt;code&gt;Regs&lt;/code&gt; as a sealed handle and touches it only
+through &lt;code&gt;initRegs&lt;/code&gt;, &lt;code&gt;readReg&lt;/code&gt;, and &lt;code&gt;writeReg&lt;/code&gt;, exactly the three verbs on
+the door. Should a later version want a different representation — a
+packed &lt;code&gt;BitVector 512&lt;/code&gt;, a pair of banked halves, whatever a timing closure
+demands — it can change this line and the three functions and break not a
+single caller, because no caller was ever allowed to see the shape it is
+changing.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-newtype-1&quot;&gt;&lt;a href=&quot;#fn-newtype&quot;&gt;[1]&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;p&gt;The &lt;code&gt;deriving&lt;/code&gt; block is the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;four-class refrain&lt;/a&gt; every stateful
+&lt;a rel=&quot;external&quot; href=&quot;https://github.com/felipebalbi/tamal&quot;&gt;Tamal&lt;/a&gt; block wears, and I will be quick with it: &lt;code&gt;Generic&lt;/code&gt; lets Clash work
+structurally, &lt;code&gt;Show&lt;/code&gt; and &lt;code&gt;Eq&lt;/code&gt; are for the tests — and &lt;code&gt;Eq&lt;/code&gt; earns a
+specific keep here, since one property will assert &lt;code&gt;writeReg rs 0 v === rs&lt;/code&gt;
+and needs to compare two banks — and &lt;code&gt;NFDataX&lt;/code&gt; is the one that means
+“this value can be the contents of a register.” Everywhere else in the
+series that phrase was a near-metaphor. Here it is &lt;em&gt;literal&lt;/em&gt;: the
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;engine’s &lt;code&gt;State&lt;/code&gt;&lt;/a&gt; has a field &lt;code&gt;regs :: Regs&lt;/code&gt;, the whole &lt;code&gt;State&lt;/code&gt; is
+what the &lt;code&gt;mealy&lt;/code&gt; wrapper clocks, and so a &lt;code&gt;Regs&lt;/code&gt; is not &lt;em&gt;like&lt;/em&gt; a register’s
+contents — it &lt;em&gt;is&lt;/em&gt; sixteen registers’ contents, five hundred and twelve
+flip-flops on the fabric. &lt;code&gt;NFDataX&lt;/code&gt; is the class that lets those flip-flops
+have a defined power-up value; without it, &lt;code&gt;Regs&lt;/code&gt; could not sit in the
+state at all.&lt;/p&gt;
+&lt;h2 id=&quot;power-up-is-sixteen-zeros&quot;&gt;Power-up is sixteen zeros&lt;/h2&gt;
+&lt;p&gt;One line says what the bank holds before anything happens:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;initRegs&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Regs&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;initRegs &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Regs&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;repeat &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;repeat 0&lt;/code&gt; is the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-mem/&quot;&gt;&lt;code&gt;Vec&lt;/code&gt; &lt;code&gt;repeat&lt;/code&gt;&lt;/a&gt; that fills a whole fixed-length
+vector with one value; here it lays down sixteen copies of &lt;code&gt;0&lt;/code&gt;, and &lt;code&gt;Regs&lt;/code&gt;
+wraps them. Every register powers up holding zero. This is the same move
+the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-mem/&quot;&gt;memories&lt;/a&gt; made with &lt;code&gt;repeat 0&lt;/code&gt; for their &lt;code&gt;INIT&lt;/code&gt; contents, and it
+does the same double duty: on hardware it becomes the flip-flops’ reset
+value, and in simulation it means every slot is &lt;em&gt;defined&lt;/em&gt; from the first
+cycle, so a randomised test that reads a register nobody has written gets a
+zero rather than an exception.&lt;/p&gt;
+&lt;p&gt;And &lt;code&gt;initRegs&lt;/code&gt; is not merely &lt;em&gt;a&lt;/em&gt; starting value; it is &lt;em&gt;the&lt;/em&gt; one. The
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;shape post&lt;/a&gt; read &lt;code&gt;initState&lt;/code&gt; and found &lt;code&gt;regs = initRegs&lt;/code&gt; sitting in
+it, and read the larger fact folded into &lt;code&gt;initState&lt;/code&gt; existing at all:
+&lt;a rel=&quot;external&quot; href=&quot;https://github.com/felipebalbi/tamal&quot;&gt;Tamal&lt;/a&gt; has &lt;strong&gt;no reset port.&lt;/strong&gt; The top ties reset permanently deasserted and
+leans on power-up &lt;code&gt;init&lt;/code&gt;, so &lt;code&gt;initRegs&lt;/code&gt; is not what a reset line loads —
+there is no reset line — it is what the register bank &lt;em&gt;powers up holding&lt;/em&gt;.
+When a second program runs, &lt;code&gt;softInit&lt;/code&gt; throws the whole machine back to
+&lt;code&gt;initState&lt;/code&gt;, &lt;code&gt;regs&lt;/code&gt; included, so every run begins from sixteen zeros and
+the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;byte-identical re-run&lt;/a&gt; the intro promised extends cleanly
+through the register file. The determinism has to reach all the way down
+here, and &lt;code&gt;repeat 0&lt;/code&gt; is where it lands.&lt;/p&gt;
+&lt;h2 id=&quot;a-name-is-not-a-slot&quot;&gt;A name is not a slot&lt;/h2&gt;
+&lt;p&gt;Between the five-bit name a caller hands in and the physical register it
+means sits one private helper — private, like the CRC’s &lt;code&gt;step&lt;/code&gt;, kept off
+the door because nothing outside should depend on how a name becomes a
+slot:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;regIndex&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Reg&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Index&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 16&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;regIndex r &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; unpack &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;truncateB r&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;A &lt;code&gt;Reg&lt;/code&gt; is a &lt;code&gt;BitVector 5&lt;/code&gt;; an &lt;code&gt;Index 16&lt;/code&gt; is a number in &lt;code&gt;0..15&lt;/code&gt;, the type
+Clash uses to index a sixteen-element vector safely. &lt;code&gt;regIndex&lt;/code&gt; is the
+translation, and it is two operations read right to left. &lt;code&gt;truncateB r&lt;/code&gt;
+keeps the &lt;strong&gt;low four bits&lt;/strong&gt; of the five-bit selector and discards the top
+one, yielding a &lt;code&gt;BitVector 4&lt;/code&gt;; &lt;code&gt;unpack&lt;/code&gt; then reinterprets those four bits
+as an &lt;code&gt;Index 16&lt;/code&gt;, whose bit-width is exactly four.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-index-1&quot;&gt;&lt;a href=&quot;#fn-index&quot;&gt;[2]&lt;/a&gt;&lt;/sup&gt; The wider
+selector is narrowed to the width the bank actually has.&lt;/p&gt;
+&lt;p&gt;This is a small instance of the width-changing family — &lt;code&gt;truncateB&lt;/code&gt;,
+&lt;code&gt;zeroExtend&lt;/code&gt;, &lt;code&gt;signExtend&lt;/code&gt; — as opposed to the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-isa/&quot;&gt;structural &lt;code&gt;bitCoerce&lt;/code&gt;&lt;/a&gt;
+that reshapes bits without changing how many there are. &lt;code&gt;truncateB&lt;/code&gt; changes
+the count: five bits in, four out, the fifth dropped on the floor. And the
+choice of which bit to drop is the design.&lt;/p&gt;
+&lt;p&gt;Look at the result type. &lt;code&gt;regIndex&lt;/code&gt; returns an &lt;code&gt;Index 16&lt;/code&gt;, and an
+&lt;code&gt;Index 16&lt;/code&gt; &lt;em&gt;cannot&lt;/em&gt; be out of range — the values it can hold are &lt;code&gt;0&lt;/code&gt;
+through &lt;code&gt;15&lt;/code&gt; and no others, guaranteed by the type. So when &lt;code&gt;readReg&lt;/code&gt; and
+&lt;code&gt;writeReg&lt;/code&gt; reach for the total Clash primitives &lt;code&gt;(!!)&lt;/code&gt; and &lt;code&gt;replace&lt;/code&gt;, there
+is no bounds check to write and no out-of-range case to handle, because the
+index they are handed made the bound part of its own type.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-prim-1&quot;&gt;&lt;a href=&quot;#fn-prim&quot;&gt;[3]&lt;/a&gt;&lt;/sup&gt; This is
+the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-mem/&quot;&gt;memories’&lt;/a&gt; “widths live in the type, so there is no branch to
+have,” moved one level over: the safety is not enforced at runtime, it is
+made unrepresentable at compile time.&lt;/p&gt;
+&lt;p&gt;But narrowing five bits to four has a visible consequence, and the design
+chose it on purpose. Two selectors that differ only in their top bit —
+&lt;code&gt;x1&lt;/code&gt; (&lt;code&gt;00001&lt;/code&gt;) and &lt;code&gt;x17&lt;/code&gt; (&lt;code&gt;10001&lt;/code&gt;) — truncate to the &lt;em&gt;same&lt;/em&gt; four bits and
+therefore the same slot. The out-of-window selectors &lt;code&gt;x16..x31&lt;/code&gt; &lt;strong&gt;alias&lt;/strong&gt;
+their low-four twins. The leaf does not reject them; it folds them back
+into the sixteen it has. That keeps the function &lt;strong&gt;total&lt;/strong&gt; — every one of
+the thirty-two names a five-bit field can hold yields a defined slot, none
+traps — and totality is the property a leaf is supposed to guarantee.
+Whether &lt;code&gt;x16..x31&lt;/code&gt; should be &lt;em&gt;refused&lt;/em&gt; is a real question, but it is the
+assembler’s and the engine’s question, not this leaf’s: the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-isa/&quot;&gt;instruction
+set&lt;/a&gt; noted that &lt;code&gt;Reg&lt;/code&gt; is “wider than the register file behind it …
+deliberate room to grow,” and the fifth bit is that room,
+reserved for a future that implements thirty-two registers. Until then the
+register file stays total by aliasing, and leaves the rejecting to the
+layers whose job rejecting is.&lt;/p&gt;
+&lt;h2 id=&quot;readreg-the-hole-at-x0&quot;&gt;&lt;code&gt;readReg&lt;/code&gt;: the hole at x0&lt;/h2&gt;
+&lt;p&gt;The first of the two ports:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;readReg&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Regs&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Reg&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;readReg &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Regs&lt;/span&gt;&lt;span&gt; v&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; r&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span&gt; idx &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; x0 is hardwired to 0.&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span&gt; otherwise &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; v &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;!!&lt;/span&gt;&lt;span&gt; idx&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; where&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  idx &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; regIndex r&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-haskell-primer/&quot;&gt;type is half the documentation&lt;/a&gt;: a bank and a name in, a
+thirty-two-bit value out, and — the part the type says by saying nothing
+— &lt;em&gt;always&lt;/em&gt; a value, no &lt;code&gt;Maybe&lt;/code&gt;, no error. Reading a register cannot fail.
+It pattern-matches the bank open as &lt;code&gt;Regs v&lt;/code&gt; (allowed, we are inside the
+wall), computes &lt;code&gt;idx = regIndex r&lt;/code&gt;, and forks on one guard.&lt;/p&gt;
+&lt;p&gt;That guard is the design decision the whole &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-introducing/&quot;&gt;RISC-V flavour&lt;/a&gt; turns
+on. When &lt;code&gt;idx == 0&lt;/code&gt;, &lt;code&gt;readReg&lt;/code&gt; does &lt;strong&gt;not&lt;/strong&gt; return &lt;code&gt;v !! 0&lt;/code&gt; — it does not
+read slot zero’s contents at all. It returns the literal &lt;code&gt;0&lt;/code&gt;. Register
+&lt;code&gt;x0&lt;/code&gt; is hardwired to zero: reading it yields zero no matter what is
+physically stored in slot zero, and nothing can make it read anything
+else. Every other index falls to &lt;code&gt;v !! idx&lt;/code&gt;, the total vector index that
+pulls slot &lt;code&gt;idx&lt;/code&gt;’s word straight out.&lt;/p&gt;
+&lt;p&gt;We have already spent this guarantee, a whole post before we built it. The
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;dispatch post’s&lt;/a&gt; operand selectors ended every table with a
+catch-all &lt;code&gt;_ -&amp;gt; 0&lt;/code&gt;, so that an instruction with no second source “reads
+&lt;code&gt;x0&lt;/code&gt;” and gets zero — “a read that is always safe, always defined, and
+costs nothing, because &lt;code&gt;x0&lt;/code&gt; is not a register you can get wrong.” &lt;em&gt;This
+guard is why.&lt;/em&gt; The reason reading &lt;code&gt;x0&lt;/code&gt; is free is that &lt;code&gt;readReg&lt;/code&gt; answers
+&lt;code&gt;0&lt;/code&gt; without so much as glancing at the vector; &lt;code&gt;LoadImm&lt;/code&gt;, which names no
+sources and reads &lt;code&gt;x0&lt;/code&gt; twice, pays nothing for the two reads because both
+short-circuit here. The engine leaned on a promise, and the promise is one
+line of guard in a leaf.&lt;/p&gt;
+&lt;p&gt;In hardware &lt;code&gt;readReg&lt;/code&gt; is combinational — the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-isa/&quot;&gt;truth-table totality&lt;/a&gt;
+the series keeps returning to, cashed as a &lt;strong&gt;16-to-1 multiplexer&lt;/strong&gt;: the
+four-bit index selects one of sixteen thirty-two-bit lanes, and the lane
+for slot zero is tied to constant zero rather than to a flip-flop’s
+output.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-prim-2&quot;&gt;&lt;a href=&quot;#fn-prim&quot;&gt;[3]&lt;/a&gt;&lt;/sup&gt; No clock, no latency; the value is there the moment the
+index is. And because it is combinational, the datapath can call it twice
+in one cycle — once for &lt;code&gt;rs1&lt;/code&gt;, once for &lt;code&gt;rs2&lt;/code&gt; — and get both source
+values at once, which is why a module that exports a single &lt;code&gt;readReg&lt;/code&gt; gives
+the datapath &lt;em&gt;two&lt;/em&gt; read ports. The one function, instantiated twice, is the
+classic two-read shape of a register file; the &lt;code&gt;x0&lt;/code&gt; register even earns a
+second keep as the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;always-true branch&lt;/a&gt;, where &lt;code&gt;j off&lt;/code&gt; is really
+&lt;code&gt;beq x0, x0, off&lt;/code&gt;, a comparison of zero against zero that &lt;code&gt;readReg&lt;/code&gt; makes
+free on both sides.&lt;/p&gt;
+&lt;h2 id=&quot;writereg-the-write-that-replaces&quot;&gt;&lt;code&gt;writeReg&lt;/code&gt;: the write that replaces&lt;/h2&gt;
+&lt;p&gt;The second port, and the more quietly radical one:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;writeReg&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Regs&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Reg&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Regs&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;writeReg regs&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;@&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Regs&lt;/span&gt;&lt;span&gt; v&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; r x&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span&gt; idx &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; regs &lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; writes to x0 are ignored!&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span&gt; otherwise &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Regs&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;replace idx x v&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; where&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  idx &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; regIndex r&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Read the type first, because its &lt;em&gt;return&lt;/em&gt; is the whole story. &lt;code&gt;writeReg&lt;/code&gt;
+takes a bank, a name, and a value, and hands back — a bank. Not &lt;code&gt;()&lt;/code&gt;, not
+&lt;code&gt;IO ()&lt;/code&gt;, not a mutation performed on the side: a fresh &lt;code&gt;Regs&lt;/code&gt;. A write to a
+register does not &lt;em&gt;change&lt;/em&gt; the register file. It &lt;em&gt;computes a new one&lt;/em&gt; and
+returns it, leaving the old one exactly as it was.&lt;/p&gt;
+&lt;p&gt;This is the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-haskell-primer/&quot;&gt;primer’s&lt;/a&gt; “mapping, not procedure,” cashed the way the
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-crc/&quot;&gt;CRC’s fold&lt;/a&gt; cashed it: nothing is overwritten. In C, &lt;code&gt;regs[rd] = x&lt;/code&gt;
+reaches into an array and clobbers a cell. Here &lt;code&gt;replace idx x v&lt;/code&gt; produces a
+&lt;em&gt;new&lt;/em&gt; vector identical to &lt;code&gt;v&lt;/code&gt; but with slot &lt;code&gt;idx&lt;/code&gt; set to &lt;code&gt;x&lt;/code&gt;, and &lt;code&gt;Regs&lt;/code&gt;
+wraps it; the argument &lt;code&gt;v&lt;/code&gt; is never touched and is simply not referenced
+again. What looks like the mutation of a register is a pure function from an
+old bank to a new bank, and the “mutation” you imagine happens exactly once,
+elsewhere: when the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;Mealy wrapper&lt;/a&gt; clocks the returned &lt;code&gt;State&lt;/code&gt; –
+the one now carrying the new &lt;code&gt;Regs&lt;/code&gt; — into the fabric flip-flops at the
+edge. The datapath itself assigns nothing.&lt;/p&gt;
+&lt;p&gt;The guard is &lt;code&gt;x0&lt;/code&gt; again, from the writing side. &lt;code&gt;idx == 0&lt;/code&gt; returns &lt;code&gt;regs&lt;/code&gt;
+— the whole original bank, unchanged — so a write to &lt;code&gt;x0&lt;/code&gt; is silently
+discarded, which is the other half of “hardwired to zero”: you cannot read
+anything but zero out, and you cannot put anything in. The
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;dispatch post&lt;/a&gt; promised this too, noting that &lt;code&gt;writeReg&lt;/code&gt; “quietly
+enforces one rule … a write to &lt;code&gt;x0&lt;/code&gt; is discarded, because &lt;code&gt;x0&lt;/code&gt; is
+hardwired zero.” Here is the enforcement, one guard wide. Every other index
+takes the &lt;code&gt;replace&lt;/code&gt; path. And the as-pattern &lt;code&gt;regs@(Regs v)&lt;/code&gt; is a small
+convenience doing real work: it binds the whole argument as &lt;code&gt;regs&lt;/code&gt; &lt;em&gt;and&lt;/em&gt; its
+unwrapped vector as &lt;code&gt;v&lt;/code&gt; in one shot, so the &lt;code&gt;x0&lt;/code&gt; arm can return the original
+&lt;code&gt;regs&lt;/code&gt; without rebuilding it while the other arm still has &lt;code&gt;v&lt;/code&gt; in hand to
+hand to &lt;code&gt;replace&lt;/code&gt;.&lt;/p&gt;
+&lt;h2 id=&quot;one-invariant-one-place-twice&quot;&gt;One invariant, one place, twice&lt;/h2&gt;
+&lt;p&gt;Two things are worth pausing on together, because they are really one
+decision. First, &lt;code&gt;x0&lt;/code&gt; is guarded in &lt;em&gt;both&lt;/em&gt; ports — read returns zero,
+write is discarded — and both guards test the &lt;strong&gt;truncated&lt;/strong&gt; index,
+&lt;code&gt;idx == 0&lt;/code&gt;, not the raw five-bit selector. That is what makes the hole
+consistent under aliasing: &lt;code&gt;x16&lt;/code&gt; truncates to slot zero, so &lt;code&gt;x16&lt;/code&gt; reads
+zero and discards its writes &lt;em&gt;exactly&lt;/em&gt; as &lt;code&gt;x0&lt;/code&gt; does. The aliasing and the
+hardwiring compose without anyone arranging it; the same &lt;code&gt;idx == 0&lt;/code&gt; that
+protects &lt;code&gt;x0&lt;/code&gt; protects its out-of-window twin for free.&lt;/p&gt;
+&lt;p&gt;Second, and larger: the &lt;code&gt;x0&lt;/code&gt; rule lives &lt;em&gt;here&lt;/em&gt;, in the register file, and
+nowhere else. The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;engine&lt;/a&gt; reads and writes registers uniformly —
+&lt;code&gt;readReg (regs s) rd&lt;/code&gt;, &lt;code&gt;writeReg (regs s) rd result&lt;/code&gt; — and never checks
+whether &lt;code&gt;rd&lt;/code&gt; is zero, because it never has to. If the rule lived in the
+engine instead, every one of the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;thirteen DATA arms&lt;/a&gt; that writes a
+register would need an &lt;code&gt;if rd /= 0&lt;/code&gt; around its writeback, and the invariant
+would be scattered across a dozen call sites, each an opportunity to forget
+it. Housed in one leaf, it is impossible to forget: the register file
+&lt;em&gt;is&lt;/em&gt; the thing that makes &lt;code&gt;x0&lt;/code&gt; behave, so anything that goes through the
+register file inherits the behaviour.&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;&lt;code&gt;x0&lt;/code&gt; is not a register the engine keeps at zero. It is a register that
+cannot be anything else, because the only door to it refuses to carry a
+value either way.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;figure class=&quot;rf-fig&quot; style=&quot;margin:2rem 0&quot;&gt;
+&lt;svg class=&quot;rf&quot; viewBox=&quot;0 0 760 244&quot; role=&quot;img&quot; aria-labelledby=&quot;rf-t rf-d&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot;&gt;
+&lt;title id=&quot;rf-t&quot;&gt;The tamal register file: sixteen registers with x0 a hardwired zero, two read ports, one write port&lt;/title&gt;
+&lt;desc id=&quot;rf-d&quot;&gt;Sixteen register cells in a row, labelled x0 on the left through x15 on the right, together forming the opaque Regs value, a Vec of sixteen 32-bit words. x0 is drawn in the accent colour and marked identically zero: reading it returns zero and writes to it are discarded. A five-bit selector is truncated to its low four bits to choose a slot, so out-of-window selectors x16 through x31 alias their low-four twin. Below the bank, one write port labelled writeReg carries a destination and a value up into the bank and produces a fresh bank, while two read ports labelled readReg tap values rs1v and rs2v out of it.&lt;/desc&gt;
+&lt;style&gt;
+.rf{max-width:760px;width:100%;height:auto;display:block;margin:0 auto}
+.rf .cell{fill:var(--bg-dim);stroke:var(--fg-main);stroke-width:2}
+.rf .cellA{fill:var(--bg-dim);stroke:var(--accent);stroke-width:2.5}
+.rf .nm{fill:var(--fg-main);font-family:var(--mono);font-size:12px}
+.rf .nmA{fill:var(--accent);font-family:var(--mono);font-size:12px}
+.rf .zero{fill:var(--accent);font-family:var(--mono);font-size:11px}
+.rf .brk{stroke:var(--fg-dim);stroke-width:1.5;fill:none}
+.rf .cap{fill:var(--fg-dim);font-family:var(--mono);font-size:12px}
+.rf .prd{fill:var(--fg-main);font-family:var(--mono);font-size:12px}
+.rf .prdA{fill:var(--accent);font-family:var(--mono);font-size:12px}
+.rf .wire{stroke:var(--fg-main);stroke-width:2;fill:none}
+.rf .accw{stroke:var(--accent);stroke-width:2.5;fill:none}
+.rf .ah{fill:var(--fg-main)}
+.rf .aha{fill:var(--accent)}
+&lt;/style&gt;
+&lt;defs&gt;
+&lt;marker id=&quot;rf-a&quot; markerWidth=&quot;9&quot; markerHeight=&quot;7&quot; refX=&quot;7&quot; refY=&quot;3.5&quot; orient=&quot;auto&quot;&gt;&lt;path d=&quot;M0,0 L7,3.5 L0,7 Z&quot; class=&quot;ah&quot;/&gt;&lt;/marker&gt;
+&lt;marker id=&quot;rf-aa&quot; markerWidth=&quot;9&quot; markerHeight=&quot;7&quot; refX=&quot;7&quot; refY=&quot;3.5&quot; orient=&quot;auto&quot;&gt;&lt;path d=&quot;M0,0 L7,3.5 L0,7 Z&quot; class=&quot;aha&quot;/&gt;&lt;/marker&gt;
+&lt;/defs&gt;
+&lt;!-- bracket over the whole bank --&gt;
+&lt;path class=&quot;brk&quot; d=&quot;M28,64 V56 H728 V64&quot;/&gt;
+&lt;text class=&quot;cap&quot; x=&quot;378&quot; y=&quot;48&quot; text-anchor=&quot;middle&quot;&gt;Regs — Vec 16 (BitVector 32)&lt;/text&gt;
+&lt;!-- 16 cells --&gt;
+&lt;rect class=&quot;cellA&quot; x=&quot;28&quot; y=&quot;70&quot; width=&quot;40&quot; height=&quot;54&quot; rx=&quot;4&quot;/&gt;
+&lt;text class=&quot;nmA&quot; x=&quot;48&quot; y=&quot;94&quot; text-anchor=&quot;middle&quot;&gt;x0&lt;/text&gt;
+&lt;text class=&quot;zero&quot; x=&quot;48&quot; y=&quot;112&quot; text-anchor=&quot;middle&quot;&gt;≡0&lt;/text&gt;
+&lt;rect class=&quot;cell&quot; x=&quot;72&quot; y=&quot;70&quot; width=&quot;40&quot; height=&quot;54&quot; rx=&quot;4&quot;/&gt;
+&lt;text class=&quot;nm&quot; x=&quot;92&quot; y=&quot;101&quot; text-anchor=&quot;middle&quot;&gt;x1&lt;/text&gt;
+&lt;rect class=&quot;cell&quot; x=&quot;116&quot; y=&quot;70&quot; width=&quot;40&quot; height=&quot;54&quot; rx=&quot;4&quot;/&gt;
+&lt;text class=&quot;nm&quot; x=&quot;136&quot; y=&quot;101&quot; text-anchor=&quot;middle&quot;&gt;x2&lt;/text&gt;
+&lt;rect class=&quot;cell&quot; x=&quot;160&quot; y=&quot;70&quot; width=&quot;40&quot; height=&quot;54&quot; rx=&quot;4&quot;/&gt;
+&lt;text class=&quot;nm&quot; x=&quot;180&quot; y=&quot;101&quot; text-anchor=&quot;middle&quot;&gt;x3&lt;/text&gt;
+&lt;rect class=&quot;cell&quot; x=&quot;204&quot; y=&quot;70&quot; width=&quot;40&quot; height=&quot;54&quot; rx=&quot;4&quot;/&gt;
+&lt;text class=&quot;nm&quot; x=&quot;224&quot; y=&quot;101&quot; text-anchor=&quot;middle&quot;&gt;x4&lt;/text&gt;
+&lt;rect class=&quot;cell&quot; x=&quot;248&quot; y=&quot;70&quot; width=&quot;40&quot; height=&quot;54&quot; rx=&quot;4&quot;/&gt;
+&lt;text class=&quot;nm&quot; x=&quot;268&quot; y=&quot;101&quot; text-anchor=&quot;middle&quot;&gt;x5&lt;/text&gt;
+&lt;rect class=&quot;cell&quot; x=&quot;292&quot; y=&quot;70&quot; width=&quot;40&quot; height=&quot;54&quot; rx=&quot;4&quot;/&gt;
+&lt;text class=&quot;nm&quot; x=&quot;312&quot; y=&quot;101&quot; text-anchor=&quot;middle&quot;&gt;x6&lt;/text&gt;
+&lt;rect class=&quot;cell&quot; x=&quot;336&quot; y=&quot;70&quot; width=&quot;40&quot; height=&quot;54&quot; rx=&quot;4&quot;/&gt;
+&lt;text class=&quot;nm&quot; x=&quot;356&quot; y=&quot;101&quot; text-anchor=&quot;middle&quot;&gt;x7&lt;/text&gt;
+&lt;rect class=&quot;cell&quot; x=&quot;380&quot; y=&quot;70&quot; width=&quot;40&quot; height=&quot;54&quot; rx=&quot;4&quot;/&gt;
+&lt;text class=&quot;nm&quot; x=&quot;400&quot; y=&quot;101&quot; text-anchor=&quot;middle&quot;&gt;x8&lt;/text&gt;
+&lt;rect class=&quot;cell&quot; x=&quot;424&quot; y=&quot;70&quot; width=&quot;40&quot; height=&quot;54&quot; rx=&quot;4&quot;/&gt;
+&lt;text class=&quot;nm&quot; x=&quot;444&quot; y=&quot;101&quot; text-anchor=&quot;middle&quot;&gt;x9&lt;/text&gt;
+&lt;rect class=&quot;cell&quot; x=&quot;468&quot; y=&quot;70&quot; width=&quot;40&quot; height=&quot;54&quot; rx=&quot;4&quot;/&gt;
+&lt;text class=&quot;nm&quot; x=&quot;488&quot; y=&quot;101&quot; text-anchor=&quot;middle&quot;&gt;x10&lt;/text&gt;
+&lt;rect class=&quot;cell&quot; x=&quot;512&quot; y=&quot;70&quot; width=&quot;40&quot; height=&quot;54&quot; rx=&quot;4&quot;/&gt;
+&lt;text class=&quot;nm&quot; x=&quot;532&quot; y=&quot;101&quot; text-anchor=&quot;middle&quot;&gt;x11&lt;/text&gt;
+&lt;rect class=&quot;cell&quot; x=&quot;556&quot; y=&quot;70&quot; width=&quot;40&quot; height=&quot;54&quot; rx=&quot;4&quot;/&gt;
+&lt;text class=&quot;nm&quot; x=&quot;576&quot; y=&quot;101&quot; text-anchor=&quot;middle&quot;&gt;x12&lt;/text&gt;
+&lt;rect class=&quot;cell&quot; x=&quot;600&quot; y=&quot;70&quot; width=&quot;40&quot; height=&quot;54&quot; rx=&quot;4&quot;/&gt;
+&lt;text class=&quot;nm&quot; x=&quot;620&quot; y=&quot;101&quot; text-anchor=&quot;middle&quot;&gt;x13&lt;/text&gt;
+&lt;rect class=&quot;cell&quot; x=&quot;644&quot; y=&quot;70&quot; width=&quot;40&quot; height=&quot;54&quot; rx=&quot;4&quot;/&gt;
+&lt;text class=&quot;nm&quot; x=&quot;664&quot; y=&quot;101&quot; text-anchor=&quot;middle&quot;&gt;x14&lt;/text&gt;
+&lt;rect class=&quot;cell&quot; x=&quot;688&quot; y=&quot;70&quot; width=&quot;40&quot; height=&quot;54&quot; rx=&quot;4&quot;/&gt;
+&lt;text class=&quot;nm&quot; x=&quot;708&quot; y=&quot;101&quot; text-anchor=&quot;middle&quot;&gt;x15&lt;/text&gt;
+&lt;!-- write port: value up into the bank --&gt;
+&lt;path class=&quot;wire&quot; d=&quot;M180,220 V124&quot; marker-end=&quot;url(#rf-a)&quot;/&gt;
+&lt;text class=&quot;prd&quot; x=&quot;180&quot; y=&quot;230&quot; text-anchor=&quot;middle&quot;&gt;writeReg rd x&lt;/text&gt;
+&lt;!-- read ports: values down out of the bank --&gt;
+&lt;path class=&quot;wire&quot; d=&quot;M470,124 V210&quot; marker-end=&quot;url(#rf-a)&quot;/&gt;
+&lt;text class=&quot;prd&quot; x=&quot;470&quot; y=&quot;230&quot; text-anchor=&quot;middle&quot;&gt;readReg rs1 → rs1v&lt;/text&gt;
+&lt;path class=&quot;wire&quot; d=&quot;M632,124 V210&quot; marker-end=&quot;url(#rf-a)&quot;/&gt;
+&lt;text class=&quot;prd&quot; x=&quot;632&quot; y=&quot;230&quot; text-anchor=&quot;middle&quot;&gt;readReg rs2 → rs2v&lt;/text&gt;
+&lt;/svg&gt;
+&lt;figcaption style=&quot;text-align:center;color:var(--fg-dim);font-size:.9rem;margin-top:.85rem;font-family:var(--sans)&quot;&gt;The register file as the datapath sees it. The sixteen cells are the opaque &lt;code&gt;Regs&lt;/code&gt;, a &lt;code&gt;Vec 16 (BitVector 32)&lt;/code&gt;; &lt;code&gt;x0&lt;/code&gt; (accent) is the hole, &lt;code&gt;≡0&lt;/code&gt; --- &lt;code&gt;readReg&lt;/code&gt; returns zero for it and &lt;code&gt;writeReg&lt;/code&gt; discards writes to it, both keyed on the truncated index so &lt;code&gt;x16&lt;/code&gt;‥&lt;code&gt;x31&lt;/code&gt; alias &lt;code&gt;x0&lt;/code&gt;‥&lt;code&gt;x15&lt;/code&gt; and inherit the same behaviour. A five-bit &lt;code&gt;Reg&lt;/code&gt; is truncated to its low four bits (&lt;code&gt;regIndex&lt;/code&gt;) to pick a slot, so the index is an &lt;code&gt;Index 16&lt;/code&gt; that &lt;em&gt;cannot&lt;/em&gt; be out of range. One &lt;code&gt;writeReg&lt;/code&gt; port returns a fresh bank; one &lt;code&gt;readReg&lt;/code&gt;, instantiated twice, gives the two combinational read ports the datapath fetches &lt;code&gt;rs1&lt;/code&gt; and &lt;code&gt;rs2&lt;/code&gt; through.&lt;/figcaption&gt;
+&lt;/figure&gt;
+&lt;h2 id=&quot;read-old-write-new-for-free&quot;&gt;Read-old, write-new, for free&lt;/h2&gt;
+&lt;p&gt;Step back up one level, to the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;dispatch post’s&lt;/a&gt; &lt;code&gt;dataWb&lt;/code&gt;, and watch
+all three functions meet in a single cycle:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  rs1v &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; readReg &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;regs s&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;operandRs1 i&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  rs2v &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; readReg &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;regs s&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;operandRs2 i&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  dataWb rd &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    let&lt;/span&gt;&lt;span&gt; s&amp;#39; &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;advance s&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;regs&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; writeReg &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;regs s&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; rd &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;dataResult i rs1v rs2v&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;     in&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;s&amp;#39;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; busOut s&amp;#39;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Every one of them touches &lt;code&gt;regs s&lt;/code&gt; — the &lt;em&gt;current&lt;/em&gt; cycle’s bank. The two
+reads pull &lt;code&gt;rs1v&lt;/code&gt; and &lt;code&gt;rs2v&lt;/code&gt; out of it; the write builds a &lt;em&gt;new&lt;/em&gt; bank from
+it and tucks that into &lt;code&gt;s&#39;&lt;/code&gt; under &lt;code&gt;regs&lt;/code&gt;. Because &lt;code&gt;readReg&lt;/code&gt; reads the value
+the state holds &lt;em&gt;now&lt;/em&gt;, and &lt;code&gt;writeReg&lt;/code&gt; merely computes the value the state
+will hold &lt;em&gt;next&lt;/em&gt;, the two cannot collide. Even when a &lt;code&gt;DATA&lt;/code&gt; instruction
+writes the very register it read — &lt;code&gt;add x3, x3, x1&lt;/code&gt;, where &lt;code&gt;rd&lt;/code&gt; and &lt;code&gt;rs1&lt;/code&gt;
+are both &lt;code&gt;x3&lt;/code&gt; — &lt;code&gt;rs1v&lt;/code&gt; is the &lt;em&gt;old&lt;/em&gt; &lt;code&gt;x3&lt;/code&gt;, sampled before the write, and
+the new &lt;code&gt;x3&lt;/code&gt; does not exist until the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;Mealy wrapper&lt;/a&gt; clocks &lt;code&gt;s&#39;&lt;/code&gt; at
+the edge. Read-old, write-new, hazard-free, and nobody wrote a hazard
+check: it falls out of the read and the write being pure functions of the
+same value, with the “write” a separate return that only becomes state a
+cycle later.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-hazard-1&quot;&gt;&lt;a href=&quot;#fn-hazard&quot;&gt;[4]&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;p&gt;This is why the register-file design rejected a &lt;code&gt;blockRam&lt;/code&gt;-backed
+bank, and it is worth naming because it is the road not taken. A block RAM
+has a one-cycle read latency and lives at &lt;code&gt;Signal&lt;/code&gt; level; it could not be a
+field of a pure Mealy &lt;code&gt;State&lt;/code&gt;, and reading and writing the same address in
+one cycle would open exactly the read-during-write hazard the pure version
+closes by construction. Five hundred and twelve bits is small enough to
+live in fabric flip-flops with a combinational read, so it does — and the
+purity that made the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;whole engine testable&lt;/a&gt; makes its register
+hazards vanish as a side effect. The same choice buys both.&lt;/p&gt;
+&lt;h2 id=&quot;the-tests&quot;&gt;The tests&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;Test.RegFile&lt;/code&gt; is short, the way a leaf’s tests are short, and it makes the
+same quiet point the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-crc/&quot;&gt;CRC&lt;/a&gt; and the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-mem/&quot;&gt;memories&lt;/a&gt; made: a claim this
+small can be pinned down &lt;em&gt;completely&lt;/em&gt;. Its cleverest line is a generator:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;genRegs&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Gen&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Regs&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;genRegs &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; do&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ws &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;-&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Gen.&lt;/span&gt;&lt;span&gt;list &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Range.&lt;/span&gt;&lt;span&gt;linear &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 20&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;lt;$&amp;gt;&lt;/span&gt;&lt;span&gt; genReg &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;*&amp;gt;&lt;/span&gt;&lt;span&gt; genWord&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  pure &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;foldl&amp;#39; &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;\&lt;/span&gt;&lt;span&gt;rs &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;r&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; v&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; writeReg rs r v&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; initRegs ws&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Read what it does &lt;em&gt;not&lt;/em&gt; do. It builds an arbitrary register bank by drawing
+a random list of up to twenty &lt;code&gt;(register, value)&lt;/code&gt; pairs and &lt;em&gt;folding
+&lt;code&gt;writeReg&lt;/code&gt; over them&lt;/em&gt;, starting from &lt;code&gt;initRegs&lt;/code&gt; — so every &lt;code&gt;Regs&lt;/code&gt; the
+tests ever see is constructed &lt;strong&gt;only through the public door&lt;/strong&gt;. The
+generator never reaches for the &lt;code&gt;Regs&lt;/code&gt; constructor, because the constructor
+is not exported and is not the test’s to touch, exactly as the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-crc/&quot;&gt;CRC’s
+tests&lt;/a&gt; “exercise the byte-level &lt;code&gt;crc8Update&lt;/code&gt; and never reach for
+&lt;code&gt;step&lt;/code&gt;.” The wall holds even here; the properties test the bank the way a
+real caller builds it, one &lt;code&gt;writeReg&lt;/code&gt; at a time. (The &lt;code&gt;foldl&#39;&lt;/code&gt; is
+&lt;code&gt;Data.List&lt;/code&gt;’s, not the &lt;code&gt;Vec&lt;/code&gt; fold &lt;code&gt;import Clash.Prelude&lt;/code&gt; &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-crc/&quot;&gt;shadowed&lt;/a&gt; —
+&lt;code&gt;ws&lt;/code&gt; is a list — the same prelude-swap wrinkle that made the CRC tests
+reach for &lt;code&gt;L.foldl&#39;&lt;/code&gt;.)&lt;/p&gt;
+&lt;p&gt;The properties then stake down every corner of the design at once:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;testProperty &lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;read-after-write (r /= x0)&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; $&lt;/span&gt;&lt;span&gt; property &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; do&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  rs &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;-&lt;/span&gt;&lt;span&gt; forAll genRegs&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  r &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;-&lt;/span&gt;&lt;span&gt; forAll genNonZeroReg&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  v &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;-&lt;/span&gt;&lt;span&gt; forAll genWord&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  readReg &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;writeReg rs r v&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; r &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;===&lt;/span&gt;&lt;span&gt; v&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Write a value to any non-&lt;code&gt;x0&lt;/code&gt; register and read it straight back: you get
+the value, whatever the slot held before. That is the ordinary register’s
+contract — an overwrite wins — and it is the first thing to prove. Three
+more guard the &lt;code&gt;x0&lt;/code&gt; hole from all sides: &lt;code&gt;readReg rs 0 === 0&lt;/code&gt; says the read
+is always zero; &lt;code&gt;writeReg rs 0 v === rs&lt;/code&gt; says the write is a no-op, and it
+leans on the derived &lt;code&gt;Eq Regs&lt;/code&gt; to compare whole banks (the reason &lt;code&gt;Eq&lt;/code&gt; was
+on the door); and a &lt;em&gt;register independence&lt;/em&gt; property draws two selectors
+with distinct low-four indices and checks that writing one leaves the
+other’s read untouched — no write scribbles on a neighbour. One pins the
+power-up state, &lt;code&gt;readReg initRegs r === 0&lt;/code&gt; for every name. And two pin the
+truncation itself:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;testProperty &lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;x16..x31 alias x0..x15&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; $&lt;/span&gt;&lt;span&gt; property &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; do&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  r &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;-&lt;/span&gt;&lt;span&gt; forAll genNonZeroReg &lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; x1..x15&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  v &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;-&lt;/span&gt;&lt;span&gt; forAll genWord&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  readReg &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;writeReg initRegs &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;r &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;+&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 16&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; v&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; r &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;===&lt;/span&gt;&lt;span&gt; v&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;testCase &lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;x16 aliases x0 (write discarded)&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  $&lt;/span&gt;&lt;span&gt; writeReg initRegs &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;16&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 42&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  @?=&lt;/span&gt;&lt;span&gt; initRegs&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The property writes to &lt;code&gt;r + 16&lt;/code&gt; — an out-of-window selector — and reads
+back through &lt;code&gt;r&lt;/code&gt;, demanding the value land in the twin slot; the &lt;a rel=&quot;external&quot; href=&quot;https://hedgehog.qa&quot;&gt;Hedgehog&lt;/a&gt;
+run fires it across every &lt;code&gt;r&lt;/code&gt; in &lt;code&gt;x1..x15&lt;/code&gt;. The &lt;code&gt;HUnit&lt;/code&gt; case nails the one
+corner the property cannot reach, since &lt;code&gt;x0&lt;/code&gt; has no non-zero twin to read:
+writing &lt;code&gt;42&lt;/code&gt; to &lt;code&gt;x16&lt;/code&gt;, which aliases &lt;code&gt;x0&lt;/code&gt;, must leave the bank &lt;em&gt;identical&lt;/em&gt;,
+because the write is discarded. Six checks and a witness, and between them
+they describe the whole surface of the leaf — the bijection on
+&lt;code&gt;x1..x15&lt;/code&gt;, the hole at &lt;code&gt;x0&lt;/code&gt;, the aliasing of everything above — with
+nothing left to guess.&lt;/p&gt;
+&lt;h2 id=&quot;what-we-read&quot;&gt;What we read&lt;/h2&gt;
+&lt;p&gt;The last pure leaf, opened whole. A four-name door that exports one type
+and three verbs, and exports the type &lt;em&gt;opaquely&lt;/em&gt;, so a &lt;code&gt;Vec 16 (BitVector 32)&lt;/code&gt; can be sealed behind the wall and touched only through &lt;code&gt;initRegs&lt;/code&gt;,
+&lt;code&gt;readReg&lt;/code&gt;, and &lt;code&gt;writeReg&lt;/code&gt;. A single import — &lt;code&gt;Tamal.Isa&lt;/code&gt;, for the name of
+a selector — and, pointedly, not the engine whose registers it holds: the
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-mem/&quot;&gt;memories’&lt;/a&gt; discipline, cashed as promised, a leaf built before the
+&lt;code&gt;step&lt;/code&gt; that would use it. A &lt;code&gt;newtype&lt;/code&gt; bank of five hundred and twelve bits
+that powers up to sixteen zeros and, deriving &lt;code&gt;NFDataX&lt;/code&gt;, &lt;em&gt;is&lt;/em&gt; the engine’s
+register flip-flops in its &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;Mealy state&lt;/a&gt;. A private &lt;code&gt;regIndex&lt;/code&gt; that
+truncates a five-bit name to a four-bit slot, so the index is an &lt;code&gt;Index 16&lt;/code&gt;
+that cannot be out of range and the out-of-window &lt;code&gt;x16..x31&lt;/code&gt; alias their
+low-four twins rather than trap — totality by construction, room to grow
+left in the fifth bit. &lt;code&gt;readReg&lt;/code&gt;’s hole at &lt;code&gt;x0&lt;/code&gt;, the hardwired zero that
+made “no operand” &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;free a post ago&lt;/a&gt;; &lt;code&gt;writeReg&lt;/code&gt;’s discarded write and
+its functional update, a fresh bank &lt;em&gt;returned&lt;/em&gt; rather than a cell &lt;em&gt;mutated&lt;/em&gt;,
+the primer’s mapping-not-procedure one last time. One &lt;code&gt;x0&lt;/code&gt; invariant, kept
+in one place and keyed on the truncated index so aliasing inherits it. The
+read-old/write-new hazard-freedom that falls out of a pure step for nothing.
+And a test file that builds every bank through the public door and pins the
+bijection, the hole, and the aliasing from six directions at once.&lt;/p&gt;
+&lt;p&gt;The register file hands the datapath two values every cycle, and those
+values do not sit idle. &lt;code&gt;rs1v&lt;/code&gt; and &lt;code&gt;rs2v&lt;/code&gt; — the two reads &lt;code&gt;dataWb&lt;/code&gt; took
+before it wrote — flow straight on into the one box the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;dispatch
+post&lt;/a&gt; still had shut over its writeback: &lt;code&gt;dataResult&lt;/code&gt;, the ALU, which
+turns two register values and an instruction into the one value that comes
+back to &lt;code&gt;writeReg&lt;/code&gt;. And the same two reads feed the branch comparator that
+decided whether a jump was taken. Both were named and left closed. Next we
+open them together — &lt;code&gt;Tamal.Alu&lt;/code&gt; and &lt;code&gt;Tamal.Branch&lt;/code&gt;, the add and the
+&lt;code&gt;and&lt;/code&gt; and the taken branch — the compute layer that sits between the two
+ports we just read, consuming what one hands out and producing what the
+other takes in.&lt;/p&gt;
+&lt;section class=&quot;footnotes&quot;&gt;
+&lt;ol class=&quot;footnotes-list&quot;&gt;
+&lt;li id=&quot;fn-newtype&quot;&gt;
+&lt;p&gt;&lt;code&gt;newtype&lt;/code&gt; rather than &lt;code&gt;data&lt;/code&gt; is a deliberate, zero-cost choice.
+A &lt;code&gt;newtype&lt;/code&gt; may wrap exactly one field, and Haskell guarantees it is
+&lt;em&gt;erased&lt;/em&gt; at compile time: at runtime a &lt;code&gt;Regs&lt;/code&gt; &lt;strong&gt;is&lt;/strong&gt; a &lt;code&gt;Vec 16 (BitVector 32)&lt;/code&gt;, with no box, no tag, no indirection — the wrapper exists only in the
+type-checker, where it does the work of keeping the two types distinct and
+the constructor private. So the encapsulation the opaque export buys is
+free: it costs a name in the type system and nothing in the gates. Clash
+lowers the &lt;code&gt;Vec 16&lt;/code&gt; to a bank of flip-flops exactly as it would an
+unwrapped vector, and the &lt;code&gt;Regs&lt;/code&gt; label vanishes before synthesis ever sees
+it. You get the wall without paying for a wall. &lt;a href=&quot;#fr-newtype-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id=&quot;fn-index&quot;&gt;
+&lt;p&gt;The widths line up by type inference, read outside in. &lt;code&gt;regIndex&lt;/code&gt;
+is annotated to return &lt;code&gt;Index 16&lt;/code&gt;, and the &lt;code&gt;BitSize&lt;/code&gt; of &lt;code&gt;Index 16&lt;/code&gt; is &lt;code&gt;4&lt;/code&gt;
+(four bits address sixteen slots). That return type fixes &lt;code&gt;unpack :: BitVector 4 -&amp;gt; Index 16&lt;/code&gt;, which in turn fixes &lt;code&gt;truncateB r :: BitVector 4&lt;/code&gt;
+— &lt;code&gt;truncateB&lt;/code&gt; is polymorphic in its output width, so the surrounding type
+is what tells it to keep four bits rather than three or five. Nothing here
+names the number four; it is deduced from &lt;code&gt;Index 16&lt;/code&gt;, so changing the bank
+to &lt;code&gt;Vec 32&lt;/code&gt; and the selector’s window would re-derive the truncation width
+automatically. The type carries the arithmetic, and the code only says
+“narrow to fit.” &lt;a href=&quot;#fr-index-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id=&quot;fn-prim&quot;&gt;
+&lt;p&gt;&lt;code&gt;(!!) :: Vec n a -&amp;gt; Index n -&amp;gt; a&lt;/code&gt; and &lt;code&gt;replace :: Index n -&amp;gt; a -&amp;gt; Vec n a -&amp;gt; Vec n a&lt;/code&gt; are Clash’s &lt;em&gt;total&lt;/em&gt; vector primitives: because the
+index has type &lt;code&gt;Index n&lt;/code&gt;, there is no out-of-range value to pass and thus no
+partial case, no runtime bounds fault. In hardware &lt;code&gt;(!!)&lt;/code&gt; on a &lt;code&gt;Vec 16&lt;/code&gt;
+lowers to a 16-to-1 multiplexer selected by the four index bits, and
+&lt;code&gt;readReg&lt;/code&gt;’s &lt;code&gt;x0&lt;/code&gt; guard is a further two-way mux tying the output to constant
+zero when the index is zero. &lt;code&gt;writeReg&lt;/code&gt;’s &lt;code&gt;replace&lt;/code&gt; lowers to sixteen
+thirty-two-bit registers, each with a load-enable asserted when &lt;code&gt;idx&lt;/code&gt;
+equals its position &lt;em&gt;and&lt;/em&gt; &lt;code&gt;idx&lt;/code&gt; is non-zero — which is precisely why slot
+zero is never written. All of it is combinational logic over five hundred
+and twelve flip-flops; none of it is a &lt;code&gt;blockRam&lt;/code&gt;, and that is the point. &lt;a href=&quot;#fr-prim-1&quot;&gt;↩&lt;/a&gt; &lt;a href=&quot;#fr-prim-2&quot;&gt;↩2&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id=&quot;fn-hazard&quot;&gt;
+&lt;p&gt;The hazard-freedom is a property of &lt;em&gt;values&lt;/em&gt;, not of careful
+sequencing. &lt;code&gt;readReg (regs s) rs&lt;/code&gt; and &lt;code&gt;writeReg (regs s) rd v&lt;/code&gt; are both
+functions of the same immutable &lt;code&gt;regs s&lt;/code&gt;; neither can observe the other,
+because there is no mutable cell for one to write and the other to read.
+The new bank is a distinct value that the caller places into &lt;code&gt;s&#39;&lt;/code&gt;, and only
+the clock edge — the one genuinely stateful event, owned by the &lt;code&gt;mealy&lt;/code&gt;
+wrapper a level up — turns &lt;code&gt;s&#39;&lt;/code&gt; into the next &lt;code&gt;regs s&lt;/code&gt;. So “read the old,
+write the new” is not a rule the register file implements; it is the only
+thing that &lt;em&gt;can&lt;/em&gt; happen when reads and writes are pure and state advances
+once per cycle. A conventional imperative register file has to design
+around the write-during-read case; this one cannot express it. &lt;a href=&quot;#fr-hazard-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/section&gt;
+</content>
+  </entry>
+  
+</feed>

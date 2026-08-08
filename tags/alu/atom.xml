@@ -1,0 +1,600 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+  <title>Felipe Balbi</title>
+  <subtitle>Notes on embedded systems, Rust, and the craft of writing software.</subtitle>
+  <link href="https://balbi.sh/tags/alu/atom.xml" rel="self" type="application/atom+xml"/>
+  <link href="https://balbi.sh"/>
+  <generator uri="https://www.getzola.org/">Zola</generator>
+  <updated>2026-08-07T09:00:00+00:00</updated>
+  <id>https://balbi.sh/tags/alu/atom.xml</id>
+  
+  <entry xml:lang="en">
+    <title>Tamal: Add, And, and the Taken Branch</title>
+    <published>2026-08-07T09:00:00+00:00</published>
+    <updated>2026-08-07T09:00:00+00:00</updated>
+    <author><name>Felipe Balbi</name></author>
+    <link rel="alternate" href="https://balbi.sh/posts/tamal-compute/" type="text/html"/>
+    <id>https://balbi.sh/posts/tamal-compute/</id>
+    <summary type="html">&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-regfile/&quot;&gt;register file&lt;/a&gt; handed the datapath two values, and we
+followed them to the door of the next box. &lt;code&gt;rs1v&lt;/code&gt; and &lt;code&gt;rs2v&lt;/code&gt; — read
+through one register port, bound for the other — do not travel straight
+from the read to the write. Between the two ports sits a layer that turns
+them into something: the value that comes back to &lt;code&gt;writeReg&lt;/code&gt;, or the single
+bit that decides whether to jump. That layer is this post. The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;dispatch
+post&lt;/a&gt; held two boxes shut over exactly these two acts — &lt;code&gt;dataResult&lt;/code&gt;,
+the value its &lt;code&gt;dataWb&lt;/code&gt; wrote, and &lt;code&gt;branchTaken&lt;/code&gt;, the decision its &lt;code&gt;branch&lt;/code&gt;
+turned on — and we open both here, in the two small modules that hold
+them: &lt;code&gt;Tamal.Alu&lt;/code&gt; and &lt;code&gt;Tamal.Branch&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;These are leaves, read whole — &lt;code&gt;Alu&lt;/code&gt; is eighty-six lines, &lt;code&gt;Branch&lt;/code&gt; is
+thirty-four — and together they are the engine’s &lt;strong&gt;compute layer&lt;/strong&gt;: pure,
+combinational, single-cycle functions of operand &lt;em&gt;values&lt;/em&gt;. Neither knows
+there is a register file above it or an engine around it; each takes
+thirty-two-bit values and answers. This is where the machine finally does
+arithmetic — and where, in two import lines, it collides with the rest of
+the language over what to call it.&lt;/p&gt;</summary>
+    
+    <content type="html">&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-regfile/&quot;&gt;register file&lt;/a&gt; handed the datapath two values, and we
+followed them to the door of the next box. &lt;code&gt;rs1v&lt;/code&gt; and &lt;code&gt;rs2v&lt;/code&gt; — read
+through one register port, bound for the other — do not travel straight
+from the read to the write. Between the two ports sits a layer that turns
+them into something: the value that comes back to &lt;code&gt;writeReg&lt;/code&gt;, or the single
+bit that decides whether to jump. That layer is this post. The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;dispatch
+post&lt;/a&gt; held two boxes shut over exactly these two acts — &lt;code&gt;dataResult&lt;/code&gt;,
+the value its &lt;code&gt;dataWb&lt;/code&gt; wrote, and &lt;code&gt;branchTaken&lt;/code&gt;, the decision its &lt;code&gt;branch&lt;/code&gt;
+turned on — and we open both here, in the two small modules that hold
+them: &lt;code&gt;Tamal.Alu&lt;/code&gt; and &lt;code&gt;Tamal.Branch&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;These are leaves, read whole — &lt;code&gt;Alu&lt;/code&gt; is eighty-six lines, &lt;code&gt;Branch&lt;/code&gt; is
+thirty-four — and together they are the engine’s &lt;strong&gt;compute layer&lt;/strong&gt;: pure,
+combinational, single-cycle functions of operand &lt;em&gt;values&lt;/em&gt;. Neither knows
+there is a register file above it or an engine around it; each takes
+thirty-two-bit values and answers. This is where the machine finally does
+arithmetic — and where, in two import lines, it collides with the rest of
+the language over what to call it.&lt;/p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;/span&gt;&lt;h2 id=&quot;two-boxes-one-kind-of-thing&quot;&gt;Two boxes, one kind of thing&lt;/h2&gt;
+&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;dispatch post&lt;/a&gt; left seven leaves shut, and two of them sat over
+the only places &lt;code&gt;Exec&lt;/code&gt; actually &lt;em&gt;computed&lt;/em&gt;. One was &lt;code&gt;dataResult&lt;/code&gt;, called
+from &lt;code&gt;dataWb&lt;/code&gt; — the handler that &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;thirteen DATA instructions&lt;/a&gt; all
+funnelled through, each supplying a destination register and letting the
+box work out the value. The other was &lt;code&gt;branchTaken&lt;/code&gt;, called from &lt;code&gt;branch&lt;/code&gt;
+— the helper the four conditional branches deferred their condition to
+while the engine kept the program-counter arithmetic for itself. We open
+them together because they are the same kind of thing: a pure, total,
+single-cycle function of two register values, no state, no clock, no wire.
+The difference is only in what they return — one a thirty-two-bit value,
+the other a single &lt;code&gt;Bool&lt;/code&gt; — and that difference is exactly the line
+between the DATA group’s compute and the CTRL group’s branches.&lt;/p&gt;
+&lt;p&gt;They come as two modules, and the split is deliberate: one concern each,
+the way the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-isa/&quot;&gt;ISA&lt;/a&gt;, the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-crc/&quot;&gt;CRC&lt;/a&gt;, and the rest are one concern each.&lt;/p&gt;
+&lt;p&gt;That has been the shape of this whole descent: the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;engine’s map&lt;/a&gt;
+named eight boxes and opened one, and every post since has opened the next
+in the order the engine reaches for it — &lt;code&gt;decode&lt;/code&gt; first, then the
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-regfile/&quot;&gt;registers&lt;/a&gt; its operands named, and now the compute those
+registers feed. Two boxes fall in one post here because they are siblings:
+both are handed the same pair of register reads, both answer in a single
+cycle, and only the shape of the answer — a value, or a verdict — tells
+them apart.&lt;/p&gt;
+&lt;p&gt;The ALU is the larger story, so we read it first, all the way down — and
+its very first two lines are a puzzle worth stopping on.&lt;/p&gt;
+&lt;h2 id=&quot;the-two-layer-plan&quot;&gt;The two-layer plan&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;Tamal.Alu&lt;/code&gt;’s door lists one type and two functions:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;module&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Tamal.Alu&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; AluOp&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;..&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; alu&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dataResult&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  )&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; where&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;AluOp&lt;/code&gt; is exported with &lt;code&gt;(..)&lt;/code&gt; — all its constructors, because callers
+name them — and then &lt;code&gt;alu&lt;/code&gt; and &lt;code&gt;dataResult&lt;/code&gt;. Two functions for one
+module is the shape to notice: they are two &lt;em&gt;layers&lt;/em&gt;, and the layering is
+the whole design. &lt;code&gt;alu&lt;/code&gt; is the thin core — give it an operation and two
+values, it computes. &lt;code&gt;dataResult&lt;/code&gt; is the wrapper — give it a decoded
+&lt;code&gt;Instr&lt;/code&gt; and two register values, and it works out &lt;em&gt;which&lt;/em&gt; operation, pulls
+any immediate out of the instruction, and calls &lt;code&gt;alu&lt;/code&gt;. The core knows
+arithmetic; the wrapper knows the instruction set. Keeping them apart is
+what let the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;dispatch post’s&lt;/a&gt; &lt;code&gt;dataWb&lt;/code&gt; hand the whole instruction to
+&lt;code&gt;dataResult&lt;/code&gt; and collapse thirteen arms into one: the wrapper reads the
+operation off the instruction, so no caller has to.&lt;/p&gt;
+&lt;h2 id=&quot;two-import-lines-two-collisions&quot;&gt;Two import lines, two collisions&lt;/h2&gt;
+&lt;p&gt;Under the header sit three imports, and two of them carry scars:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;import&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Clash.Prelude&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; hiding&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;And&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Xor&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;import&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Tamal.Isa&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Instr&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;import&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; qualified&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Tamal.Isa&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; as&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Isa&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-crc/&quot;&gt;prelude swap&lt;/a&gt; is the line every block carries — but here it
+comes with a &lt;code&gt;hiding (And, Xor)&lt;/code&gt; clause, and that clause is the first
+symptom of a collision this module walks straight into on purpose. The
+ALU wants to name its operations the obvious way: &lt;code&gt;Add&lt;/code&gt;, &lt;code&gt;Sub&lt;/code&gt;, &lt;code&gt;And&lt;/code&gt;,
+&lt;code&gt;Or&lt;/code&gt;, &lt;code&gt;Xor&lt;/code&gt;. That vocabulary is the plainest in all of computing — and it
+is already spoken for, twice.&lt;/p&gt;
+&lt;p&gt;The first claimant is the standard library. Modern &lt;code&gt;Data.Bits&lt;/code&gt; ships
+&lt;code&gt;newtype&lt;/code&gt; wrappers called &lt;code&gt;And&lt;/code&gt; and &lt;code&gt;Xor&lt;/code&gt; — little monoid boxes whose
+&lt;code&gt;&amp;lt;&amp;gt;&lt;/code&gt; is bitwise-and and bitwise-xor, handy for folding a pile of bits down
+with &lt;code&gt;mconcat&lt;/code&gt; — and &lt;code&gt;Clash.Prelude&lt;/code&gt; re-exports them.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-databits-1&quot;&gt;&lt;a href=&quot;#fn-databits&quot;&gt;[1]&lt;/a&gt;&lt;/sup&gt; So the
+moment &lt;code&gt;AluOp&lt;/code&gt; declares a constructor &lt;code&gt;And&lt;/code&gt;, it clashes with the &lt;code&gt;And&lt;/code&gt; the
+prelude just brought in. The module’s answer is to slam that door:
+&lt;code&gt;hiding (And, Xor)&lt;/code&gt; drops those two names from the import, leaving &lt;code&gt;AluOp&lt;/code&gt;’s
+constructors the only &lt;code&gt;And&lt;/code&gt; and &lt;code&gt;Xor&lt;/code&gt; in scope. The core never needed the
+wrappers anyway — it does bitwise work with the &lt;em&gt;operators&lt;/em&gt; &lt;code&gt;.&amp;amp;.&lt;/code&gt; and
+&lt;code&gt;xor&lt;/code&gt;, not the monoids. And &lt;code&gt;Or&lt;/code&gt; escapes the whole affair, because
+&lt;code&gt;Data.Bits&lt;/code&gt; spells its or-wrapper &lt;code&gt;Ior&lt;/code&gt;, not &lt;code&gt;Or&lt;/code&gt;, so there is nothing to
+hide.&lt;/p&gt;
+&lt;p&gt;The second claimant is closer to home: the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-isa/&quot;&gt;instruction set&lt;/a&gt; itself.
+&lt;code&gt;Tamal.Isa&lt;/code&gt;’s &lt;code&gt;Instr&lt;/code&gt; has constructors &lt;code&gt;Add&lt;/code&gt; and &lt;code&gt;Sub&lt;/code&gt; — the DATA
+opcodes — and &lt;code&gt;AluOp&lt;/code&gt; wants those exact names for its operations. Two
+types in scope, each with an &lt;code&gt;Add&lt;/code&gt;: an unresolvable ambiguity. So &lt;code&gt;Instr&lt;/code&gt;
+comes in &lt;em&gt;qualified&lt;/em&gt;, &lt;code&gt;import qualified Tamal.Isa as Isa&lt;/code&gt;, and every
+instruction constructor must be written &lt;code&gt;Isa.Add&lt;/code&gt;, &lt;code&gt;Isa.Sub&lt;/code&gt;, and so on,
+while the bare &lt;code&gt;Add&lt;/code&gt; and &lt;code&gt;Sub&lt;/code&gt; belong to &lt;code&gt;AluOp&lt;/code&gt;. (The unqualified
+&lt;code&gt;import Tamal.Isa (Instr)&lt;/code&gt; on the line between is just so the &lt;em&gt;type&lt;/em&gt;
+&lt;code&gt;Instr&lt;/code&gt; can be named without a prefix in the signatures.)&lt;/p&gt;
+&lt;p&gt;Read together, the two lines are not clumsiness to apologise for — they
+are the two-layer split showing through the namespace. &lt;code&gt;AluOp&lt;/code&gt; and &lt;code&gt;Instr&lt;/code&gt;
+both need a word for “add,” because they live at two different levels: one
+is a &lt;em&gt;hardware operation&lt;/em&gt;, the other an &lt;em&gt;instruction&lt;/em&gt;. The whole job of
+&lt;code&gt;dataResult&lt;/code&gt; is to translate the second into the first — &lt;code&gt;Isa.Add&lt;/code&gt; into
+&lt;code&gt;alu Add&lt;/code&gt; — and a translator between two vocabularies only exists because
+the two vocabularies are, deliberately, distinct. The collision is the
+design, made visible at the import list.&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;When two layers both need the word “add,” the import list is where you
+can see the seam between them.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;h2 id=&quot;the-core-eight-total-operations&quot;&gt;The core: eight total operations&lt;/h2&gt;
+&lt;p&gt;With the names sorted out, the enum is plain:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; AluOp&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Add&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Sub&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; And&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Or&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Xor&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Sll&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Srl&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Sra&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  deriving&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; stock&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Generic&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Show&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Eq&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Enum&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bounded&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  deriving&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; anyclass&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;NFDataX&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Eight operations: add, subtract, the three bitwise ops, and three shifts
+— shift-left-logical, shift-right-logical, shift-right-arithmetic. The
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;deriving refrain&lt;/a&gt; is the usual four, with two additions worth
+naming: &lt;code&gt;Enum&lt;/code&gt; and &lt;code&gt;Bounded&lt;/code&gt;. Those two let a caller write
+&lt;code&gt;[minBound .. maxBound]&lt;/code&gt; and get &lt;em&gt;every&lt;/em&gt; &lt;code&gt;AluOp&lt;/code&gt; in order — which is
+precisely how the tests will enumerate the operations later, and a small
+example of a derived instance bought for a specific downstream use.&lt;/p&gt;
+&lt;p&gt;The core itself is one total &lt;code&gt;case&lt;/code&gt;:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;alu&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; AluOp&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;alu op r1 r2 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; case&lt;/span&gt;&lt;span&gt; op &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;of&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  Add&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; r1 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;+&lt;/span&gt;&lt;span&gt; r2&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  Sub&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; r1 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&lt;/span&gt;&lt;span&gt; r2&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  And&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; r1 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&amp;amp;.&lt;/span&gt;&lt;span&gt; r2&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  Or&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; r1 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.|.&lt;/span&gt;&lt;span&gt; r2&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  Xor&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; r1 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;`&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;xor&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;`&lt;/span&gt;&lt;span&gt; r2&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  Sll&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; r1 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;`&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;shiftL&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;`&lt;/span&gt;&lt;span&gt; sh&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  Srl&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; r1 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;`&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;shiftR&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;`&lt;/span&gt;&lt;span&gt; sh&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  Sra&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; pack &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;shiftR &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;unpack r1 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Signed&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; sh&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; where&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;  sh&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Int&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  sh &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; fromIntegral &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;unpack &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;truncateB r2&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Unsigned&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 5&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-haskell-primer/&quot;&gt;type is half the documentation&lt;/a&gt;: an operation and two
+thirty-two-bit values in, one out, always — no &lt;code&gt;Maybe&lt;/code&gt;, no failure. The
+first five arms are the ones that need no comment: &lt;code&gt;Add&lt;/code&gt; and &lt;code&gt;Sub&lt;/code&gt; are
+&lt;code&gt;BitVector&lt;/code&gt;’s &lt;code&gt;Num&lt;/code&gt;, wrapping modulo $2^{32}$; &lt;code&gt;And&lt;/code&gt;, &lt;code&gt;Or&lt;/code&gt;, &lt;code&gt;Xor&lt;/code&gt; are the
+operators &lt;code&gt;.&amp;amp;.&lt;/code&gt;, &lt;code&gt;.|.&lt;/code&gt;, &lt;code&gt;`xor`&lt;/code&gt; the module hid the wrappers to keep
+clear. That &lt;code&gt;Sub&lt;/code&gt; is &lt;code&gt;r1 - r2&lt;/code&gt; and nothing fancier is the same
+two’s-complement fact the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;branch offset&lt;/a&gt; leaned on and the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-crc/&quot;&gt;CRC&lt;/a&gt;
+met in its own algebra: subtraction is addition of the negation, one
+operation on the hardware, which is why the tests can assert
+&lt;code&gt;alu Sub a b === alu Add a (complement b + 1)&lt;/code&gt; and have it hold by
+construction.&lt;/p&gt;
+&lt;p&gt;The shifts are where the close reading earns its keep. All three take their
+distance from &lt;code&gt;sh&lt;/code&gt;, and &lt;code&gt;sh&lt;/code&gt; is defined once in the &lt;code&gt;where&lt;/code&gt;: the &lt;strong&gt;low five
+bits of operand B&lt;/strong&gt;, &lt;code&gt;truncateB r2&lt;/code&gt; narrowed to a &lt;code&gt;BitVector 5&lt;/code&gt;, unpacked to
+an &lt;code&gt;Unsigned 5&lt;/code&gt;, and read as an &lt;code&gt;Int&lt;/code&gt; in &lt;code&gt;0..31&lt;/code&gt;. Masking the shift amount
+to five bits is a RISC-V habit with a real payoff — a five-bit count can
+only ask for a shift of zero through thirty-one, so a shift by thirty-two or
+more is &lt;em&gt;impossible to express&lt;/em&gt;, and the “shift wider than the word”
+undefined behaviour that haunts C simply has no encoding here. A shift by 32
+masks to a shift by 0; the operation stays total because its argument was
+range-limited before it arrived.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-mask-1&quot;&gt;&lt;a href=&quot;#fn-mask&quot;&gt;[2]&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;p&gt;Then the split between &lt;code&gt;Srl&lt;/code&gt; and &lt;code&gt;Sra&lt;/code&gt;, which is the subtlest line in the
+module. &lt;code&gt;Srl&lt;/code&gt; is &lt;code&gt;r1 `shiftR` sh&lt;/code&gt; — and &lt;code&gt;BitVector&lt;/code&gt;’s &lt;code&gt;shiftR&lt;/code&gt; is
+&lt;strong&gt;logical&lt;/strong&gt;, filling from the top with zeros. &lt;code&gt;Sra&lt;/code&gt; wants the &lt;em&gt;arithmetic&lt;/em&gt;
+shift, the one that fills with copies of the sign bit so that shifting a
+negative number right divides it. &lt;code&gt;BitVector&lt;/code&gt; has no sign to preserve, so
+&lt;code&gt;Sra&lt;/code&gt; borrows one: &lt;code&gt;unpack r1 :: Signed 32&lt;/code&gt; reinterprets the same
+thirty-two bits as a &lt;em&gt;signed&lt;/em&gt; number, &lt;code&gt;shiftR&lt;/code&gt; on &lt;code&gt;Signed&lt;/code&gt; sign-fills, and
+&lt;code&gt;pack&lt;/code&gt; puts the bits back as a &lt;code&gt;BitVector&lt;/code&gt;. Nothing moved but the &lt;em&gt;type&lt;/em&gt;.
+The bits are identical going in; reading them as &lt;code&gt;Signed&lt;/code&gt; is what makes the
+shift arithmetic, and reading them back as &lt;code&gt;BitVector&lt;/code&gt; is what returns them
+to the untyped wires the rest of the datapath speaks.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-sra-1&quot;&gt;&lt;a href=&quot;#fn-sra&quot;&gt;[3]&lt;/a&gt;&lt;/sup&gt; It is the
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-crc/&quot;&gt;CRC’s&lt;/a&gt; “the kind of value is part of the contract” turned into a tool:
+when the operation needs a sign, the code manufactures one by changing how
+the bits are read, for exactly one expression, and changes it back.&lt;/p&gt;
+&lt;p&gt;And notice what is &lt;em&gt;not&lt;/em&gt; in the &lt;code&gt;case&lt;/code&gt;: a ninth arm, an error, a reserved
+op. &lt;code&gt;AluOp&lt;/code&gt; has eight constructors and &lt;code&gt;alu&lt;/code&gt; handles eight; it is total
+with nothing left over. That is only possible because the one reserved shift
+encoding — the &lt;code&gt;0b11&lt;/code&gt; op field — never reaches here: the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-isa/&quot;&gt;instruction
+set&lt;/a&gt; traps it at decode, the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-isa/&quot;&gt;&lt;code&gt;SHIFT&lt;/code&gt; op &lt;code&gt;0b11&lt;/code&gt; that the isa post’s
+test pinned&lt;/a&gt;. The reserved case is handled one layer out, at the
+decoder, so the core can be a clean eight-way truth table — which in
+hardware is exactly what it becomes, a bank of adders and shifters and gate
+arrays with &lt;code&gt;op&lt;/code&gt; selecting one.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-lion-1&quot;&gt;&lt;a href=&quot;#fn-lion&quot;&gt;[4]&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;p&gt;And a truth table computes &lt;em&gt;everything at once&lt;/em&gt;. There is no clock inside
+&lt;code&gt;alu&lt;/code&gt; and no sequencing — the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-haskell-primer/&quot;&gt;primer’s&lt;/a&gt; combinational logic — so
+every arm’s gates exist and run every cycle: the adder adds, the shifters
+shift, the gate arrays and-or-xor in parallel, and the &lt;code&gt;case&lt;/code&gt; is a
+multiplexer at the &lt;em&gt;output&lt;/em&gt; that keeps the one result &lt;code&gt;op&lt;/code&gt; asked for and
+discards the rest. The apparent waste is the shape of hardware, and it is
+also why the whole of &lt;code&gt;alu&lt;/code&gt; resolves inside the single &lt;code&gt;Exec&lt;/code&gt; cycle the
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;dispatch post&lt;/a&gt; spent on a DATA instruction: one operation chosen from
+eight computed, no time borrowed.&lt;/p&gt;
+&lt;h2 id=&quot;the-wrapper-resolving-operand-b&quot;&gt;The wrapper: resolving operand B&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;alu&lt;/code&gt; computes; it does not know an instruction from a hole in the ground.
+&lt;code&gt;dataResult&lt;/code&gt; is the layer that does, and it is where the DATA group’s
+compute opcodes fold onto the core’s eight operations:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;dataResult&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Instr&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;dataResult instr rs1v rs2v &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; case&lt;/span&gt;&lt;span&gt; instr &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;of&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  Isa.&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;LoadImm&lt;/span&gt;&lt;span&gt; _ imm &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span&gt; signExtend imm&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  Isa.&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Lui&lt;/span&gt;&lt;span&gt; _ imm21 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;zeroExtend imm21 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; `&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;shiftL&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;`&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 11&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  Isa.&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Mov&lt;/span&gt;&lt;span&gt; _ _ &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span&gt; rs1v&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  Isa.&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Add&lt;/span&gt;&lt;span&gt; _ _ _ &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span&gt; alu &lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Add&lt;/span&gt;&lt;span&gt; rs1v rs2v&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  Isa.&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Addi&lt;/span&gt;&lt;span&gt; _ _ imm &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span&gt; alu &lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Add&lt;/span&gt;&lt;span&gt; rs1v &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;signExtend imm&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;  --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; … Sub, And_/Andi, Or_/Ori, Xor_/Xori, all the same shape …&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  Isa.&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Shift&lt;/span&gt;&lt;span&gt; _ _ shOp amt &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span&gt; alu &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;toAluShift shOp&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; rs1v &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;zeroExtend amt&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  _ &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; BUS / CTRL / RDSR: never routed here by the Engine&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; where&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;  toAluShift&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 2&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; AluOp&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  toAluShift &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; \&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;case&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;    0b00&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Sll&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;    0b01&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Srl&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    _ &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Sra&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; 0b10; 0b11 is unreachable (decode traps it)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Read the arms in three groups. The first three &lt;em&gt;bypass&lt;/em&gt; &lt;code&gt;alu&lt;/code&gt; entirely,
+because none of them is arithmetic — they are ways to get a &lt;em&gt;constant&lt;/em&gt;, or
+a copy, into a register. &lt;code&gt;LoadImm&lt;/code&gt; sign-extends its twenty-one-bit
+immediate, so one instruction reaches the whole signed-twenty-one range
+(&lt;code&gt;li rd, -1&lt;/code&gt; in a single word); &lt;code&gt;Lui&lt;/code&gt; places the upper immediate for the
+two-instruction constants; and &lt;code&gt;Mov&lt;/code&gt; is the degenerate case, an operation
+with nothing to compute — it copies &lt;code&gt;rs1v&lt;/code&gt;, ignores &lt;code&gt;rs2v&lt;/code&gt;, the identity
+function wearing an opcode. The last real arm, &lt;code&gt;Shift&lt;/code&gt;, dispatches to one of
+the three shift ops via &lt;code&gt;toAluShift&lt;/code&gt;. And everything between — the arithmetic and
+logic — is the group that reveals &lt;em&gt;why the wrapper exists&lt;/em&gt;: look at &lt;code&gt;Add&lt;/code&gt;
+and &lt;code&gt;Addi&lt;/code&gt; sitting one line apart.&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  Isa.&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Add&lt;/span&gt;&lt;span&gt; _ _ _ &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span&gt; alu &lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Add&lt;/span&gt;&lt;span&gt; rs1v rs2v&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  Isa.&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Addi&lt;/span&gt;&lt;span&gt; _ _ imm &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span&gt; alu &lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Add&lt;/span&gt;&lt;span&gt; rs1v &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;signExtend imm&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Both call &lt;code&gt;alu Add rs1v&lt;/code&gt;. The only difference is the second operand: &lt;code&gt;Add&lt;/code&gt;
+uses &lt;code&gt;rs2v&lt;/code&gt;, the value of the second register; &lt;code&gt;Addi&lt;/code&gt; uses &lt;code&gt;signExtend imm&lt;/code&gt;,
+the instruction’s immediate widened to thirty-two bits. That is the entire
+distinction between a register-register op and its immediate form, and it
+repeats for &lt;code&gt;And&lt;/code&gt;/&lt;code&gt;Andi&lt;/code&gt;, &lt;code&gt;Or&lt;/code&gt;/&lt;code&gt;Ori&lt;/code&gt;, &lt;code&gt;Xor&lt;/code&gt;/&lt;code&gt;Xori&lt;/code&gt;. So the arithmetic and
+logic opcodes collapse onto eight operations not by coincidence but because
+each register/immediate pair is &lt;em&gt;one&lt;/em&gt; operation over &lt;em&gt;one&lt;/em&gt; choice of operand B:
+a register value, or an immediate. &lt;code&gt;dataResult&lt;/code&gt;’s job, boiled down, is to
+&lt;strong&gt;resolve operand B&lt;/strong&gt; and hand off. This is the other side of the
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;dispatch post’s&lt;/a&gt; collapse — there, thirteen arms became one
+&lt;code&gt;dataWb&lt;/code&gt; because “&lt;code&gt;dataResult&lt;/code&gt; reads the operation off the instruction”;
+here is the reading, and the eight-fold fan-out it feeds.&lt;/p&gt;
+&lt;p&gt;Step back and the operand path is complete across three posts. The
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;dispatch post’s&lt;/a&gt; &lt;code&gt;operandRs1&lt;/code&gt; and &lt;code&gt;operandRs2&lt;/code&gt; tables said &lt;em&gt;which&lt;/em&gt;
+registers an instruction reads; the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-regfile/&quot;&gt;register file&lt;/a&gt; turned those
+names into the values &lt;code&gt;rs1v&lt;/code&gt; and &lt;code&gt;rs2v&lt;/code&gt;; and &lt;code&gt;dataResult&lt;/code&gt; says &lt;em&gt;which
+operation&lt;/em&gt;, and where operand B comes from. Four pieces in a line — the
+selector tables, &lt;code&gt;readReg&lt;/code&gt;, &lt;code&gt;dataResult&lt;/code&gt;, &lt;code&gt;writeReg&lt;/code&gt; — are a DATA
+instruction’s entire datapath, and every one of them was built and tested
+alone before the engine wired them in a row. That was the wager of reading
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;outside in&lt;/a&gt;, paid back a leaf at a time.&lt;/p&gt;
+&lt;p&gt;The immediates are widened by one rule, almost: every I-form immediate
+&lt;em&gt;sign-extends&lt;/em&gt; — &lt;code&gt;signExtend imm&lt;/code&gt;, so an immediate with its top bit set is
+negative and &lt;code&gt;addi rd, rd, -1&lt;/code&gt; subtracts one — and the single exception is
+the shift amount, &lt;code&gt;zeroExtend amt&lt;/code&gt;, because a shift distance is a count, not
+a signed value.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-li-1&quot;&gt;&lt;a href=&quot;#fn-li&quot;&gt;[5]&lt;/a&gt;&lt;/sup&gt; &lt;code&gt;Lui&lt;/code&gt; is the one placement worth a second look:
+&lt;code&gt;(zeroExtend imm21 :: BitVector 32) `shiftL` 11&lt;/code&gt; takes the twenty-one-bit
+immediate the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-isa/&quot;&gt;ISA post&lt;/a&gt; watched get carved out of the &lt;code&gt;rs1 ++ rs2 ++ imm&lt;/code&gt; fields — the widest immediate in the set, from the fields its opcodes
+had spare — and lays it into bits &lt;code&gt;[31:11]&lt;/code&gt;, low eleven zero. That shift
+of eleven is chosen so &lt;code&gt;Lui&lt;/code&gt;’s bottom edge meets &lt;code&gt;Addi&lt;/code&gt;’s sign-extended top,
+which is what lets the assembler build any thirty-two-bit constant in two
+instructions.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-li-2&quot;&gt;&lt;a href=&quot;#fn-li&quot;&gt;[5]&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;p&gt;Two things the wrapper does &lt;em&gt;not&lt;/em&gt; do, both by design. It takes register
+&lt;em&gt;values&lt;/em&gt; &lt;code&gt;rs1v&lt;/code&gt; and &lt;code&gt;rs2v&lt;/code&gt;, never a &lt;code&gt;Regs&lt;/code&gt; — so it has no idea the
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-regfile/&quot;&gt;register file&lt;/a&gt; exists, and the &lt;code&gt;x0&lt;/code&gt;-hardwiring and the
+discarded-write-to-&lt;code&gt;x0&lt;/code&gt; we read last post are &lt;em&gt;not&lt;/em&gt; its concern; the engine
+reads &lt;code&gt;x0&lt;/code&gt; as zero on the way in and drops writes to &lt;code&gt;x0&lt;/code&gt; on the way out,
+and &lt;code&gt;dataResult&lt;/code&gt; computes on whatever values it is handed. The compute
+layer sits &lt;em&gt;between&lt;/em&gt; the two register ports and touches neither: the engine
+wires &lt;code&gt;readReg&lt;/code&gt;’s outputs into &lt;code&gt;dataResult&lt;/code&gt; and &lt;code&gt;dataResult&lt;/code&gt;’s output into
+&lt;code&gt;writeReg&lt;/code&gt;. Each leaf minds one concern — the register file was engine-
+ignorant, the ALU is register-file-ignorant — and the engine is the only
+place that knows them all.&lt;/p&gt;
+&lt;p&gt;And the &lt;code&gt;_ -&amp;gt; 0&lt;/code&gt; at the bottom is the totality tax. &lt;code&gt;dataResult&lt;/code&gt; matches on
+the whole &lt;code&gt;Instr&lt;/code&gt; type, so Clash demands every constructor have an answer
+— but the BUS, CTRL, and &lt;code&gt;RDSR&lt;/code&gt; instructions never arrive here, because
+the engine routes only DATA-compute through &lt;code&gt;dataResult&lt;/code&gt; and handles the
+rest itself. The default is unreachable &lt;em&gt;in the engine&lt;/em&gt;; &lt;code&gt;0&lt;/code&gt; is a safe,
+deterministic value for a case the wiring guarantees will never come up.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-default-1&quot;&gt;&lt;a href=&quot;#fn-default&quot;&gt;[6]&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;figure class=&quot;cmp-fig&quot; style=&quot;margin:2rem 0&quot;&gt;
+&lt;svg class=&quot;cmp&quot; viewBox=&quot;0 0 760 350&quot; role=&quot;img&quot; aria-labelledby=&quot;cmp-t cmp-d&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot;&gt;
+&lt;title id=&quot;cmp-t&quot;&gt;The tamal compute layer: the two-layer ALU and the branch comparator&lt;/title&gt;
+&lt;desc id=&quot;cmp-d&quot;&gt;A dataflow diagram. On the left, two register values rs1v and rs2v and an immediate enter. Operand A of the ALU is rs1v; operand B is chosen by a multiplexer between rs2v, used by the register-register forms, and the sign-extended immediate, used by the immediate forms. The ALU core, drawn in the accent colour, applies one of eight operations selected by AluOp: Add, Sub, And, Or, Xor, Sll, Srl, Sra. A final multiplexer selects between the ALU result and the constant placers LoadImm, Lui and Mov to produce dataResult, which flows to writeReg rd. Below, a separate branchTaken comparator takes the same two register values and one of Beq, Bne, Bltu, Bgeu and returns taken as a Bool, while the engine does the PC math.&lt;/desc&gt;
+&lt;style&gt;
+.cmp{max-width:760px;width:100%;height:auto;display:block;margin:0 auto}
+.cmp .box{fill:var(--bg-dim);stroke:var(--fg-main);stroke-width:2}
+.cmp .boxA{fill:var(--bg-dim);stroke:var(--accent);stroke-width:2.5}
+.cmp .mux{fill:var(--bg-main);stroke:var(--fg-main);stroke-width:1.8}
+.cmp .muxA{fill:var(--bg-main);stroke:var(--accent);stroke-width:2}
+.cmp .t{fill:var(--fg-main);font-family:var(--mono);font-size:13px}
+.cmp .tA{fill:var(--accent);font-family:var(--mono);font-size:14px}
+.cmp .s{fill:var(--fg-dim);font-family:var(--mono);font-size:11px}
+.cmp .io{fill:var(--fg-main);font-family:var(--mono);font-size:12px}
+.cmp .w{stroke:var(--fg-main);stroke-width:2;fill:none}
+.cmp .wa{stroke:var(--accent);stroke-width:2.5;fill:none}
+.cmp .nd{fill:var(--fg-main)}
+.cmp .ah{fill:var(--fg-main)}
+&lt;/style&gt;
+&lt;defs&gt;
+&lt;marker id=&quot;cmp-a&quot; markerWidth=&quot;9&quot; markerHeight=&quot;7&quot; refX=&quot;7&quot; refY=&quot;3.5&quot; orient=&quot;auto&quot;&gt;&lt;path d=&quot;M0,0 L7,3.5 L0,7 Z&quot; class=&quot;ah&quot;/&gt;&lt;/marker&gt;
+&lt;/defs&gt;
+&lt;!-- inputs --&gt;
+&lt;text class=&quot;io&quot; x=&quot;14&quot; y=&quot;100&quot; text-anchor=&quot;start&quot;&gt;rs1v&lt;/text&gt;
+&lt;text class=&quot;io&quot; x=&quot;14&quot; y=&quot;150&quot; text-anchor=&quot;start&quot;&gt;rs2v&lt;/text&gt;
+&lt;text class=&quot;io&quot; x=&quot;14&quot; y=&quot;176&quot; text-anchor=&quot;start&quot;&gt;imm / amt&lt;/text&gt;
+&lt;!-- operand A: rs1v -&gt; alu --&gt;
+&lt;path class=&quot;w&quot; d=&quot;M56,96 H300&quot; marker-end=&quot;url(#cmp-a)&quot;/&gt;
+&lt;!-- rs2v -&gt; operand-B mux (reg) --&gt;
+&lt;path class=&quot;w&quot; d=&quot;M56,146 H214&quot;/&gt;
+&lt;!-- imm -&gt; operand-B mux (sign-extended) --&gt;
+&lt;path class=&quot;w&quot; d=&quot;M82,172 H214&quot;/&gt;
+&lt;text class=&quot;s&quot; x=&quot;150&quot; y=&quot;190&quot; text-anchor=&quot;middle&quot;&gt;sext imm&lt;/text&gt;
+&lt;!-- operand-B mux --&gt;
+&lt;path class=&quot;muxA&quot; d=&quot;M214,140 L248,150 L248,168 L214,178 Z&quot;/&gt;
+&lt;text class=&quot;s&quot; x=&quot;227&quot; y=&quot;163&quot; text-anchor=&quot;middle&quot;&gt;B&lt;/text&gt;
+&lt;path class=&quot;w&quot; d=&quot;M248,159 H300&quot; marker-end=&quot;url(#cmp-a)&quot;/&gt;
+&lt;!-- alu core --&gt;
+&lt;rect class=&quot;boxA&quot; x=&quot;300&quot; y=&quot;66&quot; width=&quot;180&quot; height=&quot;104&quot; rx=&quot;8&quot;/&gt;
+&lt;text class=&quot;tA&quot; x=&quot;390&quot; y=&quot;94&quot; text-anchor=&quot;middle&quot;&gt;alu&lt;/text&gt;
+&lt;text class=&quot;s&quot; x=&quot;390&quot; y=&quot;122&quot; text-anchor=&quot;middle&quot;&gt;Add  Sub  And  Or  Xor&lt;/text&gt;
+&lt;text class=&quot;s&quot; x=&quot;390&quot; y=&quot;142&quot; text-anchor=&quot;middle&quot;&gt;Sll  Srl  Sra&lt;/text&gt;
+&lt;text class=&quot;s&quot; x=&quot;390&quot; y=&quot;162&quot; text-anchor=&quot;middle&quot;&gt;total · dispatched by AluOp&lt;/text&gt;
+&lt;!-- alu -&gt; final mux --&gt;
+&lt;path class=&quot;wa&quot; d=&quot;M480,118 H540&quot;/&gt;
+&lt;!-- constant placers --&gt;
+&lt;rect class=&quot;box&quot; x=&quot;300&quot; y=&quot;200&quot; width=&quot;180&quot; height=&quot;48&quot; rx=&quot;6&quot;/&gt;
+&lt;text class=&quot;t&quot; x=&quot;390&quot; y=&quot;222&quot; text-anchor=&quot;middle&quot;&gt;LoadImm · Lui · Mov&lt;/text&gt;
+&lt;text class=&quot;s&quot; x=&quot;390&quot; y=&quot;240&quot; text-anchor=&quot;middle&quot;&gt;constant / pass-through&lt;/text&gt;
+&lt;path class=&quot;w&quot; d=&quot;M480,224 H540&quot;/&gt;
+&lt;!-- final select mux --&gt;
+&lt;path class=&quot;mux&quot; d=&quot;M540,104 L572,124 L572,218 L540,238 Z&quot;/&gt;
+&lt;path class=&quot;w&quot; d=&quot;M572,171 H612&quot; marker-end=&quot;url(#cmp-a)&quot;/&gt;
+&lt;text class=&quot;t&quot; x=&quot;618&quot; y=&quot;167&quot; text-anchor=&quot;start&quot;&gt;dataResult&lt;/text&gt;
+&lt;text class=&quot;s&quot; x=&quot;618&quot; y=&quot;185&quot; text-anchor=&quot;start&quot;&gt;→ writeReg rd&lt;/text&gt;
+&lt;!-- branch taps off rs1v / rs2v --&gt;
+&lt;circle class=&quot;nd&quot; cx=&quot;86&quot; cy=&quot;96&quot; r=&quot;3.5&quot;/&gt;
+&lt;path class=&quot;w&quot; d=&quot;M86,96 V300 H300&quot; marker-end=&quot;url(#cmp-a)&quot;/&gt;
+&lt;circle class=&quot;nd&quot; cx=&quot;110&quot; cy=&quot;146&quot; r=&quot;3.5&quot;/&gt;
+&lt;path class=&quot;w&quot; d=&quot;M110,146 V316 H300&quot; marker-end=&quot;url(#cmp-a)&quot;/&gt;
+&lt;!-- branch comparator --&gt;
+&lt;rect class=&quot;box&quot; x=&quot;300&quot; y=&quot;284&quot; width=&quot;180&quot; height=&quot;46&quot; rx=&quot;6&quot;/&gt;
+&lt;text class=&quot;t&quot; x=&quot;390&quot; y=&quot;306&quot; text-anchor=&quot;middle&quot;&gt;branchTaken&lt;/text&gt;
+&lt;text class=&quot;s&quot; x=&quot;390&quot; y=&quot;324&quot; text-anchor=&quot;middle&quot;&gt;Beq · Bne · Bltu · Bgeu&lt;/text&gt;
+&lt;path class=&quot;w&quot; d=&quot;M480,307 H512&quot; marker-end=&quot;url(#cmp-a)&quot;/&gt;
+&lt;text class=&quot;t&quot; x=&quot;518&quot; y=&quot;303&quot; text-anchor=&quot;start&quot;&gt;taken : Bool&lt;/text&gt;
+&lt;text class=&quot;s&quot; x=&quot;518&quot; y=&quot;321&quot; text-anchor=&quot;start&quot;&gt;engine does PC math&lt;/text&gt;
+&lt;/svg&gt;
+&lt;figcaption style=&quot;text-align:center;color:var(--fg-dim);font-size:.9rem;margin-top:.85rem;font-family:var(--sans)&quot;&gt;The compute layer as two functions. &lt;code&gt;dataResult&lt;/code&gt; (top) resolves operand B --- a register value &lt;code&gt;rs2v&lt;/code&gt; or a sign-extended immediate --- and feeds the accent &lt;code&gt;alu&lt;/code&gt; core, the eight &lt;code&gt;AluOp&lt;/code&gt;s the DATA compute collapses onto; &lt;code&gt;Lui&lt;/code&gt;, &lt;code&gt;Mov&lt;/code&gt; and &lt;code&gt;LoadImm&lt;/code&gt; bypass the core as constants, and a final select yields the value written back. &lt;code&gt;branchTaken&lt;/code&gt; (bottom) is the sibling: the same two register values, one of four comparisons, a single &lt;em&gt;taken&lt;/em&gt; bit --- the decision, with the PC arithmetic kept in the engine. Both take &lt;em&gt;values&lt;/em&gt;, not registers; the compute layer sits between the two register ports and touches neither. (The shift amount uses &lt;code&gt;zeroExtend amt&lt;/code&gt;, not sign-extension.)&lt;/figcaption&gt;
+&lt;/figure&gt;
+&lt;h2 id=&quot;the-comparator&quot;&gt;The comparator&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;Tamal.Branch&lt;/code&gt; is the sidecar in that diagram, and it is small enough to
+read whole:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;module&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Tamal.Branch&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BranchOp&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;..&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; branchTaken&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  )&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; where&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;import&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Clash.Prelude&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BranchOp&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Beq&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Bne&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Bltu&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Bgeu&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  deriving&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; stock&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Generic&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Show&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Eq&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Enum&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bounded&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  deriving&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; anyclass&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;NFDataX&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;branchTaken&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BranchOp&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bool&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;branchTaken op r1 r2 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; case&lt;/span&gt;&lt;span&gt; op &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;of&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  Beq&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; r1 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span&gt; r2&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  Bne&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; r1 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;/=&lt;/span&gt;&lt;span&gt; r2&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  Bltu&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; r1 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;&lt;/span&gt;&lt;span&gt; r2&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  Bgeu&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; r1 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;gt;=&lt;/span&gt;&lt;span&gt; r2&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Note the import: a plain &lt;code&gt;import Clash.Prelude&lt;/code&gt;, no &lt;code&gt;hiding&lt;/code&gt; clause. The
+ALU had to fight for its names; the branch comparator does not, because
+&lt;code&gt;Beq&lt;/code&gt;, &lt;code&gt;Bne&lt;/code&gt;, &lt;code&gt;Bltu&lt;/code&gt;, &lt;code&gt;Bgeu&lt;/code&gt; collide with nothing — they are the module’s
+own coinage, not words the standard library or the instruction set already
+owns. The absence of a scar is itself a small tell: this module reuses no
+vocabulary, so it borrows no trouble.&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;branchTaken&lt;/code&gt; returns a &lt;code&gt;Bool&lt;/code&gt; and nothing else — &lt;em&gt;taken, or not&lt;/em&gt;. That is
+the entire point of the split the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;dispatch post&lt;/a&gt; set up: the
+comparator decides, and the engine jumps. When the engine ran &lt;code&gt;branch&lt;/code&gt;, it
+called &lt;code&gt;Br.branchTaken&lt;/code&gt; for the yes/no and then did the program-counter
+arithmetic &lt;em&gt;itself&lt;/em&gt; — the eleven-bit signed offset truncated to ten bits
+and added modulo the counter, backwards jumps falling out of the
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;two’s-complement wraparound&lt;/a&gt;. None of that is here. &lt;code&gt;branchTaken&lt;/code&gt;
+never sees the offset, never sees the PC; it is a pure predicate on two
+values, and the offset math belongs to the only thing that knows where the
+program counter is. That is why &lt;code&gt;Branch&lt;/code&gt; needs no &lt;code&gt;Instr&lt;/code&gt; wrapper the way
+&lt;code&gt;Alu&lt;/code&gt; did: there is no immediate to resolve, no operand B to mux — both
+operands are registers — so mapping the four branch constructors to
+&lt;code&gt;BranchOp&lt;/code&gt; is a one-line remap the engine does inline, and a &lt;code&gt;branchResult&lt;/code&gt;-
+on-&lt;code&gt;Instr&lt;/code&gt; layer would earn nothing. &lt;code&gt;Alu&lt;/code&gt; grew a second layer because it
+had immediates to fold in; &lt;code&gt;Branch&lt;/code&gt; stayed one because it did not.&lt;/p&gt;
+&lt;p&gt;The four comparisons hold one detail that is easy to miss and important to
+get right. &lt;code&gt;Beq&lt;/code&gt; and &lt;code&gt;Bne&lt;/code&gt; are &lt;code&gt;==&lt;/code&gt; and &lt;code&gt;/=&lt;/code&gt;, unremarkable. But &lt;code&gt;Bltu&lt;/code&gt; and
+&lt;code&gt;Bgeu&lt;/code&gt; — the “u” is for &lt;em&gt;unsigned&lt;/em&gt; — are just &lt;code&gt;&amp;lt;&lt;/code&gt; and &lt;code&gt;&amp;gt;=&lt;/code&gt;, and they are
+unsigned &lt;em&gt;for free&lt;/em&gt;, because they operate on &lt;code&gt;BitVector&lt;/code&gt;, and &lt;code&gt;BitVector&lt;/code&gt;’s
+&lt;code&gt;Ord&lt;/code&gt; is unsigned. A &lt;code&gt;BitVector 32&lt;/code&gt; has no sign bit to interpret; ordered,
+it compares as a plain thirty-two-bit magnitude, &lt;code&gt;0xFFFFFFFF&lt;/code&gt; the largest
+value rather than $-1$. That is &lt;em&gt;exactly&lt;/em&gt; the &lt;code&gt;BLTU&lt;/code&gt;/&lt;code&gt;BGEU&lt;/code&gt; semantics, so
+the comparator gets them by writing &lt;code&gt;&amp;lt;&lt;/code&gt; and doing nothing else.&lt;/p&gt;
+&lt;p&gt;This is the mirror image of the ALU’s &lt;code&gt;Sra&lt;/code&gt;, and the two together are the
+whole story of how this layer handles number types. &lt;code&gt;Sra&lt;/code&gt; &lt;em&gt;reached for&lt;/em&gt;
+&lt;code&gt;Signed 32&lt;/code&gt;, reinterpreting its bits to borrow a sign it needed for an
+arithmetic shift. &lt;code&gt;branchTaken&lt;/code&gt; &lt;em&gt;stays on&lt;/em&gt; &lt;code&gt;BitVector&lt;/code&gt; to keep the sign
+away, because an unsigned compare is what it wants. Same thirty-two bits,
+opposite choices — and each is made by choosing the type the bits are read
+through, for exactly the operation that needs it.&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;The bits never change. The type you read them through is the operation.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;Signed branches — &lt;code&gt;BLT&lt;/code&gt;, &lt;code&gt;BGE&lt;/code&gt;, the ones that &lt;em&gt;would&lt;/em&gt; need &lt;code&gt;Signed&lt;/code&gt;’s
+&lt;code&gt;Ord&lt;/code&gt; — are simply not in v1, reserved for a later phase; the four here
+are the unsigned pair and the two equalities, and every one of them is a
+single operator on the untyped word.&lt;/p&gt;
+&lt;h2 id=&quot;the-tests&quot;&gt;The tests&lt;/h2&gt;
+&lt;p&gt;Two test files, and they pose a question the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-crc/&quot;&gt;CRC&lt;/a&gt; and the
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-mem/&quot;&gt;memories&lt;/a&gt; did not have to: when your reference model is nearly
+identical to your implementation, what does a test &lt;em&gt;buy&lt;/em&gt;? &lt;code&gt;alu Add a b === a + b&lt;/code&gt; checks that add is add — a near-tautology. The answer is that the
+boring arms are there to catch a &lt;em&gt;wiring&lt;/em&gt; slip (an &lt;code&gt;Add&lt;/code&gt; that quietly does
+&lt;code&gt;.|.&lt;/code&gt;), and the real value lives in the arms where the behaviour is subtle.
+Those get pinned twice, by property and by hand:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;testProperty &lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;Sub == Add of two&amp;#39;s complement&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; $&lt;/span&gt;&lt;span&gt; property &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; do&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  a &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;-&lt;/span&gt;&lt;span&gt; forAll genWord&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  b &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;-&lt;/span&gt;&lt;span&gt; forAll genWord&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  alu &lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Sub&lt;/span&gt;&lt;span&gt; a b &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;===&lt;/span&gt;&lt;span&gt; alu &lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Add&lt;/span&gt;&lt;span&gt; a &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;complement b &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;+&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;testCase &lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;Sra 0x80000000 by 1 = 0xC0000000 (sign-fill)&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  $&lt;/span&gt;&lt;span&gt; alu &lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Sra&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0x80000000&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  @?=&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0xC0000000&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;testCase &lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;Srl 0x80000000 by 1 = 0x40000000 (zero-fill)&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  $&lt;/span&gt;&lt;span&gt; alu &lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Srl&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0x80000000&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  @?=&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0x40000000&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The first states the two’s-complement identity as a law. The two concrete
+vectors are the sharpest lines in the suite: the &lt;em&gt;same&lt;/em&gt; input,
+&lt;code&gt;0x80000000&lt;/code&gt;, shifted right by one, gives &lt;code&gt;0xC0000000&lt;/code&gt; under &lt;code&gt;Sra&lt;/code&gt; and
+&lt;code&gt;0x40000000&lt;/code&gt; under &lt;code&gt;Srl&lt;/code&gt; — the arithmetic shift copying the sign bit down,
+the logical shift feeding a zero. If the &lt;code&gt;unpack … :: Signed 32&lt;/code&gt;
+reinterpretation in &lt;code&gt;Sra&lt;/code&gt; were ever dropped, the first case goes red
+instantly. Around them sit the property that the shift amount is masked to
+five bits (&lt;code&gt;alu Sll a b === alu Sll a (b .&amp;amp;. 0x1F)&lt;/code&gt;), that a shift by zero is
+identity, and that &lt;code&gt;Sra&lt;/code&gt; preserves the sign bit — the whole subtle corner,
+staked down.&lt;/p&gt;
+&lt;p&gt;The &lt;code&gt;dataResult&lt;/code&gt; tests check the &lt;em&gt;other&lt;/em&gt; layer: not the arithmetic, but the
+wiring that routes each opcode to it. &lt;code&gt;Mov&lt;/code&gt; returns &lt;code&gt;rs1v&lt;/code&gt;; &lt;code&gt;LoadImm&lt;/code&gt;
+sign-extends; &lt;code&gt;Lui&lt;/code&gt; lands its immediate at &lt;code&gt;[31:11]&lt;/code&gt; with the low eleven
+zero (&lt;code&gt;(r .&amp;amp;. 0x7FF) === 0&lt;/code&gt;); each immediate form agrees with &lt;code&gt;alu&lt;/code&gt; on the
+sign-extended operand, each register form agrees with &lt;code&gt;alu&lt;/code&gt; on &lt;code&gt;rs2v&lt;/code&gt;. They
+prove the wrapper dispatches correctly, independently of whether the core
+computes correctly — two layers, two sets of tests.&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;Test.Branch&lt;/code&gt; gets to do something the others cannot, and it is the
+&lt;code&gt;Enum&lt;/code&gt;/&lt;code&gt;Bounded&lt;/code&gt; deriving paying off:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;testProperty &lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;branchTaken matches reference (all ops)&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; $&lt;/span&gt;&lt;span&gt; property &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; do&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  op &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;-&lt;/span&gt;&lt;span&gt; forAll &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Gen.&lt;/span&gt;&lt;span&gt;element &lt;/span&gt;&lt;span&gt;[&lt;/span&gt;&lt;span&gt;minBound &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;..&lt;/span&gt;&lt;span&gt; maxBound&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  a &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;-&lt;/span&gt;&lt;span&gt; forAll genWord&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  b &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;-&lt;/span&gt;&lt;span&gt; forAll genWord&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  branchTaken op a b &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;===&lt;/span&gt;&lt;span&gt; ref op a b&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;[minBound .. maxBound]&lt;/code&gt; is &lt;em&gt;every&lt;/em&gt; &lt;code&gt;BranchOp&lt;/code&gt;, enumerable because the type
+derives &lt;code&gt;Enum&lt;/code&gt; and &lt;code&gt;Bounded&lt;/code&gt;, so “for all ops” is literal rather than a
+hand-kept list that could fall out of date. Beside it, the complementarity
+properties — &lt;code&gt;Beq&lt;/code&gt; is exactly &lt;code&gt;not Bne&lt;/code&gt;, &lt;code&gt;Bltu&lt;/code&gt; exactly &lt;code&gt;not Bgeu&lt;/code&gt; — fall
+free out of the comparator’s structure, and three concrete vectors stand
+guard over the unsigned reading:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;testCase &lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;Bltu is unsigned: 0x7FFFFFFF &amp;lt; 0x80000000&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  $&lt;/span&gt;&lt;span&gt; branchTaken &lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Bltu&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0x7FFFFFFF&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0x80000000&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  @?=&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; True&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Read as &lt;em&gt;signed&lt;/em&gt;, &lt;code&gt;0x80000000&lt;/code&gt; is the most negative number and
+&lt;code&gt;0x7FFFFFFF&lt;/code&gt; the most positive, so a signed &lt;code&gt;&amp;lt;&lt;/code&gt; would call this &lt;code&gt;False&lt;/code&gt;.
+Read as &lt;em&gt;unsigned&lt;/em&gt; — which is what &lt;code&gt;BitVector&lt;/code&gt;’s &lt;code&gt;Ord&lt;/code&gt; does — &lt;code&gt;0x80000000&lt;/code&gt;
+is the larger, and the answer is &lt;code&gt;True&lt;/code&gt;. This one case is the tripwire: the
+day someone reinterprets the operands as &lt;code&gt;Signed&lt;/code&gt; by mistake, it goes red
+and names the bug. It is the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-regfile/&quot;&gt;regfile tests’&lt;/a&gt; discipline in a
+different key — the smallest input that distinguishes the behaviour you
+want from the one you might slip into.&lt;/p&gt;
+&lt;h2 id=&quot;what-we-read&quot;&gt;What we read&lt;/h2&gt;
+&lt;p&gt;The two computing boxes of the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;dispatch post&lt;/a&gt;, opened. &lt;code&gt;Tamal.Alu&lt;/code&gt;
+in two layers: a thin, total &lt;code&gt;alu&lt;/code&gt; core dispatched by an eight-constructor
+&lt;code&gt;AluOp&lt;/code&gt; over register values — its &lt;code&gt;Sub&lt;/code&gt; the two’s-complement add, its
+shifts masked to five bits so a shift past the word is well-defined, its
+&lt;code&gt;Sra&lt;/code&gt; borrowing a &lt;code&gt;Signed&lt;/code&gt; reading for one expression while &lt;code&gt;Srl&lt;/code&gt; stays
+logical — and above it &lt;code&gt;dataResult&lt;/code&gt;, the wrapper that places the &lt;code&gt;Lui&lt;/code&gt;,
+&lt;code&gt;Mov&lt;/code&gt;, and &lt;code&gt;LoadImm&lt;/code&gt; constants and resolves operand B, so the arithmetic
+and logic opcodes collapse onto eight operations because each register/immediate pair
+is one operation over one choice of second operand. It takes &lt;em&gt;values&lt;/em&gt;, so
+it never meets the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-regfile/&quot;&gt;register file&lt;/a&gt;; it sits between the two ports
+and touches neither. Two import lines that were both naming collisions —
+&lt;code&gt;And&lt;/code&gt; and &lt;code&gt;Xor&lt;/code&gt; hidden from the prelude, &lt;code&gt;Isa&lt;/code&gt; qualified — because a
+compute layer and an instruction set both need the word “add,” and the
+translator between them exists precisely because they are kept apart. And
+&lt;code&gt;Tamal.Branch&lt;/code&gt;, four lines returning only taken-or-not, its &lt;code&gt;Bltu&lt;/code&gt;/&lt;code&gt;Bgeu&lt;/code&gt;
+unsigned for free from &lt;code&gt;BitVector&lt;/code&gt;’s own &lt;code&gt;Ord&lt;/code&gt;, the PC arithmetic left to
+the engine — the clean inverse of &lt;code&gt;Sra&lt;/code&gt;’s reach for a sign. The bits never
+changed; the type read through them was the operation, every time. And
+tests that pin the subtle corners against near-identical references, and
+enumerate every op because the enums derive &lt;code&gt;Bounded&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;dataResult&lt;/code&gt;’s value now flows back to &lt;code&gt;writeReg&lt;/code&gt;, and &lt;code&gt;branchTaken&lt;/code&gt;’s bit
+to the program counter — and with that, the compute is accounted for. Of
+the leaves the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;dispatch post&lt;/a&gt; named and held shut, only one is still
+closed, and it is the one nearest the wire. When a &lt;code&gt;PUT&lt;/code&gt; loaded its shifter
+and the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-bus/&quot;&gt;bus post&lt;/a&gt; walked the beats, the drive on the lanes came from
+&lt;code&gt;serializeX1&lt;/code&gt;, and a turnaround from &lt;code&gt;tarBeat&lt;/code&gt; — names for a byte becoming
+MSB-first bits on &lt;code&gt;IO[0]&lt;/code&gt;, and for the handover clock, all of it built out
+of a single tiny type: a lane, a &lt;code&gt;(value, enable)&lt;/code&gt; pair, the whole tri-state
+story in two bits. That serialiser is the last box. We open it next — and
+when it is open, the engine is open entire, map and every piece — before
+the series turns, in a later batch, to the impure shell that carries those
+&lt;code&gt;(value, enable)&lt;/code&gt; pairs the last step out, to the pins.&lt;/p&gt;
+&lt;section class=&quot;footnotes&quot;&gt;
+&lt;ol class=&quot;footnotes-list&quot;&gt;
+&lt;li id=&quot;fn-databits&quot;&gt;
+&lt;p&gt;Since &lt;code&gt;base&lt;/code&gt; 4.16 &lt;code&gt;Data.Bits&lt;/code&gt; provides the &lt;code&gt;newtype&lt;/code&gt; wrappers
+&lt;code&gt;And&lt;/code&gt;, &lt;code&gt;Ior&lt;/code&gt;, &lt;code&gt;Xor&lt;/code&gt;, and &lt;code&gt;Iff&lt;/code&gt;, whose &lt;code&gt;Semigroup&lt;/code&gt;/&lt;code&gt;Monoid&lt;/code&gt; instances fold a
+collection under bitwise-and, -or, -xor, and -xnor — so &lt;code&gt;getAnd (foldMap And xs)&lt;/code&gt; ands a list together. &lt;code&gt;Clash.Prelude&lt;/code&gt; re-exports &lt;code&gt;Data.Bits&lt;/code&gt;, &lt;code&gt;And&lt;/code&gt;
+and &lt;code&gt;Xor&lt;/code&gt; among them, so the moment &lt;code&gt;AluOp&lt;/code&gt; declares constructors of those
+names they clash; &lt;code&gt;hiding (And, Xor)&lt;/code&gt; drops the imports, and the core does
+its bitwise work with the operators &lt;code&gt;.&amp;amp;.&lt;/code&gt; and &lt;code&gt;`xor`&lt;/code&gt; anyway. &lt;code&gt;Or&lt;/code&gt;
+survives only by luck of spelling: the or-wrapper is &lt;code&gt;Ior&lt;/code&gt; (“inclusive
+or”), not &lt;code&gt;Or&lt;/code&gt;, so nothing shadows &lt;code&gt;AluOp&lt;/code&gt;’s &lt;code&gt;Or&lt;/code&gt;. &lt;a href=&quot;#fr-databits-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id=&quot;fn-mask&quot;&gt;
+&lt;p&gt;&lt;code&gt;sh&lt;/code&gt; is &lt;code&gt;fromIntegral (unpack (truncateB r2) :: Unsigned 5)&lt;/code&gt;.
+&lt;code&gt;truncateB r2&lt;/code&gt; keeps the low five bits as a &lt;code&gt;BitVector 5&lt;/code&gt;; &lt;code&gt;unpack&lt;/code&gt; reads
+them as an &lt;code&gt;Unsigned 5&lt;/code&gt; (0..31); &lt;code&gt;fromIntegral&lt;/code&gt; makes the &lt;code&gt;Int&lt;/code&gt; that
+&lt;code&gt;shiftL&lt;/code&gt;/&lt;code&gt;shiftR&lt;/code&gt; want. The detour through &lt;code&gt;Unsigned 5&lt;/code&gt; is not optional:
+&lt;code&gt;BitVector&lt;/code&gt; has no &lt;code&gt;Integral&lt;/code&gt; instance — you cannot &lt;code&gt;fromIntegral&lt;/code&gt; it
+directly — because a bare bag of bits has no agreed numeric reading, the
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-crc/&quot;&gt;CRC’s&lt;/a&gt; point that a value’s &lt;em&gt;kind&lt;/em&gt; is part of its contract. Masking to
+five bits before shifting is what makes a shift-by-≥-32 well-defined: the
+count physically cannot exceed thirty-one, so the C-style “shift wider than
+the type is undefined” has no representable input. &lt;a href=&quot;#fr-mask-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id=&quot;fn-sra&quot;&gt;
+&lt;p&gt;&lt;code&gt;unpack&lt;/code&gt; and &lt;code&gt;pack&lt;/code&gt; are the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-isa/&quot;&gt;&lt;code&gt;bitCoerce&lt;/code&gt; family&lt;/a&gt; — total,
+zero-cost reinterpretations between types of the same bit-width, lowering to
+no gates, only a relabelling of wires. &lt;code&gt;unpack r1 :: Signed 32&lt;/code&gt; reads the
+thirty-two bits as a two’s-complement number; &lt;code&gt;shiftR&lt;/code&gt; on &lt;code&gt;Signed&lt;/code&gt; is
+arithmetic, replicating the sign bit; &lt;code&gt;pack&lt;/code&gt; reads the result back as a
+&lt;code&gt;BitVector&lt;/code&gt;. That sandwich is the whole mechanism: &lt;code&gt;BitVector&lt;/code&gt;’s own
+&lt;code&gt;shiftR&lt;/code&gt; is logical, and the only difference between &lt;code&gt;Srl&lt;/code&gt; and &lt;code&gt;Sra&lt;/code&gt; is
+which type does the shifting. Nothing is added or dropped — the bits match
+on both sides of the &lt;code&gt;unpack&lt;/code&gt;/&lt;code&gt;pack&lt;/code&gt; — only their reading differs, signed
+for the length of one shift. &lt;a href=&quot;#fr-sra-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id=&quot;fn-lion&quot;&gt;
+&lt;p&gt;The “small total &lt;code&gt;alu&lt;/code&gt; core plus a &lt;code&gt;decode&lt;/code&gt; that returns &lt;code&gt;Either&lt;/code&gt;”
+division is borrowed from &lt;a rel=&quot;external&quot; href=&quot;https://github.com/standardsemiconductor/lion&quot;&gt;Lion&lt;/a&gt;,
+an RV32I core in Clash: keep the arithmetic core total by pushing every
+reserved or illegal encoding out to the decoder, so the datapath never has
+to represent “no answer.” tamal diverges from RV32I in the particulars —
+its own opcode groups, eleven-bit immediates, unsigned-only branches in v1
+— so it does not inherit RV32I’s formal-verification harness; hedgehog
+property tests are the verification baseline instead. &lt;a href=&quot;#fr-lion-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id=&quot;fn-li&quot;&gt;
+&lt;p&gt;The eleven-bit shift on &lt;code&gt;Lui&lt;/code&gt; is not arbitrary. &lt;code&gt;Lui&lt;/code&gt; carries a
+twenty-one-bit immediate (the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-isa/&quot;&gt;ISA post’s&lt;/a&gt; &lt;code&gt;rs1 ++ rs2 ++ imm&lt;/code&gt;,
+$5 + 5 + 11 = 21$) and places it at bits &lt;code&gt;[31:11]&lt;/code&gt;; &lt;code&gt;Addi&lt;/code&gt; sign-extends its
+eleven-bit immediate across &lt;code&gt;[10:0]&lt;/code&gt; and up. Because &lt;code&gt;Lui&lt;/code&gt;’s bottom bit
+meets &lt;code&gt;Addi&lt;/code&gt;’s sign-extended top, &lt;code&gt;li = LUI + ADDI&lt;/code&gt; builds &lt;em&gt;any&lt;/em&gt; thirty-two
+-bit constant in at most two instructions, with sign-extension used
+uniformly (the shift amount, a count, is the exception, &lt;code&gt;zeroExtend amt&lt;/code&gt;).
+An earlier draft shifted &lt;code&gt;Lui&lt;/code&gt; by twelve to mirror RISC-V and left a
+reachability gap needing a third instruction; widening the immediate to
+twenty-one and realigning the shift to eleven closed it. The primitive here
+fixes only &lt;code&gt;Lui = imm21 &amp;lt;&amp;lt; 11&lt;/code&gt;; the constant-tiling lives in the assembler. &lt;a href=&quot;#fr-li-1&quot;&gt;↩&lt;/a&gt; &lt;a href=&quot;#fr-li-2&quot;&gt;↩2&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id=&quot;fn-default&quot;&gt;
+&lt;p&gt;&lt;code&gt;dataResult&lt;/code&gt; matches the entire &lt;code&gt;Instr&lt;/code&gt; type, so Clash requires
+a total function — every constructor needs a right-hand side. The BUS,
+CTRL, and &lt;code&gt;RDSR&lt;/code&gt; instructions have one only as a formality: the engine
+dispatches on the decoded &lt;em&gt;group&lt;/em&gt; and routes just DATA-compute through
+&lt;code&gt;dataResult&lt;/code&gt;, handling &lt;code&gt;RDSR&lt;/code&gt; (which reads engine state, not operands) and
+the branches and bus ops on their own paths. So &lt;code&gt;_ -&amp;gt; 0&lt;/code&gt; is unreachable by
+construction, and &lt;code&gt;0&lt;/code&gt; is a deterministic placeholder, not a computed value.
+A &lt;code&gt;Maybe&lt;/code&gt;-returning variant was considered and rejected: every input the
+engine actually delivers yields a real value, so the &lt;code&gt;Nothing&lt;/code&gt; would never
+fire and would only burden every caller with an unwrapping. &lt;a href=&quot;#fr-default-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/section&gt;
+</content>
+  </entry>
+  
+</feed>
