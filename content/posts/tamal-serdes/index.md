@@ -1,7 +1,7 @@
 +++
 title = "Tamal: Value and Enable"
 date = 2026-08-10T09:00:00
-draft = true
+draft = false
 description = "The last shut box of the outside-in descent, opened: Tamal.Bus.Serdes, the pure single-I/O serialiser post 3's beatLanes reached into three times without looking inside, fifty-four lines with no clock and no state; the Lane type, a (value, enable) pair that is the whole tri-state story in two bits --- a data bit and the output-enable that decides whether it means anything, oe = 0 being hands-off, hi-Z --- written as a transparent type synonym rather than a newtype wall because the engine handles it as the bare tuple everywhere; Lanes, a Vec 4 of them, the drive on all four I/O wires for one beat, four wide when v1 drives one; hiZ and driveHigh, release and drive, repeat sizing the vector from the type; serializeX1, a byte unpacked MSB-first into eight beats that drive IO[0] and tri-state the rest, the exact per-bit map post 3 indexed a beat at a time; deserializeX1, the tidy pack inverse the engine never actually calls because sampleGet shifts bits in by hand, kept for the round-trip law it makes expressible; tarBeat, drive-all-high on beat zero and release after, the eSPI turnaround in one line; the x1 corner filled while dual and quad are named and reserved; and three tests that pin the two bits down --- a loopback round-trip, an MSB-first drive-and-tri-state check, and the turnaround --- closing the arc with the engine at last open entire."
 [taxonomies]
 tags = ["haskell", "clash", "fpga", "tamal", "engine", "espi"]
