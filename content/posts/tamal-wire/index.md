@@ -1,7 +1,7 @@
 +++
 title = "Tamal: Frames on the Wire"
 date = 2026-08-11T09:00:00
-draft = true
+draft = false
 description = "The pure host<->FPGA framing the loader realized a bit at a time, opened whole: Tamal.Wire and its Tamal.Wire.Cobs leaf, two pure [BitVector 8] reference models that never run on the fabric. COBS strips every 0x00 from a payload so one 0x00 can delimit frames --- a group is a code byte (len+1) then up to 254 non-zero bytes --- and the load-bearing subtlety is that a full 254-byte group flushes as a 0xFF continuation checked before the b == 0 case, so a zero landing on a full group opens a fresh empty group instead of vanishing. Above it, the frame layer: wordToBytesLE splitting a word into four little-endian bytes (the host transport is LE while the eSPI wire is MSB-first), crc8 folding the CRC post's crc8Update over a byte list, frameEncode appending the CRC then COBS-encoding then the delimiter, and frameDecode undoing it with a WireError sum of named failures. Above that, the message layer: ControlMsg, the 0x01/0x02/0x81 opcodes, encodeControl/decodeControl and encodeResult/decodeResult, bytesToWords regrouping LE quartets and failing unless a multiple of four. The reference-model role made explicit --- the loader implements the streaming form, this pure twin is the readable thing it is proven equal to --- and the tests that pin the boundary down: COBS round-trip over zero-dense and full-group generators, single-byte-corruption never a silent success, and the CRC-8/SMBUS check vector."
 [taxonomies]
 tags = ["haskell", "clash", "fpga", "tamal", "wire", "loader"]
