@@ -1,7 +1,7 @@
 +++
 title = "Tamal: The Record and the Ring"
 date = 2026-08-12T09:00:00
-draft = true
+draft = false
 description = "The pure twin the bus post kept promising: Tamal.Trace, sixty-four lines that never run on the fabric, holding the record format the engine's inline emitter is checked against. Three shapes --- Capture (one word, tag 00), Mark (two words, tag 10, label then payload), Halt (one word, tag 11, trap and reason and overflow and status) --- and encodeRecord laying each into 32-bit words with the exact bitCoerce tuples the engine builds inline in captureWord, markLabelWord and haltWith, so the two can be read side by side and a test can prove them equal. Then ringPush, the overflow-safe, record-atomic push: three cases --- already overflowed drops and latches the sticky flag, fits advances the pointer by the record's whole word count, else overflow drops and latches --- and the reason atomicity matters is Mark's two words, because a torn MARK desyncs the host's parse. The pure model of the drop-on-full, never-past-the-limit, terminator-slot-reserved contract that the bus post met a word at a time. Both formats, in and out, are now done; next the series crosses into the impure shell that makes the pins physical."
 [taxonomies]
 tags = ["haskell", "clash", "fpga", "tamal", "trace", "espi"]
