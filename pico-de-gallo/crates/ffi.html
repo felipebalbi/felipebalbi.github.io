@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-6b728ee3.js";
+            window.path_to_searchindex_js = "../searchindex-79aa07f4.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -239,6 +239,58 @@ those integers compiled into <code>switch</code> statements.</p>
 </blockquote>
 <p>The full status-code list lives in the
 <a href="../appendix/status-codes.html">Status Code Reference</a>.</p>
+<h2 id="limits-and-configuration-enums"><a class="header" href="#limits-and-configuration-enums">Limits and configuration enums</a></h2>
+<p>The header exports the firmware’s transfer limits and pin count, so C
+callers can size buffers and validate indices from the same numbers the
+firmware enforces instead of hard-coding copies:</p>
+<pre><code class="language-c">#define GALLO_MAX_TRANSFER_SIZE 4096
+#define GALLO_MAX_BATCH_OPS 64
+#define GALLO_NUM_GPIOS 4
+</code></pre>
+<p><code>GALLO_MAX_TRANSFER_SIZE</code> applies <strong>per direction</strong> — a write-then-read may
+carry that many bytes each way. Exceeding it yields <code>Status::BufferTooLong</code>.
+Exceeding <code>GALLO_MAX_BATCH_OPS</code> in <code>gallo_i2c_batch</code> or <code>gallo_spi_batch</code>
+yields <code>Status::InvalidArgument</code>.</p>
+<p><code>GALLO_NUM_GPIOS</code> bounds the valid pin indices, <code>0..GALLO_NUM_GPIOS</code>, which
+map to physical GPIO8–GPIO11 on the Pico 2 header. Anything at or above it
+yields <code>Status::GpioInvalidPin</code>. The same indices select the SPI chip select
+in <code>gallo_spi_batch</code>, so bound a chip select by this constant rather than a
+literal. Note the dedicated <code>SPI_CS</code> header pin (GPIO5) is not one of these
+and is not currently claimed by the firmware.</p>
+<p>All three mirror constants in <code>pico-de-gallo-internal</code>, and a compile-time
+assertion in <code>pico-de-gallo-ffi</code> fails the build if they ever disagree.</p>
+<p>The header also names the integer values that the <code>gallo_*</code> entry points
+already accept and return as <code>uint8_t</code>:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Enum</th><th>Values</th><th>Used by</th></tr>
+</thead>
+<tbody>
+<tr><td><code>GalloI2cFrequency</code></td><td><code>_Standard</code> 0, <code>_Fast</code> 1, <code>_FastPlus</code> 2</td><td><code>gallo_i2c_set_config</code>, <code>gallo_i2c_get_config</code></td></tr>
+<tr><td><code>GalloGpioDirection</code></td><td><code>_Input</code> 0, <code>_Output</code> 1</td><td><code>gallo_gpio_set_config</code></td></tr>
+<tr><td><code>GalloGpioPull</code></td><td><code>_None</code> 0, <code>_Up</code> 1, <code>_Down</code> 2</td><td><code>gallo_gpio_set_config</code></td></tr>
+<tr><td><code>GalloGpioEdge</code></td><td><code>_Rising</code> 0, <code>_Falling</code> 1, <code>_Any</code> 2</td><td><code>gallo_gpio_subscribe</code></td></tr>
+<tr><td><code>GalloI2cBatchOpTag</code></td><td><code>_Read</code> 0, <code>_Write</code> 1</td><td><code>GalloI2cBatchOp::tag</code></td></tr>
+<tr><td><code>GalloSpiBatchOpTag</code></td><td><code>_Read</code> 0, <code>_Write</code> 1, <code>_Transfer</code> 2, <code>_DelayNs</code> 3</td><td><code>GalloSpiBatchOp::tag</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Variant names are prefixed with the enum name (<code>GalloGpioPull_Up</code>), because C
+enum variants share a single global namespace and several of these would
+otherwise collide — both batch-op tags define <code>Read</code> and <code>Write</code>.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>These enums are additive. The function signatures still take plain
+<code>uint8_t</code>, so existing code that passes literals keeps working unchanged.</p>
+</blockquote>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>Like <code>Status</code>, these values are <strong>stable C ABI</strong> and must match the
+<code>pico-de-gallo-internal</code> wire enums they mirror. Wire-enum variant order is
+itself ABI, because postcard serializes by variant index. A unit test
+(<code>config_enums_match_wire_enums</code>) asserts the two numberings agree.</p>
+</blockquote>
 <h2 id="function-reference"><a class="header" href="#function-reference">Function Reference</a></h2>
 <p>The generated header is the canonical API surface, but these are the functions
 you will use most often.</p>
@@ -280,7 +332,9 @@ Status gallo_i2c_set_config(const PicoDeGallo *gallo, uint8_t frequency);
 Status gallo_i2c_get_config(const PicoDeGallo *gallo, uint8_t *out_frequency);
 </code></pre>
 <p><code>frequency</code> uses the wire enum encoding: <code>0 = Standard</code>, <code>1 = Fast</code>,
-<code>2 = FastPlus</code>.</p>
+<code>2 = FastPlus</code>. The header also defines <code>GalloI2cFrequency</code>
+(<code>GalloI2cFrequency_Standard</code>, <code>_Fast</code>, <code>_FastPlus</code>) if you would rather pass a
+name than a number — see <a href="#limits-and-configuration-enums">Limits and configuration enums</a>.</p>
 <h4 id="i2c-batch"><a class="header" href="#i2c-batch">I<sup>2</sup>C batch</a></h4>
 <pre><code class="language-c">typedef struct GalloI2cBatchOp {
     uint8_t       tag;       // 0 = Read, 1 = Write
@@ -426,6 +480,35 @@ cargo build --release
 </tbody>
 </table>
 </div>
+<h3 id="static-library"><a class="header" href="#static-library">Static library</a></h3>
+<p>The crate also builds a <code>staticlib</code>, alongside the shared library rather than
+instead of it:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Platform</th><th>Artifact</th></tr>
+</thead>
+<tbody>
+<tr><td>Linux, macOS</td><td><code>target/release/libpico_de_gallo_ffi.a</code></td></tr>
+<tr><td>Windows</td><td><code>target/release/pico_de_gallo_ffi.lib</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Link it when you want a self-contained executable and no runtime search-path
+setup — the Zephyr module does exactly this so the <code>native_sim</code> runner carries
+the FFI inside <code>zephyr.exe</code> and needs no <code>-Wl,-rpath</code>. Expect a substantially
+larger binary, since the whole async runtime and USB stack come along.</p>
+<p>A Rust <code>staticlib</code> does not carry its transitive system-library requirements,
+so a manual link needs them spelled out. Ask the toolchain rather than
+guessing:</p>
+<pre><code class="language-bash">cargo rustc --release --crate-type staticlib -- --print native-static-libs
+</code></pre>
+<p>On x86-64 Linux that currently reports:</p>
+<pre><code class="language-text">-lgcc_s -lutil -lrt -lpthread -lm -ldl -lc
+</code></pre>
+<p>The list is platform-specific; re-run it on macOS or Windows instead of
+reusing the Linux one. Only the shared library is published as a release
+asset — see the release workflow for the exact asset names.</p>
 <h3 id="generated-header"><a class="header" href="#generated-header">Generated header</a></h3>
 <p>The header is generated by <code>cbindgen</code> during the build. Look under Cargo’s
 <code>OUT_DIR</code> for <code>pico_de_gallo.h</code>:</p>
@@ -442,7 +525,21 @@ supposed to stay in lockstep with them.</p>
 <li>language: C,</li>
 <li>include guard: <code>PICO_DE_GALLO_H</code>,</li>
 <li>style: both tagged and typedef forms,</li>
-<li>line endings: LF.</li>
+<li>line endings: LF,</li>
+<li>an <code>[export] include</code> list.</li>
+</ul>
+<p>Two cbindgen behaviours are worth knowing before you add anything to the
+header, because both fail <strong>silently</strong>:</p>
+<ul>
+<li><strong>Unreferenced types are pruned.</strong> cbindgen only emits types reachable from
+an exported function signature. The configuration enums above appear in no
+signature, so they must be listed in <code>[export] include</code> or they vanish from
+the header with no warning.</li>
+<li><strong>Const initializers must be literals.</strong> cbindgen folds them syntactically,
+so <code>pub const A: usize = some::path::B;</code> compiles cleanly and emits nothing.
+Write the literal and guard it with a <code>const</code> assertion instead — that is
+what <code>GALLO_MAX_TRANSFER_SIZE</code>, <code>GALLO_MAX_BATCH_OPS</code> and
+<code>GALLO_NUM_GPIOS</code> do.</li>
 </ul>
 <h2 id="complete-example"><a class="header" href="#complete-example">Complete Example</a></h2>
 <pre><code class="language-c">#include &lt;stdint.h&gt;
