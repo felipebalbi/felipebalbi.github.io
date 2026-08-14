@@ -1,7 +1,7 @@
 +++
 title = "Tamal: Everything, Wired"
 date = 2026-08-14T09:00:00
-draft = true
+draft = false
 description = "Every module in the series has been read; none of them have been joined. Tamal.Top joins them in a hundred and fifteen lines: one function, system, that takes a UART line and four sampled IO bits and gives back a serial line, a four-lane drive, three sidebands and a status LED. The moment the engine gets its clock is stepM, three lines re-associating step's (State, BusOut, Maybe Ring) into the pair mealy demands, with a property test proving the adapter adds nothing at all. system's signature is deliberately free of BiSignal, so the whole integration is cosim-testable and the awkward part stays a hundred and four lines wide. Then the confluence: the UART at two megabaud, the loader FSM, the instruction and ring block RAMs, and mealy stepM initState at the centre, with three feedback knots --- the program counter into the instruction memory, the ring write into the trace memory, the trace memory back into the loader's drain. ringWrite projects a Ring record onto the memory's bare tuple, keeping the promise that a memory never learns what a trace record is. The LED is a latch, a counter and a truth table. And the tests run the whole machine for the first time: a program serialised onto a wire, triggered, and drained back as a REVISION word and a HALT terminator with every field zero."
 [taxonomies]
 tags = ["haskell", "clash", "fpga", "tamal", "top", "espi"]
