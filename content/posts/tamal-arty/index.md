@@ -1,7 +1,7 @@
 +++
 title = "Tamal: Binding to Silicon"
 date = 2026-08-17T09:00:00
-draft = true
+draft = false
 description = "The last module, and the shortest: fifty-one lines that give the design an address. Tamal.Board.ArtyA7 is the thin pin-binding shell --- a topEntity whose every argument and result carries a type-level name, seven in and nine out, with io0 through io3 appearing on both sides because a BiSignalIn argument and the BiSignalOut derived from it fuse into one inout port; makeTopEntity turning those annotations into a Verilog port list; Dom100, thirty-nine lines away in Tamal.Domain, declaring the Arty's hundred-megahertz oscillator as a type so the baud generator can read the clock period back out of it; noReset = unsafeFromActiveHigh (pure False), which is the whole reset strategy of the design, because on an FPGA the bitstream loads every register's initial value and initState is where the engine already comes up; and a four-line body that wires system to espiPads in a knot each half of which the other half completes. Then the constraints file, where the pins actually are --- E3 for the clock, a Pmod for the whole eSPI bus, PULLUP TRUE on the four lanes, which is the physical fact the pad module's type-level PullUp tag has been asserting all along with nothing to check it. Below this there is no more Haskell. The series closes."
 [taxonomies]
 tags = ["haskell", "clash", "fpga", "tamal", "board", "espi"]
