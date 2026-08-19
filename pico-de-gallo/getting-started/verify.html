@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-79aa07f4.js";
+            window.path_to_searchindex_js = "../searchindex-988a4873.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -214,6 +214,20 @@ Ping OK
 <p><code>ping</code> sends a random <code>u32</code> to the firmware and asserts the echo
 matches. If you can ping, USB and the wire protocol are fully
 functional.</p>
+<p>The payload is randomised per invocation, so a stale or
+default-initialised response can’t pass as a healthy round trip. If
+the round trip completes but the value comes back wrong, you get the
+mismatch instead of a generic transport error:</p>
+<pre><code class="language-console">$ gallo ping
+Error: ping echo mismatch: sent 0x9f2c41ab, received 0x00000000
+</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p><code>ping</code> and <code>version</code> are the only device subcommands that skip the
+up-front schema check described below. That is deliberate: a board
+whose schema doesn’t match your <code>gallo</code> build should still be able
+to prove its USB path works.</p>
+</blockquote>
 <h2 id="listing-multiple-devices"><a class="header" href="#listing-multiple-devices">Listing Multiple Devices</a></h2>
 <p>If you have more than one Pico de Gallo connected, <code>gallo list</code>
 shows them:</p>

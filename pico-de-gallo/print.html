@@ -38,7 +38,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-79aa07f4.js";
+            window.path_to_searchindex_js = "searchindex-988a4873.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-2de855f1.js"></script>
@@ -788,6 +788,20 @@ Ping OK
 <p><code>ping</code> sends a random <code>u32</code> to the firmware and asserts the echo
 matches. If you can ping, USB and the wire protocol are fully
 functional.</p>
+<p>The payload is randomised per invocation, so a stale or
+default-initialised response can’t pass as a healthy round trip. If
+the round trip completes but the value comes back wrong, you get the
+mismatch instead of a generic transport error:</p>
+<pre><code class="language-console">$ gallo ping
+Error: ping echo mismatch: sent 0x9f2c41ab, received 0x00000000
+</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p><code>ping</code> and <code>version</code> are the only device subcommands that skip the
+up-front schema check described below. That is deliberate: a board
+whose schema doesn’t match your <code>gallo</code> build should still be able
+to prove its USB path works.</p>
+</blockquote>
 <h2 id="listing-multiple-devices"><a class="header" href="#listing-multiple-devices">Listing Multiple Devices</a></h2>
 <p>If you have more than one Pico de Gallo connected, <code>gallo list</code>
 shows them:</p>
@@ -1170,14 +1184,20 @@ a GPIO manually around the SPI ops.</p>
 <pre><code class="language-console">$ gallo spi help
 SPI access methods
 
+Usage: gallo spi &lt;COMMAND&gt;
+
 Commands:
   read        Read bytes through SPI bus
   write       Write bytes through SPI bus
-  transfer    Full-duplex SPI transfer
-  write-read  Write bytes followed by read bytes
-  set-config  Set SPI bus configuration (frequency, phase, polarity)
-  get-config  Get current SPI bus configuration
+  transfer    Full-duplex SPI transfer (simultaneous write and read)
+  write-read  Write bytes followed by read bytes (half-duplex)
+  set-config  Set SPI bus parameters
+  get-config  Query the current SPI bus configuration
   batch       Execute multiple SPI operations atomically under chip-select
+  help        Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help  Print help
 </code></pre>
 <h3 id="read--write--transfer"><a class="header" href="#read--write--transfer">Read / Write / Transfer</a></h3>
 <pre><code class="language-console">$ gallo spi read --count 4
@@ -1191,9 +1211,30 @@ $ gallo spi transfer --bytes 0x01 0x02 0x03 0x04
 <p><code>transfer</code> clocks out the given bytes on MOSI and simultaneously
 clocks in the same number of bytes on MISO — true full-duplex.</p>
 <h3 id="config-1"><a class="header" href="#config-1">Config</a></h3>
-<pre><code class="language-console">$ gallo spi set-config --frequency 1000000 --phase 0 --polarity 0
+<p>Mode is selected with a single <code>--mode</code> flag, defaulting to 0:</p>
+<pre><code class="language-console">$ gallo spi set-config -h
+Set SPI bus parameters
+
+Usage: gallo spi set-config [OPTIONS] --frequency &lt;FREQUENCY&gt;
+
+Options:
+      --frequency &lt;FREQUENCY&gt;  SPI frequency in Hz
+      --mode &lt;MODE&gt;            SPI mode 0-3, the conventional (CPOL, CPHA) pairing [default: 0]
+  -h, --help                   Print help (see more with '--help')
+</code></pre>
+<p>The default matches the firmware’s power-on configuration, so setting
+only the clock leaves the mode alone:</p>
+<pre><code class="language-console">$ gallo spi set-config --frequency 1000000
 $ gallo spi get-config
-Frequency: 1000000 Hz, CPHA: 0, CPOL: 0
+SPI frequency: 1000000 Hz
+SPI phase:     CaptureOnFirstTransition (CPHA=0)
+SPI polarity:  IdleLow (CPOL=0)
+</code></pre>
+<p>Any other mode is one flag away, and out-of-range values are rejected
+rather than silently masked:</p>
+<pre><code class="language-console">$ gallo spi set-config --frequency 1000000 --mode 3
+$ gallo spi set-config --frequency 1000000 --mode 4
+error: invalid value '4' for '--mode &lt;MODE&gt;': 4 is not in 0..=3
 </code></pre>
 <h3 id="batch-atomic-under-cs"><a class="header" href="#batch-atomic-under-cs">Batch (Atomic Under CS)</a></h3>
 <p>A single transaction with chip-select held low for the duration:</p>
@@ -1210,7 +1251,13 @@ See <a href="#transaction-batching">Transaction Batching</a>.</p>
 async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     let pg = PicoDeGallo::new();
 
-    pg.spi_set_config(1_000_000, SpiPhase::Mode0, SpiPolarity::Low).await?;
+    // Mode 0: sample on the first transition, clock idles low.
+    pg.spi_set_config(
+        1_000_000,
+        SpiPhase::CaptureOnFirstTransition,
+        SpiPolarity::IdleLow,
+    )
+    .await?;
 
     // Read JEDEC ID under CS on GPIO 0
     let ops = [
@@ -1275,7 +1322,10 @@ available — see the <code>gallo_spi_batch_*</code> family in the generated
 <pre><code class="language-python">from pyco_de_gallo import PycoDeGallo, SpiPhase, SpiPolarity
 
 pg = PycoDeGallo()
-pg.spi_set_config(1_000_000, SpiPhase.Mode0, SpiPolarity.Low)
+# Mode 0: sample on the first transition, clock idles low.
+pg.spi_set_config(
+    1_000_000, SpiPhase.CaptureOnFirstTransition, SpiPolarity.IdleLow
+)
 
 pg.spi_write(bytes([0x9F]))
 id_bytes = pg.spi_read(3)
@@ -2962,13 +3012,14 @@ see the same capabilities.</p>
 <li>discovering which board is which when several are plugged in.</li>
 </ul>
 <h2 id="top-level-help"><a class="header" href="#top-level-help">Top-level Help</a></h2>
-<pre><code class="language-console">$ gallo --help
+<pre><code class="language-console">$ gallo -h
 Access I2C/SPI devices through Pico De Gallo
 
 Usage: gallo [OPTIONS] &lt;COMMAND&gt;
 
 Commands:
-  list     List connected Pico de Gallo devices
+  list     List all connected Pico de Gallo devices
+  ping     Check device liveness with a round-trip echo
   version  Get firmware version
   i2c      I2C access methods
   spi      SPI access methods
@@ -2980,12 +3031,16 @@ Commands:
   help     Print this message or the help of the given subcommand(s)
 
 Options:
-  -s, --serial-number &lt;SERIAL_NUMBER&gt;  Select a specific board by USB serial
-  -f, --format &lt;FORMAT&gt;                Read output format [default: hex]
-                                       [possible values: hex, binary, ascii]
-  -h, --help                           Print help
+  -s, --serial-number &lt;SERIAL_NUMBER&gt;  Select a specific board by USB serial number
+  -f, --format &lt;FORMAT&gt;                Output format for read data [default: hex] [possible values: hex, binary, ascii]
+  -h, --help                           Print help (see more with '--help')
   -V, --version                        Print version
 </code></pre>
+<blockquote class="blockquote-tag blockquote-tag-tip">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>Tip</p>
+<p><code>--help</code> prints the same thing with each option expanded — including the
+per-value descriptions for <code>--format</code>.</p>
+</blockquote>
 <h2 id="global-options"><a class="header" href="#global-options">Global Options</a></h2>
 <h3 id="-s---serial-number"><a class="header" href="#-s---serial-number"><code>-s, --serial-number</code></a></h3>
 <p>If more than one Pico de Gallo is attached, <code>gallo</code> would otherwise use the
@@ -3026,6 +3081,31 @@ E6633861A34B8C24      2      14
 <pre><code class="language-console">$ gallo version
 Firmware version: 0.1.0
 </code></pre>
+<h3 id="ping-1"><a class="header" href="#ping-1"><code>ping</code></a></h3>
+<p>Round-trips a random <code>u32</code> through the firmware’s <code>ping</code> endpoint and
+checks that the same value comes back.</p>
+<pre><code class="language-console">$ gallo ping
+Ping OK
+</code></pre>
+<p>This is the lowest-level check <code>gallo</code> offers. It exercises USB
+enumeration, the postcard-rpc framing, and the firmware dispatch loop
+without touching a peripheral, so it is the right first move when a
+board enumerates but a peripheral command misbehaves.</p>
+<p>The payload is randomised per invocation so that a stale, duplicated, or
+default-initialised response cannot pass as a healthy round trip. If the
+round trip completes but the value comes back wrong, <code>gallo</code> reports the
+mismatch with both values rather than a generic transport error:</p>
+<pre><code class="language-console">$ gallo ping
+Error: ping echo mismatch: sent 0x9f2c41ab, received 0x00000000
+</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p><code>ping</code> and <code>version</code> are the only device subcommands that skip the
+up-front schema-version check. A board whose schema does not match this
+<code>gallo</code> build should still be able to prove its USB path works — that is
+exactly the situation <code>ping</code> exists to diagnose. See
+<a href="#verifying-your-device">Verifying Your Device</a>.</p>
+</blockquote>
 <h2 id="peripheral-command-groups"><a class="header" href="#peripheral-command-groups">Peripheral Command Groups</a></h2>
 <h3 id="i2c"><a class="header" href="#i2c"><code>i2c</code></a></h3>
 <div class="table-wrapper">
@@ -3057,7 +3137,7 @@ Firmware version: 0.1.0
 <tr><td><code>write</code></td><td>Clock out bytes</td></tr>
 <tr><td><code>transfer</code></td><td>Full-duplex SPI transfer</td></tr>
 <tr><td><code>write-read</code></td><td>Half-duplex write followed by read</td></tr>
-<tr><td><code>set-config</code></td><td>Set frequency, phase, and polarity</td></tr>
+<tr><td><code>set-config</code></td><td>Set frequency and SPI mode (0–3)</td></tr>
 <tr><td><code>get-config</code></td><td>Show the active SPI configuration</td></tr>
 <tr><td><code>batch</code></td><td>Run atomic multi-step SPI transactions under chip-select</td></tr>
 </tbody>
@@ -3143,7 +3223,8 @@ Firmware version: 0.1.0
 </div>
 <p>See the <a href="#1-wire-bus">1-Wire chapter</a>.</p>
 <h2 id="a-few-crisp-examples"><a class="header" href="#a-few-crisp-examples">A Few Crisp Examples</a></h2>
-<pre><code class="language-console">$ gallo i2c get-config
+<pre><code class="language-console">$ gallo ping
+$ gallo i2c get-config
 $ gallo spi get-config
 $ gallo uart set-config --baud-rate 115200
 $ gallo gpio monitor --pin 0 --edge rising

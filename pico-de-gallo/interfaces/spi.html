@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-79aa07f4.js";
+            window.path_to_searchindex_js = "../searchindex-988a4873.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -237,14 +237,20 @@ a GPIO manually around the SPI ops.</p>
 <pre><code class="language-console">$ gallo spi help
 SPI access methods
 
+Usage: gallo spi &lt;COMMAND&gt;
+
 Commands:
   read        Read bytes through SPI bus
   write       Write bytes through SPI bus
-  transfer    Full-duplex SPI transfer
-  write-read  Write bytes followed by read bytes
-  set-config  Set SPI bus configuration (frequency, phase, polarity)
-  get-config  Get current SPI bus configuration
+  transfer    Full-duplex SPI transfer (simultaneous write and read)
+  write-read  Write bytes followed by read bytes (half-duplex)
+  set-config  Set SPI bus parameters
+  get-config  Query the current SPI bus configuration
   batch       Execute multiple SPI operations atomically under chip-select
+  help        Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help  Print help
 </code></pre>
 <h3 id="read--write--transfer"><a class="header" href="#read--write--transfer">Read / Write / Transfer</a></h3>
 <pre><code class="language-console">$ gallo spi read --count 4
@@ -258,9 +264,30 @@ $ gallo spi transfer --bytes 0x01 0x02 0x03 0x04
 <p><code>transfer</code> clocks out the given bytes on MOSI and simultaneously
 clocks in the same number of bytes on MISO — true full-duplex.</p>
 <h3 id="config"><a class="header" href="#config">Config</a></h3>
-<pre><code class="language-console">$ gallo spi set-config --frequency 1000000 --phase 0 --polarity 0
+<p>Mode is selected with a single <code>--mode</code> flag, defaulting to 0:</p>
+<pre><code class="language-console">$ gallo spi set-config -h
+Set SPI bus parameters
+
+Usage: gallo spi set-config [OPTIONS] --frequency &lt;FREQUENCY&gt;
+
+Options:
+      --frequency &lt;FREQUENCY&gt;  SPI frequency in Hz
+      --mode &lt;MODE&gt;            SPI mode 0-3, the conventional (CPOL, CPHA) pairing [default: 0]
+  -h, --help                   Print help (see more with '--help')
+</code></pre>
+<p>The default matches the firmware’s power-on configuration, so setting
+only the clock leaves the mode alone:</p>
+<pre><code class="language-console">$ gallo spi set-config --frequency 1000000
 $ gallo spi get-config
-Frequency: 1000000 Hz, CPHA: 0, CPOL: 0
+SPI frequency: 1000000 Hz
+SPI phase:     CaptureOnFirstTransition (CPHA=0)
+SPI polarity:  IdleLow (CPOL=0)
+</code></pre>
+<p>Any other mode is one flag away, and out-of-range values are rejected
+rather than silently masked:</p>
+<pre><code class="language-console">$ gallo spi set-config --frequency 1000000 --mode 3
+$ gallo spi set-config --frequency 1000000 --mode 4
+error: invalid value '4' for '--mode &lt;MODE&gt;': 4 is not in 0..=3
 </code></pre>
 <h3 id="batch-atomic-under-cs"><a class="header" href="#batch-atomic-under-cs">Batch (Atomic Under CS)</a></h3>
 <p>A single transaction with chip-select held low for the duration:</p>
@@ -277,7 +304,13 @@ See <a href="./batching.html">Transaction Batching</a>.</p>
 async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     let pg = PicoDeGallo::new();
 
-    pg.spi_set_config(1_000_000, SpiPhase::Mode0, SpiPolarity::Low).await?;
+    // Mode 0: sample on the first transition, clock idles low.
+    pg.spi_set_config(
+        1_000_000,
+        SpiPhase::CaptureOnFirstTransition,
+        SpiPolarity::IdleLow,
+    )
+    .await?;
 
     // Read JEDEC ID under CS on GPIO 0
     let ops = [
@@ -342,7 +375,10 @@ available — see the <code>gallo_spi_batch_*</code> family in the generated
 <pre><code class="language-python">from pyco_de_gallo import PycoDeGallo, SpiPhase, SpiPolarity
 
 pg = PycoDeGallo()
-pg.spi_set_config(1_000_000, SpiPhase.Mode0, SpiPolarity.Low)
+# Mode 0: sample on the first transition, clock idles low.
+pg.spi_set_config(
+    1_000_000, SpiPhase.CaptureOnFirstTransition, SpiPolarity.IdleLow
+)
 
 pg.spi_write(bytes([0x9F]))
 id_bytes = pg.spi_read(3)
