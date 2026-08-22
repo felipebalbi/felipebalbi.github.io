@@ -1,0 +1,1137 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+  <title>Felipe Balbi</title>
+  <subtitle>Notes on embedded systems, Rust, and the craft of writing software.</subtitle>
+  <link href="https://balbi.sh/tags/pico-de-gallo/atom.xml" rel="self" type="application/atom+xml"/>
+  <link href="https://balbi.sh"/>
+  <generator uri="https://www.getzola.org/">Zola</generator>
+  <updated>2026-08-19T09:00:00+00:00</updated>
+  <id>https://balbi.sh/tags/pico-de-gallo/atom.xml</id>
+  
+  <entry xml:lang="en">
+    <title>Pico de Gallo: Real Buses for Zephyr&#39;s native_sim</title>
+    <published>2026-08-19T09:00:00+00:00</published>
+    <updated>2026-08-19T09:00:00+00:00</updated>
+    <author><name>Felipe Balbi</name></author>
+    <link rel="alternate" href="https://balbi.sh/posts/pico-de-gallo-zephyr-native-sim/" type="text/html"/>
+    <id>https://balbi.sh/posts/pico-de-gallo-zephyr-native-sim/</id>
+    <summary type="html">&lt;p&gt;&lt;a href=&quot;/pico-de-gallo/&quot;&gt;Pico de Gallo&lt;/a&gt; turns an RP2350 into a USB-attached bridge so a
+host program can drive real I²C, SPI, UART, GPIO, PWM, ADC and 1-Wire
+without cross-compiling or flashing anything. Zephyr has always had
+real buses, of course. But &lt;code&gt;native_sim&lt;/code&gt; — the board you build when you
+want a Zephyr application to run as an ordinary process on your laptop
+— has not. There is now a Pico de Gallo module that gives it some.&lt;/p&gt;</summary>
+    
+    <content type="html">&lt;p&gt;&lt;a href=&quot;/pico-de-gallo/&quot;&gt;Pico de Gallo&lt;/a&gt; turns an RP2350 into a USB-attached bridge so a
+host program can drive real I²C, SPI, UART, GPIO, PWM, ADC and 1-Wire
+without cross-compiling or flashing anything. Zephyr has always had
+real buses, of course. But &lt;code&gt;native_sim&lt;/code&gt; — the board you build when you
+want a Zephyr application to run as an ordinary process on your laptop
+— has not. There is now a Pico de Gallo module that gives it some.&lt;/p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;/span&gt;&lt;h2 id=&quot;the-shape-of-it&quot;&gt;The shape of it&lt;/h2&gt;
+&lt;p&gt;The module is on &lt;code&gt;main&lt;/code&gt;. It ships a &lt;code&gt;pico_de_gallo&lt;/code&gt; shield whose I2C
+and SPI drivers forward Zephyr’s subsystem calls straight through
+&lt;a rel=&quot;external&quot; href=&quot;https://crates.io/crates/pico-de-gallo-ffi&quot;&gt;&lt;code&gt;pico-de-gallo-ffi&lt;/code&gt;&lt;/a&gt; to a board plugged into your laptop. The
+Zephyr board is &lt;code&gt;native_sim/native/64&lt;/code&gt; — nothing is cross-compiled,
+nothing is flashed. Corrosion builds the FFI as a &lt;code&gt;staticlib&lt;/code&gt; during
+the Zephyr build and links it into the native_simulator runner, so the
+&lt;code&gt;zephyr&lt;/code&gt; binary carries the USB transport inside it: no shared object
+to keep alongside it, no runtime library path to get right.&lt;/p&gt;
+&lt;h2 id=&quot;unmodified-upstream-drivers&quot;&gt;Unmodified upstream drivers&lt;/h2&gt;
+&lt;p&gt;That is the part worth the effort. &lt;code&gt;samples/i2c_bridge&lt;/code&gt; reads a TI
+TMP117 through Zephyr’s sensor API, using the in-tree &lt;code&gt;tmp117&lt;/code&gt; driver
+as-is:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;plain&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;Temperature: 23.500000 C&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;Temperature: 23.507812 C&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;samples/spi_nor_id&lt;/code&gt; does the same on SPI, bringing up a GigaDevice
+GD25Q16 with the stock &lt;code&gt;jedec,spi-nor&lt;/code&gt; driver and reading SFDP through
+the generic flash API:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;plain&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;&amp;lt;inf&amp;gt; spi_nor: nor@0: SFDP v 1.0 AP ff with 2 PH&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;&amp;lt;inf&amp;gt; spi_nor: nor@0: 2 MiBy flash&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;Flash device ready: nor@0&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;size:     2048 KiB&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;@000000:  FF 00 00 FF 7E AA 99 7E 51 00 01 05 92 00 20 62&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Those bytes are an iCE40 bitstream, read off real flash, by a Zephyr
+application running as a native process on the host. The sample is
+deliberately read-only: its overlay omits every write-capable
+devicetree gate, so initialisation issues nothing but &lt;code&gt;RDID&lt;/code&gt; and
+&lt;code&gt;RDSFDP&lt;/code&gt;. Both status registers read &lt;code&gt;0x00&lt;/code&gt; before and after, and the
+flash contents were byte-identical across the run.&lt;/p&gt;
+&lt;h2 id=&quot;what-reviewing-it-turned-up&quot;&gt;What reviewing it turned up&lt;/h2&gt;
+&lt;p&gt;Reading the module carefully produced six issues, and all six are now
+closed and merged. The sharpest was &lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/pico-de-gallo/issues/103&quot;&gt;#103&lt;/a&gt;: the SPI driver left
+&lt;code&gt;transceive_async&lt;/code&gt; and &lt;code&gt;iodev_submit&lt;/code&gt; NULL. Zephyr’s I2C subsystem
+NULL-checks its optional ops; SPI does not. That was a segfault waiting
+for anyone who enabled &lt;code&gt;CONFIG_SPI_RTIO&lt;/code&gt; — which arrives transitively
+via &lt;code&gt;CONFIG_SENSOR_ASYNC_API&lt;/code&gt;, so without asking for it. It is now a
+&lt;code&gt;BUILD_ASSERT&lt;/code&gt;, which turns an unsupported configuration into a build
+failure that names itself instead of a crash at runtime. &lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/pico-de-gallo/issues/111&quot;&gt;#111&lt;/a&gt;
+had the SPI driver calling &lt;code&gt;k_malloc&lt;/code&gt; while depending on nothing that
+provides a heap, so any application that did not set
+&lt;code&gt;CONFIG_HEAP_MEM_POOL_SIZE&lt;/code&gt; by hand failed to link. &lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/pico-de-gallo/issues/105&quot;&gt;#105&lt;/a&gt; was a
+pair of format-string defects in I2C error paths.&lt;/p&gt;
+&lt;p&gt;The other three were seams rather than code. &lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/pico-de-gallo/issues/108&quot;&gt;#108&lt;/a&gt;: the build
+hard-coded &lt;code&gt;libpico_de_gallo_ffi.so&lt;/code&gt; and assumed an ELF host, which is
+how the &lt;code&gt;staticlib&lt;/code&gt; decision above got made — macOS and Windows are
+supported &lt;code&gt;native_sim&lt;/code&gt; hosts too. &lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/pico-de-gallo/issues/107&quot;&gt;#107&lt;/a&gt;: the module fetched the
+FFI crate &lt;em&gt;from crates.io&lt;/em&gt; despite living in the same repository as it,
+so in-tree FFI edits changed nothing and the pin was invisible to
+&lt;code&gt;cargo-deny&lt;/code&gt; and the lockfile job. &lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/pico-de-gallo/issues/106&quot;&gt;#106&lt;/a&gt;: the generated C header
+exported no constants and no config enums, so every C consumer
+hard-coded magic numbers — &lt;code&gt;GALLO_NUM_GPIOS&lt;/code&gt; and friends are exported
+now.&lt;/p&gt;
+&lt;h2 id=&quot;where-it-stands&quot;&gt;Where it stands&lt;/h2&gt;
+&lt;p&gt;Coming along, and not done. There is no CI and no test suite yet. It
+wants Zephyr &lt;code&gt;main&lt;/code&gt; rather than a release, because the SPI driver reads
+&lt;code&gt;spi_config&lt;/code&gt; fields that no tagged version has. Two of the four samples
+cannot be built at all, since the IS31FL3743B driver they want is not
+upstream.&lt;/p&gt;
+&lt;p&gt;Chip select is the honest wart. Today the SPI driver forwards the child
+node’s &lt;code&gt;reg&lt;/code&gt; straight to the firmware as a GPIO pin index, so every
+transaction reconfigures whichever board GPIO that number happens to
+name — regardless of what you have wired there (&lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/pico-de-gallo/issues/104&quot;&gt;#104&lt;/a&gt;). The work
+in flight restructures the module around a multi-function device: an
+&lt;code&gt;odp,pico-de-gallo&lt;/code&gt; parent owning the single USB handle, with &lt;code&gt;-i2c&lt;/code&gt;,
+&lt;code&gt;-spi&lt;/code&gt; and a new &lt;code&gt;-gpio&lt;/code&gt; child beneath it, and chip select moved to
+ordinary &lt;code&gt;cs-gpios&lt;/code&gt; pointing at that GPIO sibling. That earns Zephyr’s
+own CS handling for free, and makes a devicetree wiring chip select to
+a &lt;em&gt;different&lt;/em&gt; board fail the build rather than assert CS on one board
+while clocking data on another. Not merged yet.&lt;/p&gt;
+&lt;p&gt;What is merged works against real silicon, with drivers nobody wrote
+for this. Upstreaming the module proper is tracked in &lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/pico-de-gallo/issues/98&quot;&gt;#98&lt;/a&gt;.&lt;/p&gt;
+&lt;h2 id=&quot;where-to-look&quot;&gt;Where to look&lt;/h2&gt;
+&lt;p&gt;The module does not have a chapter in the book yet. Until it does, the
+&lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/pico-de-gallo/blob/main/zephyr/README.md&quot;&gt;module README&lt;/a&gt; is the guide: prerequisites, workspace
+setup, both working samples, and a frank list of driver limitations.&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;docs: the &lt;a href=&quot;/pico-de-gallo/&quot;&gt;Pico de Gallo book&lt;/a&gt; · source: &lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/pico-de-gallo&quot;&gt;the repo&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;the C API the Zephyr drivers call: &lt;a rel=&quot;external&quot; href=&quot;https://crates.io/crates/pico-de-gallo-ffi&quot;&gt;&lt;code&gt;pico-de-gallo-ffi&lt;/code&gt;&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;underneath it: &lt;a rel=&quot;external&quot; href=&quot;https://crates.io/crates/pico-de-gallo-lib&quot;&gt;&lt;code&gt;pico-de-gallo-lib&lt;/code&gt;&lt;/a&gt; ·
+&lt;a rel=&quot;external&quot; href=&quot;https://crates.io/crates/pico-de-gallo-internal&quot;&gt;&lt;code&gt;pico-de-gallo-internal&lt;/code&gt;&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+</content>
+  </entry>
+  
+  <entry xml:lang="en">
+    <title>Agentic Gallo: Introducing gallo-mcp</title>
+    <published>2026-07-28T20:00:00+00:00</published>
+    <updated>2026-07-28T20:00:00+00:00</updated>
+    <author><name>Felipe Balbi</name></author>
+    <link rel="alternate" href="https://balbi.sh/posts/gallo-mcp-introducing/" type="text/html"/>
+    <id>https://balbi.sh/posts/gallo-mcp-introducing/</id>
+    <summary type="html">&lt;p&gt;&lt;a href=&quot;/pico-de-gallo/&quot;&gt;Pico de Gallo&lt;/a&gt; turns an RP2350 into a USB-attached bridge that
+lets a host program drive real I²C, SPI, UART, GPIO, PWM, ADC, and
+1-Wire straight from your laptop — so you can write and test device
+drivers in &lt;code&gt;std&lt;/code&gt; Rust, C, or Python instead of cross-compiling for an
+MCU every time. Today there’s a new way to reach that hardware, and it
+isn’t for you: &lt;a rel=&quot;external&quot; href=&quot;https://crates.io/crates/gallo-mcp&quot;&gt;&lt;code&gt;gallo-mcp&lt;/code&gt;&lt;/a&gt; is a &lt;a rel=&quot;external&quot; href=&quot;https://modelcontextprotocol.io/&quot;&gt;Model Context Protocol&lt;/a&gt;
+server that hands the board to the AI agent writing your driver.&lt;/p&gt;</summary>
+    
+    <content type="html">&lt;p&gt;&lt;a href=&quot;/pico-de-gallo/&quot;&gt;Pico de Gallo&lt;/a&gt; turns an RP2350 into a USB-attached bridge that
+lets a host program drive real I²C, SPI, UART, GPIO, PWM, ADC, and
+1-Wire straight from your laptop — so you can write and test device
+drivers in &lt;code&gt;std&lt;/code&gt; Rust, C, or Python instead of cross-compiling for an
+MCU every time. Today there’s a new way to reach that hardware, and it
+isn’t for you: &lt;a rel=&quot;external&quot; href=&quot;https://crates.io/crates/gallo-mcp&quot;&gt;&lt;code&gt;gallo-mcp&lt;/code&gt;&lt;/a&gt; is a &lt;a rel=&quot;external&quot; href=&quot;https://modelcontextprotocol.io/&quot;&gt;Model Context Protocol&lt;/a&gt;
+server that hands the board to the AI agent writing your driver.&lt;/p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;/span&gt;&lt;h2 id=&quot;one-tool-per-peripheral-over-stdio&quot;&gt;One tool per peripheral, over stdio&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;gallo-mcp&lt;/code&gt; runs an MCP server over stdio, wraps
+&lt;a rel=&quot;external&quot; href=&quot;https://crates.io/crates/pico-de-gallo-lib&quot;&gt;&lt;code&gt;pico-de-gallo-lib&lt;/code&gt;&lt;/a&gt;, and exposes one tool for every peripheral
+operation across all seven buses. Point an MCP-capable agent at it and
+the model can probe and drive real silicon through the same board the
+&lt;code&gt;gallo&lt;/code&gt; CLI talks to — read a sensor register, scan a bus, toggle a
+pin — while it’s writing the driver, without cross-compiling or
+flashing anything.&lt;/p&gt;
+&lt;p&gt;That closes a loop that used to need a human in the middle. Instead of
+you running &lt;code&gt;gallo i2c scan&lt;/code&gt;, pasting the output into the chat, and
+asking “now what?”, the agent can:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;explore an unfamiliar device interactively,&lt;/li&gt;
+&lt;li&gt;generate register-level driver code and validate it against the
+actual chip, and&lt;/li&gt;
+&lt;li&gt;turn “what does this chip return?” into a tool call it makes itself.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id=&quot;wiring-it-into-a-client&quot;&gt;Wiring it into a client&lt;/h2&gt;
+&lt;p&gt;Install the server:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;shellsession&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;$&lt;/span&gt;&lt;span&gt; cargo install gallo-mcp&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;gallo-mcp&lt;/code&gt; speaks MCP on &lt;strong&gt;stdout&lt;/strong&gt; and logs to &lt;strong&gt;stderr&lt;/strong&gt;, so it’s
+meant to be launched by a client, not run by hand. Add it as a local
+(stdio) server. These config files are safe to commit per project, so
+the tools show up only in the repos that opt in:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;json&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;//&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; opencode.json&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;{&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;$schema&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;https://opencode.ai/config.json&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;mcp&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;pico-de-gallo&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;type&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;local&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;command&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;gallo-mcp&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;enabled&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt; true&lt;/span&gt;&lt;span&gt; }&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  }&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;json&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;//&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; Claude Code — .mcp.json&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;mcpServers&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;pico-de-gallo&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;command&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;gallo-mcp&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;args&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt; }&lt;/span&gt;&lt;span&gt; }&lt;/span&gt;&lt;span&gt; }&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;json&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;//&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; Cursor — .cursor/mcp.json&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;mcpServers&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;pico-de-gallo&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;command&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;gallo-mcp&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;args&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt; }&lt;/span&gt;&lt;span&gt; }&lt;/span&gt;&lt;span&gt; }&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;One detail worth calling out: the server holds &lt;strong&gt;no persistent USB
+claim&lt;/strong&gt;. Each tool call opens the board, runs, and releases it, so the
+device stays free for the &lt;code&gt;gallo&lt;/code&gt; CLI or another host process between
+calls. There’s a small fixed connection cost per call in exchange, but
+it also means the server starts fine with nothing plugged in — you can
+attach the board mid-session and the tools start working. If you have
+more than one board attached, &lt;code&gt;--serial-number &amp;lt;SN&amp;gt;&lt;/code&gt; picks one.&lt;/p&gt;
+&lt;h2 id=&quot;the-tool-surface&quot;&gt;The tool surface&lt;/h2&gt;
+&lt;p&gt;Tools are grouped by peripheral, and every one is annotated: reads
+carry MCP’s &lt;code&gt;readOnlyHint&lt;/code&gt;, writes and actuation carry
+&lt;code&gt;destructiveHint&lt;/code&gt; (more on why that matters below).&lt;/p&gt;
+&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Peripheral&lt;/th&gt;&lt;th&gt;What the agent can do&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;
+&lt;tr&gt;&lt;td&gt;device&lt;/td&gt;&lt;td&gt;list boards, check attach state, read firmware/schema version, ping&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;I²C&lt;/td&gt;&lt;td&gt;read, write, write-then-read, scan, batch, get/set frequency&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;SPI&lt;/td&gt;&lt;td&gt;read, write, full-duplex transfer, flush, batch, get/set config&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;UART&lt;/td&gt;&lt;td&gt;read, write, flush, get/set config&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;GPIO&lt;/td&gt;&lt;td&gt;read a pin, drive a pin, set direction/pull, bounded edge waits&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;PWM&lt;/td&gt;&lt;td&gt;get/set duty cycle, enable/disable, get/set config&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;ADC&lt;/td&gt;&lt;td&gt;read a sample, read config&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;1-Wire&lt;/td&gt;&lt;td&gt;reset, read, write, parasitic-power write, ROM search&lt;/td&gt;&lt;/tr&gt;
+&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;The &lt;a href=&quot;/pico-de-gallo/crates/mcp.html&quot;&gt;full catalog is in the book&lt;/a&gt;. A couple of conventions
+are worth knowing up front. Byte payloads go &lt;strong&gt;in&lt;/strong&gt; as hex strings —
+comma-separated or bare, &lt;code&gt;&quot;0x00,0x10&quot;&lt;/code&gt; or &lt;code&gt;&quot;0010&quot;&lt;/code&gt; — and come &lt;strong&gt;back&lt;/strong&gt;
+as both hex and a decimal array:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;json&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;//&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; i2c_write_read {&amp;quot;address&amp;quot;:72,&amp;quot;data&amp;quot;:&amp;quot;0x00&amp;quot;,&amp;quot;count&amp;quot;:2}&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;hex&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;0x0B,0xCF&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;bytes&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;11&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 207&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt; }&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;And the GPIO edge waits are &lt;strong&gt;timeout-bounded only&lt;/strong&gt;: each requires a
+non-zero &lt;code&gt;timeout_ms&lt;/code&gt;. This first release deliberately leaves out
+infinite waits and push-based edge subscriptions — a wait that never
+returns would wedge the stdio session, and event streaming is out of
+scope for now.&lt;/p&gt;
+&lt;h2 id=&quot;seeing-the-same-truth-as-the-shell&quot;&gt;Seeing the same truth as the shell&lt;/h2&gt;
+&lt;p&gt;The server was validated on real hardware: a Pico de Gallo (firmware
+v0.10.0, schema v0.6.0 — the &lt;a href=&quot;/posts/pico-de-gallo-reliability-release/&quot;&gt;reliability release&lt;/a&gt;) with a
+TMP108 temperature sensor on I²C.&lt;/p&gt;
+&lt;p&gt;Over stdio, &lt;code&gt;status&lt;/code&gt; reports the attached board:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;json&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;attached&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt; true&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;firmware_version&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;0.10.0&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;schema_major&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;schema_minor&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 6&lt;/span&gt;&lt;span&gt; }&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;i2c_scan&lt;/code&gt; finds the sensor at &lt;code&gt;0x48&lt;/code&gt;:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;json&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;//&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; i2c_scan {&amp;quot;include_reserved&amp;quot;:false}&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;addresses&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;0x48&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;raw&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;72&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt; }&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;And &lt;code&gt;i2c_write_read&lt;/code&gt; pulls its two temperature bytes:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;json&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;//&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; i2c_write_read {&amp;quot;address&amp;quot;:72,&amp;quot;data&amp;quot;:&amp;quot;0x00&amp;quot;,&amp;quot;count&amp;quot;:2}&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;hex&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;0x0B,0xCF&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;bytes&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;11&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 207&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt; }&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Those bytes are byte-for-byte identical to what the CLI returns:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;shellsession&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;$&lt;/span&gt;&lt;span&gt; gallo i2c write-read -a 0x48 -b 0x00 -c 2&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;0b cf&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Turning &lt;code&gt;0x0BCF&lt;/code&gt; into degrees Celsius is between you and the TMP108
+datasheet — the point is that the MCP round-trip returns exactly what
+the shell does. An agent driving the board through &lt;code&gt;gallo-mcp&lt;/code&gt; sees the
+same truth you would at the prompt.&lt;/p&gt;
+&lt;h2 id=&quot;a-word-on-safety&quot;&gt;A word on safety&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;gallo-mcp&lt;/code&gt; does &lt;strong&gt;not&lt;/strong&gt; gate writes itself. It annotates them and
+delegates approval to the MCP client: read tools are marked
+&lt;code&gt;readOnlyHint&lt;/code&gt;, write and actuation tools are marked &lt;code&gt;destructiveHint&lt;/code&gt;.
+A well-configured client uses those hints to prompt you before it
+drives a pin or writes a bus.&lt;/p&gt;
+&lt;p&gt;That delegation cuts both ways. Under a permission-less or
+blanket-allow client, an agent can actuate hardware — toggle GPIOs,
+write I²C/SPI, change bus configuration — with no confirmation at all.
+If the board is wired to anything you care about, run the server behind
+a client that honors &lt;code&gt;destructiveHint&lt;/code&gt;, and set your permissions
+accordingly. The bytes are real, and so are the volts.&lt;/p&gt;
+&lt;h2 id=&quot;the-plumbing-pico-de-gallo-lib-0-7-1&quot;&gt;The plumbing: &lt;code&gt;pico-de-gallo-lib&lt;/code&gt; 0.7.1&lt;/h2&gt;
+&lt;p&gt;Handing the board to an agent turned up two rough edges in the host
+library, and smoothing them out is the other half of today’s release.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;&lt;code&gt;try_new()&lt;/code&gt;.&lt;/strong&gt; The existing &lt;code&gt;PicoDeGallo::new()&lt;/code&gt; (and
+&lt;code&gt;new_with_serial_number()&lt;/code&gt;) enumerate USB at construction and &lt;strong&gt;panic&lt;/strong&gt;
+when no matching board is present or the interface can’t be claimed —
+the old “constructing never fails” doc comment was simply wrong. That’s
+fine for a CLI that’s about to exit anyway, but a long-lived MCP server
+that connects per call can’t panic just because you haven’t plugged the
+board in yet. So 0.7.1 adds fallible &lt;code&gt;try_new()&lt;/code&gt; and
+&lt;code&gt;try_new_with_serial_number()&lt;/code&gt;, returning &lt;code&gt;Result&amp;lt;PicoDeGallo, String&amp;gt;&lt;/code&gt;
+so the caller can report “no device attached” or retry a transient
+claim failure. The panicking constructors stay exactly as they were.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Nameable comms errors.&lt;/strong&gt; 0.7.0 re-exports &lt;code&gt;HostErr&lt;/code&gt; and &lt;code&gt;WireError&lt;/code&gt;
+(and makes the &lt;code&gt;host_client&lt;/code&gt; path public), so a downstream crate can
+name the transport error types when it maps &lt;code&gt;PicoDeGalloError&lt;/code&gt; into its
+own representation — without pulling in &lt;code&gt;postcard-rpc&lt;/code&gt; directly. That’s
+what lets &lt;code&gt;gallo-mcp&lt;/code&gt; match on &lt;code&gt;PicoDeGalloError::Comms(HostErr::Closed)&lt;/code&gt;
+and turn a dropped USB connection into a clean “no device attached”
+message instead of an opaque error.&lt;/p&gt;
+&lt;p&gt;Both changes are additive and non-breaking; &lt;code&gt;hal&lt;/code&gt;, &lt;code&gt;ffi&lt;/code&gt;, &lt;code&gt;gallo&lt;/code&gt;, and
+the Python bindings resolve 0.7.1 without any changes of their own. If
+you’re building your own host tooling on the library, &lt;code&gt;try_new()&lt;/code&gt; is
+the constructor you want.&lt;/p&gt;
+&lt;h2 id=&quot;get-it&quot;&gt;Get it&lt;/h2&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;shellsession&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;$&lt;/span&gt;&lt;span&gt; cargo install gallo-mcp&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;ul&gt;
+&lt;li&gt;crate: &lt;a rel=&quot;external&quot; href=&quot;https://crates.io/crates/gallo-mcp&quot;&gt;&lt;code&gt;gallo-mcp&lt;/code&gt;&lt;/a&gt; · docs: &lt;a rel=&quot;external&quot; href=&quot;https://docs.rs/gallo-mcp&quot;&gt;docs.rs/gallo-mcp&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;library: &lt;a rel=&quot;external&quot; href=&quot;https://crates.io/crates/pico-de-gallo-lib&quot;&gt;&lt;code&gt;pico-de-gallo-lib&lt;/code&gt; 0.7.1&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;everything else: the &lt;a href=&quot;/pico-de-gallo/&quot;&gt;Pico de Gallo book&lt;/a&gt; and the &lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/pico-de-gallo&quot;&gt;repo&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Wire up a board, point your agent at it, and let it read the chip
+itself.&lt;/p&gt;
+</content>
+  </entry>
+  
+  <entry xml:lang="en">
+    <title>Hi, I&#39;m Norbert</title>
+    <published>2026-07-27T12:00:00+00:00</published>
+    <updated>2026-07-27T12:00:00+00:00</updated>
+    <author><name>Felipe Balbi</name></author>
+    <link rel="alternate" href="https://balbi.sh/posts/norbert-introducing/" type="text/html"/>
+    <id>https://balbi.sh/posts/norbert-introducing/</id>
+    <summary type="html">&lt;p&gt;Meet &lt;strong&gt;Norbert&lt;/strong&gt; — a small command-line tool I wrote to program SPI
+NOR flash chips. Its defining trait is patience: it reads and parses
+the SFDP tables, verifies its work, and would rather wait a second
+than guess.&lt;/p&gt;</summary>
+    
+    <content type="html">&lt;p&gt;Meet &lt;strong&gt;Norbert&lt;/strong&gt; — a small command-line tool I wrote to program SPI
+NOR flash chips. Its defining trait is patience: it reads and parses
+the SFDP tables, verifies its work, and would rather wait a second
+than guess.&lt;/p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;/span&gt;
+&lt;p&gt;Hand Norbert a chip and it works out what the part is — reads the
+JEDEC ID, parses the SFDP tables, or falls back to a table of chips it
+already knows. From there it can erase the device, program an image,
+verify every byte it wrote, and read the flash back. It drives a bare
+flash chip over a &lt;a href=&quot;/pico-de-gallo/&quot;&gt;Pico de Gallo&lt;/a&gt; bridge, so there’s no adapter
+board to wire up.&lt;/p&gt;
+&lt;p&gt;A normal session looks like this:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;shellsession&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;$&lt;/span&gt;&lt;span&gt; norbert detect&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;Hmm... let&amp;#39;s see what we&amp;#39;ve got here.&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;Found Winbond W25Q128JV.&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;$&lt;/span&gt;&lt;span&gt; norbert program firmware.bin&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;Programming firmware.bin — 512 KiB at 0x000000.&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  erase    [██████████████████████████]  8/8 blocks&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  program  [██████████████████████████]  512 KiB/512 KiB&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  verify   [██████████████████████████]  512 KiB/512 KiB&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;Done. Have a nice boot.&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;That chattiness is the point of the name: Norbert has a personality,
+but only in its output. Underneath, the engineering is deliberately
+dull — programming flash should be predictable, transparent, reliable,
+and, above all, boring. It won’t skip verification because a write is
+&lt;em&gt;probably fine&lt;/em&gt;, and it won’t assume every chip behaves the same.&lt;/p&gt;
+&lt;p&gt;It’s early — version 0.1 — but it already recognizes a fair number of
+chips — anything supporting SFDP should just work —, and &lt;code&gt;--quiet&lt;/code&gt;
+gives scripts machine-friendly output when you don’t want the
+commentary. The source is &lt;a rel=&quot;external&quot; href=&quot;https://github.com/felipebalbi/norbert&quot;&gt;on GitHub&lt;/a&gt;; if Norbert doesn’t know
+your chip yet, teaching it one is the easiest contribution to make.&lt;/p&gt;
+</content>
+  </entry>
+  
+  <entry xml:lang="en">
+    <title>Pico de Gallo: Release Announcement</title>
+    <published>2026-06-22T09:00:00+00:00</published>
+    <updated>2026-06-22T09:00:00+00:00</updated>
+    <author><name>Felipe Balbi</name></author>
+    <link rel="alternate" href="https://balbi.sh/posts/pico-de-gallo-reliability-release/" type="text/html"/>
+    <id>https://balbi.sh/posts/pico-de-gallo-reliability-release/</id>
+    <summary type="html">&lt;p&gt;&lt;a href=&quot;/pico-de-gallo/&quot;&gt;Pico de Gallo&lt;/a&gt; turns an RP2350 into a USB-attached bridge that
+lets a host program drive real I²C, SPI, GPIO, PWM, ADC, UART, and
+1-Wire from &lt;code&gt;std&lt;/code&gt; Rust, C, or Python — so you can write and test
+device drivers on your laptop instead of cross-compiling for an MCU
+every time. Today’s release moves the whole ecosystem forward at once.&lt;/p&gt;</summary>
+    
+    <content type="html">&lt;p&gt;&lt;a href=&quot;/pico-de-gallo/&quot;&gt;Pico de Gallo&lt;/a&gt; turns an RP2350 into a USB-attached bridge that
+lets a host program drive real I²C, SPI, GPIO, PWM, ADC, UART, and
+1-Wire from &lt;code&gt;std&lt;/code&gt; Rust, C, or Python — so you can write and test
+device drivers on your laptop instead of cross-compiling for an MCU
+every time. Today’s release moves the whole ecosystem forward at once.&lt;/p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;/span&gt;
+&lt;p&gt;This is a &lt;strong&gt;lockstep release&lt;/strong&gt;. The wire protocol in
+&lt;code&gt;pico-de-gallo-internal&lt;/code&gt; went from schema 0.5 to 0.6, and under the
+pre-1.0 schema-versioning rule that is a breaking change. &lt;strong&gt;Firmware
+and host must be upgraded together&lt;/strong&gt; — a 0.10 firmware will reject an
+older host’s RPCs, and a new host will refuse to talk to old firmware
+rather than silently mis-decode bytes on the wire. The
+&lt;a href=&quot;https://balbi.sh/posts/pico-de-gallo-reliability-release/#upgrade-and-compatibility&quot;&gt;upgrade notes&lt;/a&gt; at the bottom have the full
+version table.&lt;/p&gt;
+&lt;p&gt;Most of what landed here comes out of a reliability review that turned
+up a handful of real bugs: a GPIO wait could wedge the entire firmware
+dispatcher, a hung handler had no recovery path, GPIO subscriptions
+leaked when a host process crashed, and a bumped schema &lt;em&gt;major&lt;/em&gt; could
+slip past validation and corrupt decoding silently. Each crate’s share
+of the fix is below.&lt;/p&gt;
+&lt;h2 id=&quot;pico-de-gallo-internal-0-6-0-the-wire-protocol&quot;&gt;&lt;code&gt;pico-de-gallo-internal&lt;/code&gt; 0.6.0 — the wire protocol&lt;/h2&gt;
+&lt;p&gt;This is the crate every other one depends on, and the breaking schema
+bump that drives the lockstep.&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;GpioWaitRequest&lt;/code&gt; gained a &lt;code&gt;timeout_ms: u32&lt;/code&gt; field, used by all five
+&lt;code&gt;gpio/wait-*&lt;/code&gt; endpoints (&lt;code&gt;wait-high&lt;/code&gt;, &lt;code&gt;wait-low&lt;/code&gt;, &lt;code&gt;wait-rising&lt;/code&gt;,
+&lt;code&gt;wait-falling&lt;/code&gt;, &lt;code&gt;wait-any&lt;/code&gt;). A value of &lt;code&gt;0&lt;/code&gt; preserves the old
+wait-forever behavior; a non-zero value bounds the firmware-side wait
+and returns the new &lt;code&gt;GpioError::Timeout&lt;/code&gt; on expiry. This is the wire
+half of the fix for the dispatcher wedge — a wait on a pin that never
+transitions used to block &lt;em&gt;every other endpoint&lt;/em&gt; until you
+power-cycled the board.&lt;/li&gt;
+&lt;li&gt;New &lt;code&gt;system/reset-subscriptions&lt;/code&gt; endpoint (request &lt;code&gt;()&lt;/code&gt;, response
+&lt;code&gt;u8&lt;/code&gt; count). GPIO subscriptions are server-side state that outlives
+the USB transport, so a host that crashed without sending
+&lt;code&gt;gpio/unsubscribe&lt;/code&gt; would strand those pins until a power cycle. This
+endpoint is the recovery path.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Both changes are append-only on the wire, but the schema-version bump
+itself is what requires the coordinated upgrade.&lt;/p&gt;
+&lt;h2 id=&quot;pico-de-gallo-lib-0-6-0-the-rust-host-library&quot;&gt;&lt;code&gt;pico-de-gallo-lib&lt;/code&gt; 0.6.0 — the Rust host library&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;New &lt;code&gt;gpio_wait_for_{high,low,rising_edge,falling_edge,any_edge}_with_timeout&lt;/code&gt;
+methods take a &lt;code&gt;std::time::Duration&lt;/code&gt; and return
+&lt;code&gt;Err(PicoDeGalloError::Endpoint(GpioError::Timeout))&lt;/code&gt; on expiry. The
+existing two-argument methods keep waiting forever by sending
+&lt;code&gt;timeout_ms: 0&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;New &lt;code&gt;system_reset_subscriptions()&lt;/code&gt; method returns the number of
+subscriptions it reset. The recommended connect sequence is now
+&lt;code&gt;new()&lt;/code&gt; → &lt;code&gt;validate().await?&lt;/code&gt; → &lt;code&gt;system_reset_subscriptions().await?&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;validate()&lt;/code&gt; now checks &lt;code&gt;schema_major&lt;/code&gt; in addition to
+&lt;code&gt;schema_minor&lt;/code&gt;. Previously a firmware reporting a bumped major with a
+matching minor would pass validation and the host would then
+mis-decode wire bytes — silent garbage out. &lt;code&gt;ValidateError::SchemaMismatch&lt;/code&gt;
+now carries &lt;code&gt;expected_major&lt;/code&gt; / &lt;code&gt;actual_major&lt;/code&gt;, and its &lt;code&gt;Display&lt;/code&gt;
+shows the full &lt;code&gt;MAJOR.MINOR.x&lt;/code&gt; skew.&lt;/li&gt;
+&lt;li&gt;Fixed: &lt;code&gt;validate()&lt;/code&gt; no longer mis-classifies transport,
+postcard-decode, and frame-size errors as
+&lt;code&gt;ValidateError::LegacyFirmware&lt;/code&gt;. Only the postcard-rpc “no handler
+for that key” signals (&lt;code&gt;UnknownKey&lt;/code&gt;, &lt;code&gt;KeyTooSmall&lt;/code&gt;) map to
+&lt;code&gt;LegacyFirmware&lt;/code&gt;; everything else routes to &lt;code&gt;Comms&lt;/code&gt;, so you stop
+being told to upgrade firmware that is already current.&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;MAX_BATCH_OPS&lt;/code&gt; and &lt;code&gt;MAX_TRANSFER_SIZE&lt;/code&gt; are now re-exported, so you
+don’t have to depend on the wire crate just to validate batch sizes.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id=&quot;pico-de-gallo-hal-0-6-0-the-embedded-hal-layer&quot;&gt;&lt;code&gt;pico-de-gallo-hal&lt;/code&gt; 0.6.0 — the &lt;code&gt;embedded-hal&lt;/code&gt; layer&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;New &lt;code&gt;Hal::new_validated()&lt;/code&gt; and &lt;code&gt;Hal::new_validated_with_serial_number()&lt;/code&gt;
+constructors call &lt;code&gt;validate()&lt;/code&gt; before returning, failing loudly on a
+disconnected device or a schema mismatch. The lazy &lt;code&gt;Hal::new()&lt;/code&gt; still
+defers failures to the first RPC if that’s what you want. A standalone
+&lt;code&gt;Hal::validate()&lt;/code&gt; accessor lets you check after the fact.&lt;/li&gt;
+&lt;li&gt;New &lt;code&gt;Hal::system_reset_subscriptions() -&amp;gt; Result&amp;lt;u8, SystemHalError&amp;gt;&lt;/code&gt;
+exposes the subscription teardown that previously required dropping
+down to &lt;code&gt;pico-de-gallo-lib&lt;/code&gt;. Recommended right after
+&lt;code&gt;new_validated()&lt;/code&gt; in any app that uses GPIO subscriptions.&lt;/li&gt;
+&lt;li&gt;New &lt;code&gt;Gpio::wait_for_*_with_timeout&lt;/code&gt; inherent async methods accept a
+&lt;code&gt;Duration&lt;/code&gt; and return &lt;code&gt;GpioError::Timeout&lt;/code&gt; on expiry. They’re
+inherent methods rather than trait methods because
+&lt;code&gt;embedded-hal-async&lt;/code&gt;’s &lt;code&gt;Wait&lt;/code&gt; trait has no notion of a timeout; the
+trait methods keep their wait-forever semantics.&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;AdcChannel&lt;/code&gt;, &lt;code&gt;AdcConfigurationInfo&lt;/code&gt;, &lt;code&gt;GpioDirection&lt;/code&gt;, &lt;code&gt;GpioEdge&lt;/code&gt;,
+and &lt;code&gt;GpioPull&lt;/code&gt; are now re-exported — driver authors no longer need
+&lt;code&gt;pico-de-gallo-lib&lt;/code&gt; in their &lt;code&gt;Cargo.toml&lt;/code&gt; just for these types.&lt;/li&gt;
+&lt;li&gt;New &lt;code&gt;HalInitError&lt;/code&gt; and &lt;code&gt;SystemHalError&lt;/code&gt; types, and a fix for a stale
+doc-comment that referenced a &lt;code&gt;Hal::uart_set_config&lt;/code&gt; method that
+never existed.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id=&quot;pico-de-gallo-ffi-0-7-0-the-c-bindings&quot;&gt;&lt;code&gt;pico-de-gallo-ffi&lt;/code&gt; 0.7.0 — the C bindings&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;New &lt;code&gt;gallo_init_strict()&lt;/code&gt; and &lt;code&gt;gallo_init_strict_with_serial_number()&lt;/code&gt;
+call &lt;code&gt;validate()&lt;/code&gt; internally and return &lt;code&gt;NULL&lt;/code&gt; on device-not-found,
+schema mismatch, or legacy firmware. Prefer these over the lazy
+&lt;code&gt;gallo_init&lt;/code&gt; in production C — failures surface at construct time
+instead of on the first RPC.&lt;/li&gt;
+&lt;li&gt;New &lt;code&gt;gallo_gpio_wait_for_{high,low,rising_edge,falling_edge,any_edge}_with_timeout_ms&lt;/code&gt;
+functions. &lt;code&gt;timeout_ms == 0&lt;/code&gt; keeps the wait-forever behavior;
+non-zero bounds it and returns &lt;code&gt;Status::GpioTimeout&lt;/code&gt; (&lt;code&gt;-70&lt;/code&gt;). These
+need firmware schema 0.6+; older firmware returns
+&lt;code&gt;Status::SchemaMismatch&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;New &lt;code&gt;gallo_system_reset_subscriptions()&lt;/code&gt; with
+&lt;code&gt;SystemResetSubscriptionsFailed&lt;/code&gt; (&lt;code&gt;-69&lt;/code&gt;).&lt;/li&gt;
+&lt;li&gt;The high-throughput primitives &lt;code&gt;gallo_spi_transfer&lt;/code&gt;, &lt;code&gt;gallo_spi_batch&lt;/code&gt;,
+and &lt;code&gt;gallo_i2c_batch&lt;/code&gt; are now reachable from C, via the tagged structs
+&lt;code&gt;GalloSpiBatchOp&lt;/code&gt; / &lt;code&gt;GalloI2cBatchOp&lt;/code&gt;. On a per-operation failure an
+optional &lt;code&gt;out_failed_op&lt;/code&gt; receives the zero-based index of the failing
+op. New status codes: &lt;code&gt;I2cBatchFailed&lt;/code&gt; (&lt;code&gt;-66&lt;/code&gt;), &lt;code&gt;SpiBatchFailed&lt;/code&gt;
+(&lt;code&gt;-67&lt;/code&gt;), &lt;code&gt;SpiTransferFailed&lt;/code&gt; (&lt;code&gt;-68&lt;/code&gt;). The wire protocol is unchanged
+here — this is pure FFI surface over existing endpoints.&lt;/li&gt;
+&lt;li&gt;All &lt;code&gt;gallo_*&lt;/code&gt; functions now take &lt;code&gt;const PicoDeGallo *&lt;/code&gt; for the device
+handle. The ABI is unchanged, but C consumers that previously cast
+away &lt;code&gt;const&lt;/code&gt; on every call can drop those casts, and headers built
+with &lt;code&gt;-Wcast-qual&lt;/code&gt; stop warning. The handle remains &lt;code&gt;Send + Sync&lt;/code&gt; and
+interior-mutable.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id=&quot;pyco-de-gallo-0-4-2-the-python-bindings&quot;&gt;&lt;code&gt;pyco-de-gallo&lt;/code&gt; 0.4.2 — the Python bindings&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;New &lt;code&gt;pyco_de_gallo.open_strict()&lt;/code&gt; and
+&lt;code&gt;open_strict_with_serial_number(serial_number)&lt;/code&gt; call &lt;code&gt;validate()&lt;/code&gt;
+before returning the handle and raise &lt;code&gt;RuntimeError&lt;/code&gt; on
+device-not-found, schema mismatch, or legacy firmware. Prefer these
+over the lazy &lt;code&gt;open()&lt;/code&gt; in production Python.&lt;/li&gt;
+&lt;li&gt;New &lt;code&gt;gpio_wait_for_*_with_timeout(timeout_ms: int)&lt;/code&gt; methods — &lt;code&gt;0&lt;/code&gt;
+waits forever, non-zero raises &lt;code&gt;RuntimeError&lt;/code&gt; on &lt;code&gt;GpioError::Timeout&lt;/code&gt;.
+Requires firmware schema 0.6+.&lt;/li&gt;
+&lt;li&gt;New &lt;code&gt;system_reset_subscriptions()&lt;/code&gt; returns an &lt;code&gt;int&lt;/code&gt;.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id=&quot;gallo-cli-0-7-0-the-command-line-tool&quot;&gt;&lt;code&gt;gallo&lt;/code&gt; (CLI) 0.7.0 — the command-line tool&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;gallo&lt;/code&gt; now calls &lt;code&gt;validate()&lt;/code&gt; at the top of every subcommand except
+&lt;code&gt;list&lt;/code&gt; and &lt;code&gt;version&lt;/code&gt;. A schema-version mismatch is reported up front
+with an actionable message that points at &lt;code&gt;gallo version&lt;/code&gt; and tells
+you to re-flash the firmware or install a matching &lt;code&gt;gallo&lt;/code&gt;, instead
+of surfacing as a confusing &lt;code&gt;CommsFailed&lt;/code&gt; on the first RPC. &lt;code&gt;list&lt;/code&gt; is
+exempt because it doesn’t touch a connected device; &lt;code&gt;version&lt;/code&gt; is
+exempt because it &lt;em&gt;is&lt;/em&gt; the diagnostic that reports schema skew.&lt;/li&gt;
+&lt;li&gt;Everything else is unchanged. The existing &lt;code&gt;gpio&lt;/code&gt; subcommands
+(&lt;code&gt;get&lt;/code&gt;, &lt;code&gt;put&lt;/code&gt;, &lt;code&gt;set-config&lt;/code&gt;, &lt;code&gt;monitor&lt;/code&gt;) keep working. The CLI doesn’t
+expose &lt;code&gt;gpio wait-for-*&lt;/code&gt; subcommands, so bounded waits stay available
+through the Rust, C, and Python libraries.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id=&quot;pico-de-gallo-firmware-0-10-0-the-device&quot;&gt;&lt;code&gt;pico-de-gallo-firmware&lt;/code&gt; 0.10.0 — the device&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;gpio_wait_for_*&lt;/code&gt; handlers now honor the per-request &lt;code&gt;timeout_ms&lt;/code&gt;.
+Non-zero values wrap embassy’s &lt;code&gt;wait_for_*_edge()&lt;/code&gt; future in
+&lt;code&gt;embassy_time::with_timeout(...)&lt;/code&gt; and return &lt;code&gt;GpioError::Timeout&lt;/code&gt; on
+expiry; &lt;code&gt;0&lt;/code&gt; keeps the pre-0.6 wait-forever behavior.&lt;/li&gt;
+&lt;li&gt;An embassy-rp watchdog is now enabled at a 2-second timeout, fed
+every 800 ms by a dedicated &lt;code&gt;watchdog_feeder_task&lt;/code&gt;. It’s a separate
+task on purpose — a wedged handler can’t be trusted to feed a
+handler-based scheme — so the device recovers from any future handler
+hang. &lt;code&gt;pause_on_debug(true)&lt;/code&gt; keeps debugger sessions from resetting
+the chip.&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;i2c_scan_handler&lt;/code&gt; now wraps each per-address probe in a 50 ms
+timeout, so one slow-to-NAK address no longer burns the whole scan
+budget.&lt;/li&gt;
+&lt;li&gt;New &lt;code&gt;system/reset-subscriptions&lt;/code&gt; handler iterates the GPIO monitor
+slots, signals each live one to stop, awaits the pin back from its
+monitor task, and returns it to the context. It’s idempotent and
+cheap when nothing is subscribed — the device-side half of the
+subscription-leak recovery.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Together these close the dispatcher-wedge regression (a &lt;code&gt;gpio_wait&lt;/code&gt; on
+a never-transitioning pin blocking every other endpoint), the
+no-recovery-from-a-hung-handler gap, and the worst-case impact of a
+flaky I²C bus on &lt;code&gt;i2c_scan&lt;/code&gt;.&lt;/p&gt;
+&lt;h2 id=&quot;upgrade-and-compatibility&quot;&gt;Upgrade and compatibility&lt;/h2&gt;
+&lt;p&gt;Because the wire schema changed, &lt;strong&gt;flash the new firmware and update
+your host crate in the same step&lt;/strong&gt;. Mixed versions won’t talk to each
+other — by design, the new validation refuses rather than mis-decodes.&lt;/p&gt;
+&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Crate&lt;/th&gt;&lt;th&gt;Old&lt;/th&gt;&lt;th&gt;New&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;pico-de-gallo-internal&lt;/code&gt;&lt;/td&gt;&lt;td&gt;0.5.0&lt;/td&gt;&lt;td&gt;0.6.0&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;pico-de-gallo-lib&lt;/code&gt;&lt;/td&gt;&lt;td&gt;0.5.0&lt;/td&gt;&lt;td&gt;0.6.0&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;pico-de-gallo-hal&lt;/code&gt;&lt;/td&gt;&lt;td&gt;0.5.0&lt;/td&gt;&lt;td&gt;0.6.0&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;pico-de-gallo-ffi&lt;/code&gt;&lt;/td&gt;&lt;td&gt;0.6.0&lt;/td&gt;&lt;td&gt;0.7.0&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;gallo&lt;/code&gt; (CLI)&lt;/td&gt;&lt;td&gt;0.6.0&lt;/td&gt;&lt;td&gt;0.7.0&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;pyco-de-gallo&lt;/code&gt;&lt;/td&gt;&lt;td&gt;0.2.0&lt;/td&gt;&lt;td&gt;0.4.2&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;pico-de-gallo-firmware&lt;/code&gt;&lt;/td&gt;&lt;td&gt;0.9.0&lt;/td&gt;&lt;td&gt;0.10.0&lt;/td&gt;&lt;/tr&gt;
+&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;After flashing, point the host at the device and confirm the schema
+lines up:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;shellsession&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;$&lt;/span&gt;&lt;span&gt; gallo version&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;For new code, reach for the validating entry points so a version skew
+or a missing board fails at construct time rather than on the first
+call:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Rust library: &lt;code&gt;PicoDeGallo::new()&lt;/code&gt; → &lt;code&gt;validate().await?&lt;/code&gt; →
+&lt;code&gt;system_reset_subscriptions().await?&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;HAL: &lt;code&gt;Hal::new_validated()&lt;/code&gt;, then &lt;code&gt;system_reset_subscriptions()&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;C: &lt;code&gt;gallo_init_strict()&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;Python: &lt;code&gt;pyco_de_gallo.open_strict()&lt;/code&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;If you hit a schema-mismatch error after upgrading only one side, that
+mismatch is the new validation doing its job. Re-flash or re-install so
+both ends report the same schema, and you’re good.&lt;/p&gt;
+</content>
+  </entry>
+  
+  <entry xml:lang="en">
+    <title>Examples that run</title>
+    <published>2026-06-15T15:58:00+00:00</published>
+    <updated>2026-06-15T15:58:00+00:00</updated>
+    <author><name>Felipe Balbi</name></author>
+    <link rel="alternate" href="https://balbi.sh/posts/examples-that-run/" type="text/html"/>
+    <id>https://balbi.sh/posts/examples-that-run/</id>
+    <summary type="html">&lt;p&gt;Most driver crates I reach for ship an &lt;code&gt;examples/&lt;/code&gt; directory that I
+have to &lt;em&gt;port&lt;/em&gt; before I can read it. Wrong PAC for my dev board,
+wrong linker script, a &lt;code&gt;#[entry]&lt;/code&gt; macro from a runtime I don’t have
+checked out, a &lt;code&gt;loop { wfi() }&lt;/code&gt; at the end I need to delete because
+I’m hosting the binary myself. By the time I’ve matched the example
+to my hardware, I’ve spent an hour and I haven’t learned anything
+about the chip — I’ve learned about the crate author’s bring-up
+preferences for the board they happened to own.&lt;/p&gt;
+&lt;p&gt;A &lt;a href=&quot;/posts/writing-embedded-drivers-without-an-mcu/&quot;&gt;previous post&lt;/a&gt;
+made the case for moving the bus host-side: a Pi Pico 2 acting as a
+USB-attached I²C/SPI/GPIO adapter, so the driver crate itself stays
+unchanged and runs from a &lt;code&gt;std&lt;/code&gt; binary on your laptop. This post is
+the other half. Once the bus moved, the &lt;em&gt;driver crate’s&lt;/em&gt; &lt;code&gt;examples/&lt;/code&gt;
+directory changed shape too, and the conventions that fell out are
+worth writing down. The worked example is
+&lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/tmp108&quot;&gt;&lt;code&gt;tmp108&lt;/code&gt;&lt;/a&gt; — at the
+time of writing, the only crate on crates.io that lists
+&lt;code&gt;pico-de-gallo-hal&lt;/code&gt; as a (dev-)dependency at all. Five example files,
+five distinct chip behaviors, every one of them runs on a normal dev
+machine as soon as you have the chip on a breadboard.&lt;/p&gt;</summary>
+    
+    <content type="html">&lt;p&gt;Most driver crates I reach for ship an &lt;code&gt;examples/&lt;/code&gt; directory that I
+have to &lt;em&gt;port&lt;/em&gt; before I can read it. Wrong PAC for my dev board,
+wrong linker script, a &lt;code&gt;#[entry]&lt;/code&gt; macro from a runtime I don’t have
+checked out, a &lt;code&gt;loop { wfi() }&lt;/code&gt; at the end I need to delete because
+I’m hosting the binary myself. By the time I’ve matched the example
+to my hardware, I’ve spent an hour and I haven’t learned anything
+about the chip — I’ve learned about the crate author’s bring-up
+preferences for the board they happened to own.&lt;/p&gt;
+&lt;p&gt;A &lt;a href=&quot;/posts/writing-embedded-drivers-without-an-mcu/&quot;&gt;previous post&lt;/a&gt;
+made the case for moving the bus host-side: a Pi Pico 2 acting as a
+USB-attached I²C/SPI/GPIO adapter, so the driver crate itself stays
+unchanged and runs from a &lt;code&gt;std&lt;/code&gt; binary on your laptop. This post is
+the other half. Once the bus moved, the &lt;em&gt;driver crate’s&lt;/em&gt; &lt;code&gt;examples/&lt;/code&gt;
+directory changed shape too, and the conventions that fell out are
+worth writing down. The worked example is
+&lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/tmp108&quot;&gt;&lt;code&gt;tmp108&lt;/code&gt;&lt;/a&gt; — at the
+time of writing, the only crate on crates.io that lists
+&lt;code&gt;pico-de-gallo-hal&lt;/code&gt; as a (dev-)dependency at all. Five example files,
+five distinct chip behaviors, every one of them runs on a normal dev
+machine as soon as you have the chip on a breadboard.&lt;/p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;/span&gt;
+&lt;p&gt;What follows is what I do, and why. None of it is novel; most of it
+is the kind of thing that becomes obvious once the constraint
+“every example must be runnable, by anyone, on the actual chip”
+stops being aspirational.&lt;/p&gt;
+&lt;h2 id=&quot;the-opening-line-is-the-chip-s-pinout&quot;&gt;The opening line is the chip’s pinout&lt;/h2&gt;
+&lt;p&gt;Every example in &lt;code&gt;tmp108/examples/&lt;/code&gt; opens with the same shape. The
+&lt;code&gt;oneshot.rs&lt;/code&gt; body, in full:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; hal&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Hal&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;new&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; i2c&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; hal&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;i2c&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; mut&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; tmp&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Tmp108&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;new_with_a0_gnd&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;i2c&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; temperature&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; tmp&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;temperature&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;map_err&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;|&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;_&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;|&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; anyhow!&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;Failed to read temperature&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;?&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;println!&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;Temperature: &lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;temperature:.2&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; C&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The first two lines are the entire host-side preamble. They’re
+contract: ignore me, the rest of this file is only about the chip.
+After a few examples, the reader’s eye learns to skip past them and
+read the rest as if it were library prose. There’s no clock-tree
+setup, no peripheral init, no &lt;code&gt;#[entry]&lt;/code&gt; decorator, no panic handler.
+The bus is just &lt;em&gt;there&lt;/em&gt;, the way &lt;code&gt;std::fs::File::open&lt;/code&gt; is just there
+in a Linux program.&lt;/p&gt;
+&lt;p&gt;The third line is the one that does the work. &lt;code&gt;Tmp108::new_with_a0_gnd(i2c)&lt;/code&gt;:
+the constructor name &lt;em&gt;is&lt;/em&gt; the pinout. A0 tied to GND means I²C
+address &lt;code&gt;0x48&lt;/code&gt;. The TMP108 takes one of four addresses depending on
+the state of its A0 pin, and the driver exposes one constructor per
+choice — &lt;code&gt;new_with_a0_gnd&lt;/code&gt;, &lt;code&gt;new_with_a0_vplus&lt;/code&gt;, &lt;code&gt;new_with_a0_sda&lt;/code&gt;,
+&lt;code&gt;new_with_a0_scl&lt;/code&gt;. There is no &lt;code&gt;new(addr: u8)&lt;/code&gt;. There is no way to
+construct a &lt;code&gt;Tmp108&lt;/code&gt; whose address doesn’t correspond to a real
+wiring choice on the part.&lt;/p&gt;
+&lt;p&gt;The example file tells you which jumper you’re looking at by
+&lt;em&gt;naming it in the constructor&lt;/em&gt;. A reader who has the chip strapped
+to V+ can see, without consulting the README, that this particular
+example assumes A0 is grounded — and that swapping &lt;code&gt;_a0_gnd&lt;/code&gt; for
+&lt;code&gt;_a0_vplus&lt;/code&gt; is the only change they need to make. The constructor
+name is doing documentation work that would otherwise have lived in
+a code comment, where I would have forgotten to update it the next
+time I edited the file.&lt;/p&gt;
+&lt;h2 id=&quot;one-file-per-chip-behavior-not-per-method&quot;&gt;One file per chip behavior, not per method&lt;/h2&gt;
+&lt;p&gt;There are five files in &lt;code&gt;tmp108/examples/&lt;/code&gt;: &lt;code&gt;oneshot.rs&lt;/code&gt;,
+&lt;code&gt;continuous.rs&lt;/code&gt;, &lt;code&gt;alert_comparator.rs&lt;/code&gt;, &lt;code&gt;alert_interrupt.rs&lt;/code&gt;, and
+&lt;code&gt;sensor_trait.rs&lt;/code&gt;. Each one demonstrates a thing the TMP108 &lt;em&gt;does&lt;/em&gt;
+— a single-shot conversion, a continuous-conversion loop, the
+ALERT pin in comparator mode, the ALERT pin in interrupt mode, and
+the cross-crate &lt;code&gt;embedded-sensors-hal&lt;/code&gt; trait integration. Not
+&lt;code&gt;new_with_a0_gnd.rs&lt;/code&gt;, &lt;code&gt;new_with_a0_vplus.rs&lt;/code&gt;, &lt;code&gt;new_with_a0_sda.rs&lt;/code&gt;
+— that would be per-constructor, which is per-API, which is
+library-shaped. Per-behavior is chip-shaped, which is the grain the
+reader is here for.&lt;/p&gt;
+&lt;p&gt;The grain of the directory matches the grain of the datasheet’s “Modes
+of operation” chapter, not the grain of the Rust struct’s &lt;code&gt;impl&lt;/code&gt;
+block. A reader who wants to know “how do I use the ALERT pin in
+interrupt mode” goes to &lt;code&gt;alert_interrupt.rs&lt;/code&gt;; a reader who wants to
+know “what does the public API look like” can read the
+&lt;a rel=&quot;external&quot; href=&quot;https://docs.rs/tmp108&quot;&gt;docs.rs&lt;/a&gt; page. Two different audiences, two
+different artifacts, and they don’t have to compete for space in the
+same file.&lt;/p&gt;
+&lt;p&gt;The two ALERT examples are a good test of whether “chip behavior”
+is genuinely the right axis. The TMP108’s ALERT pin has two
+operating modes that the &lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/tmp108#gotchas&quot;&gt;README’s Gotchas
+section&lt;/a&gt;
+spells out: in comparator mode the pin stays asserted until the
+temperature returns inside the hysteresis band; in interrupt mode
+the pin clears as soon as the configuration register is read. Two
+modes, two examples — not because the trait has two methods (it
+doesn’t; it has one &lt;code&gt;wait_for_temperature_threshold&lt;/code&gt;), but because
+the &lt;em&gt;chip&lt;/em&gt; genuinely behaves differently in the two configurations.
+The split exists because the reader who’s debugging “why doesn’t
+my ALERT line release” needs to know which mode they configured,
+and the example that demonstrates each mode is the most economical
+place to learn it.&lt;/p&gt;
+&lt;h2 id=&quot;same-file-both-flavors&quot;&gt;Same file, both flavors&lt;/h2&gt;
+&lt;p&gt;The TMP108 driver ships both a blocking &lt;code&gt;Tmp108&lt;/code&gt; and an async
+&lt;code&gt;AsyncTmp108&lt;/code&gt;, gated on the &lt;code&gt;async&lt;/code&gt; Cargo feature. The straightforward
+thing to do would have been &lt;code&gt;oneshot_blocking.rs&lt;/code&gt; and
+&lt;code&gt;oneshot_async.rs&lt;/code&gt;, two files, one per build configuration – one can
+certainly follow that model too. That isn’t what I did. The
+&lt;code&gt;oneshot.rs&lt;/code&gt; file has &lt;em&gt;two&lt;/em&gt; &lt;code&gt;main()&lt;/code&gt; functions in it, picked between
+by &lt;code&gt;cfg&lt;/code&gt;:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;#&lt;/span&gt;&lt;span&gt;[&lt;/span&gt;&lt;span&gt;cfg&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;not&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;feature &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;async&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;fn&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; main&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Result&lt;/span&gt;&lt;span&gt;&amp;lt;&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;&amp;gt;&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;    //&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; ... blocking body&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;#&lt;/span&gt;&lt;span&gt;[&lt;/span&gt;&lt;span&gt;cfg&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;feature &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;async&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;#&lt;/span&gt;&lt;span&gt;[&lt;/span&gt;&lt;span&gt;tokio&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span&gt;main&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;async&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; fn&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; main&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Result&lt;/span&gt;&lt;span&gt;&amp;lt;&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;&amp;gt;&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;    //&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; ... async body&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Why one file? Because a reader who wants to learn &lt;em&gt;what changes
+when you flip to async&lt;/em&gt; would, with two files, have to diff them in
+their head. With one file, the diff is &lt;em&gt;in the file&lt;/em&gt;, visible to the
+eye, enforced by the compiler. The two preambles at the top are
+identical. The chip operations are nearly identical. The only things
+that change are the &lt;code&gt;.await&lt;/code&gt;, the &lt;code&gt;#[tokio::main]&lt;/code&gt; macro, and the
+import that picks &lt;code&gt;AsyncTmp108&lt;/code&gt; instead of &lt;code&gt;Tmp108&lt;/code&gt;. The reader sees
+it, side by side, in the smallest unit of code that demonstrates the
+difference.&lt;/p&gt;
+&lt;p&gt;The trade-off is honest: the file is busier — every example that
+supports both flavors carries two &lt;code&gt;main&lt;/code&gt; functions and at least one
+pair of &lt;code&gt;#[cfg]&lt;/code&gt; arms. The payoff is that blocking/async parity is
+&lt;em&gt;observable in the source&lt;/em&gt;, not just claimed in the README. Building
+with default features picks the blocking &lt;code&gt;main&lt;/code&gt;; building with
+&lt;code&gt;--features async&lt;/code&gt; picks the async one. (&lt;code&gt;continuous.rs&lt;/code&gt;,
+&lt;code&gt;alert_comparator.rs&lt;/code&gt;, and &lt;code&gt;alert_interrupt.rs&lt;/code&gt; are async-only,
+because the underlying API is; their blocking &lt;code&gt;main&lt;/code&gt; stub prints
+the required feature flags and exits, which is itself a form of
+documentation — the file refuses to build silently into nothing.)&lt;/p&gt;
+&lt;h2 id=&quot;a-four-line-header-that-tells-you-what-you-need&quot;&gt;A four-line header that tells you what you need&lt;/h2&gt;
+&lt;p&gt;Every example opens with a doc-comment header that says, in the same
+shape every time, who the example is for and what it requires.
+&lt;code&gt;oneshot.rs&lt;/code&gt;’s header in full:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;//&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;! TMP108 one-shot conversion example.&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;//&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;!&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;//&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;! # Hardware&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;//&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;!&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;//&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;! - Pico de Gallo USB-attached host adapter&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;//&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;! - TMP108 on the default I2C bus, A0 → GND (address `0x48`)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;//&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;!&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;//&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;! # Cargo features&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;//&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;!&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;//&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;! Works with default features (blocking). Building with `--features async`&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;//&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;! produces the async variant.&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;//&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;!&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;//&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;! # Register interactions&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;//&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;!&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;//&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;! Single read of the temperature register at address `0x00`.&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;# Hardware&lt;/code&gt; says what pico de gallo connections the example needs:
+USB-attached host adapter, TMP108 on the default I²C bus, A0
+strapped to GND. &lt;code&gt;# Cargo features&lt;/code&gt; says how to flip blocking/async
+— default features for blocking, &lt;code&gt;--features async&lt;/code&gt; for async.
+&lt;code&gt;# Register interactions&lt;/code&gt; names exactly which TMP108 register the
+example touches, so the reader who is following along with the
+datasheet open can find the relevant chapter without guessing. For
+&lt;code&gt;oneshot.rs&lt;/code&gt;, that’s a single read of the temperature register at
+address &lt;code&gt;0x00&lt;/code&gt;. For &lt;code&gt;continuous.rs&lt;/code&gt;, it’s a five-step sequence
+(read config, write config with M=Continuous, read config, loop on
+temperature reads, restore M=Shutdown on exit). The header for each
+example calls out the register interactions specific to that
+example, in the order they happen.&lt;/p&gt;
+&lt;p&gt;This is the section the reader skims first to decide “is this the
+example I want?” — a six-line table of contents per file, in the
+place a Rust reader expects documentation to be. It costs nothing
+to write and removes the most common pre-run question, which is
+some flavor of “wait, what do I need to have plugged in for this
+one?” The reader doesn’t have to chase the answer through the body
+of the file or the README; the answer is already at the top.&lt;/p&gt;
+&lt;h2 id=&quot;what-this-doesn-t-cover&quot;&gt;What this doesn’t cover&lt;/h2&gt;
+&lt;p&gt;A few honest limits before I oversell any of this.&lt;/p&gt;
+&lt;p&gt;The pattern works because pico de gallo can host an I²C bus, an SPI
+bus, and a handful of GPIOs from a laptop. Drivers that need a real
+MCU peripheral — USB device, Ethernet MAC, anything DMA-bound,
+anything where the chip itself drives timing the host can’t
+sustain — can’t run this way. The conventions in this post are
+opinionated &lt;em&gt;about&lt;/em&gt; I²C/SPI/GPIO sensor and peripheral drivers; I
+have not tried any of this on a driver that needs more than those
+buses, and I would not assume any of it generalizes.&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;tmp108&lt;/code&gt; is also one crate. At the time of writing it is the &lt;em&gt;only&lt;/em&gt;
+crate on crates.io that depends on &lt;code&gt;pico-de-gallo-hal&lt;/code&gt; — &lt;a rel=&quot;external&quot; href=&quot;https://crates.io/crates/pico-de-gallo-hal/reverse_dependencies&quot;&gt;the
+reverse-deps
+page&lt;/a&gt;
+lists exactly one, and it’s a dev-dependency at that. These
+conventions are battle-tested on one chip&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-mcxa-1&quot;&gt;&lt;a href=&quot;https://balbi.sh/posts/examples-that-run/#fn-mcxa&quot;&gt;[1]&lt;/a&gt;&lt;/sup&gt;, with one set of bus
+requirements, by one author. Take them as one person’s house style,
+not as a recommendation that has survived contact with a population of
+users and other crates.&lt;/p&gt;
+&lt;p&gt;What I do think holds up, on the evidence of this one crate, is the
+shape: the constraint “every example must run on a normal dev
+machine against real silicon, with no porting step in between”
+forces an &lt;code&gt;examples/&lt;/code&gt; directory that reads like the chip’s
+datasheet, not like the library’s &lt;code&gt;impl&lt;/code&gt; block — and the
+datasheet’s grain is the right grain for the audience the examples
+are written for.&lt;/p&gt;
+&lt;section class=&quot;footnotes&quot;&gt;
+&lt;ol class=&quot;footnotes-list&quot;&gt;
+&lt;li id=&quot;fn-mcxa&quot;&gt;
+&lt;p&gt;That statement is not exactly true as I have used Pico de
+Gallo to run weekend long soak tests on MCXA I²C controller and target
+drivers. &lt;a href=&quot;https://balbi.sh/posts/examples-that-run/#fr-mcxa-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/section&gt;
+</content>
+  </entry>
+  
+  <entry xml:lang="en">
+    <title>Writing embedded drivers without an MCU</title>
+    <published>2026-06-10T16:00:00+00:00</published>
+    <updated>2026-06-10T16:00:00+00:00</updated>
+    <author><name>Felipe Balbi</name></author>
+    <link rel="alternate" href="https://balbi.sh/posts/writing-embedded-drivers-without-an-mcu/" type="text/html"/>
+    <id>https://balbi.sh/posts/writing-embedded-drivers-without-an-mcu/</id>
+    <summary type="html">&lt;p&gt;Let me clarify the title up front: there &lt;em&gt;is&lt;/em&gt; an MCU. There’s a
+Raspberry Pi Pico 2 sitting on my desk. What I mean is that the MCU
+isn’t in my dev loop. I don’t flash it. I don’t reset it. I don’t
+attach a probe to it. I treat it like a USB peripheral that happens
+to speak the buses I need — I²C, SPI, UART, GPIOs, ADC, and 1-Wire
+— and I write all of my driver code as a normal &lt;code&gt;cargo run&lt;/code&gt; binary
+that runs on my laptop, against the real sensor, over a real bus.&lt;/p&gt;
+&lt;p&gt;This post is about how that works, why it’s nice, and what you can do
+once your “embedded” driver is just a Rust program with &lt;code&gt;std&lt;/code&gt;.&lt;/p&gt;</summary>
+    
+    <content type="html">&lt;p&gt;Let me clarify the title up front: there &lt;em&gt;is&lt;/em&gt; an MCU. There’s a
+Raspberry Pi Pico 2 sitting on my desk. What I mean is that the MCU
+isn’t in my dev loop. I don’t flash it. I don’t reset it. I don’t
+attach a probe to it. I treat it like a USB peripheral that happens
+to speak the buses I need — I²C, SPI, UART, GPIOs, ADC, and 1-Wire
+— and I write all of my driver code as a normal &lt;code&gt;cargo run&lt;/code&gt; binary
+that runs on my laptop, against the real sensor, over a real bus.&lt;/p&gt;
+&lt;p&gt;This post is about how that works, why it’s nice, and what you can do
+once your “embedded” driver is just a Rust program with &lt;code&gt;std&lt;/code&gt;.&lt;/p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;/span&gt;&lt;h2 id=&quot;the-loop-i-m-trying-to-escape&quot;&gt;The loop I’m trying to escape&lt;/h2&gt;
+&lt;p&gt;The traditional embedded dev loop looks something like this:&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;Edit a line of code.&lt;/li&gt;
+&lt;li&gt;Wait for &lt;code&gt;cargo build --target=thumbv8m.main-none-eabihf&lt;/code&gt; to
+finish.&lt;/li&gt;
+&lt;li&gt;Reflash the chip (a few seconds with a probe, longer over the
+bootloader).&lt;/li&gt;
+&lt;li&gt;Either power-cycle the board or punch the reset button.&lt;/li&gt;
+&lt;li&gt;Squint at &lt;code&gt;defmt&lt;/code&gt; output through a probe.&lt;/li&gt;
+&lt;li&gt;If you need to reproduce a bug, also: physically interact with the
+board (push a button, breathe on the sensor, jiggle a wire).&lt;/li&gt;
+&lt;li&gt;Goto 1.&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;On a good day with a fast build and a good probe, that’s two minutes
+per iteration. On a bad day — a stale build cache, a probe that
+disconnects, a chip in some weird stuck state — it’s five or ten.&lt;/p&gt;
+&lt;p&gt;The frustrating part isn’t the time. The frustrating part is that
+&lt;strong&gt;none of it is about the driver I’m writing&lt;/strong&gt;. The driver is just
+some byte-level logic that talks to a chip over I²C. The chip
+doesn’t care which CPU is initiating the transactions. The chip
+certainly doesn’t care that I had to write a linker script and a
+clock-tree configuration to get there.&lt;/p&gt;
+&lt;p&gt;So: why not skip all of that, and write the protocol logic somewhere
+where iteration is free?&lt;/p&gt;
+&lt;h2 id=&quot;enter-pico-de-gallo&quot;&gt;Enter Pico de Gallo&lt;/h2&gt;
+&lt;p&gt;&lt;a href=&quot;/pico-de-gallo/&quot;&gt;&lt;em&gt;Pico de Gallo&lt;/em&gt;&lt;/a&gt; is a project I’ve been building
+for exactly this. It’s a small landing board that turns a Pi Pico 2
+into a USB-attached protocol bridge. Plug it into your laptop, and
+your laptop now has an I²C bus, a SPI bus, a UART, a handful of
+GPIOs, two PWM channels, an ADC, and a 1-Wire master — addressable
+from any host-side program.&lt;/p&gt;
+&lt;p&gt;A few things it &lt;em&gt;isn’t&lt;/em&gt;, because it gets confused with each of these:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;It’s not a logic analyzer. It drives the bus; it doesn’t sniff
+somebody else’s.&lt;/li&gt;
+&lt;li&gt;It’s not a USB-to-I²C dongle in the FTDI sense. The chip
+underneath is a Pi Pico 2, the firmware speaks
+&lt;a rel=&quot;external&quot; href=&quot;https://docs.rs/postcard-rpc/&quot;&gt;&lt;code&gt;postcard-rpc&lt;/code&gt;&lt;/a&gt;, and the host side
+is a real Rust crate with proper types and async support.&lt;/li&gt;
+&lt;li&gt;It’s not a debug probe. There’s no SWD on the other end of the
+cable. There’s only the device you wired up.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;What it actually does is let you write this:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;use&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; pico_de_gallo_hal&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Hal&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;use&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; embedded_hal&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;i2c&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;I2c&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; hal&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Hal&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;new&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; mut&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; i2c&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; hal&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;i2c&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; mut&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; buf&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;u8&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 2&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;i2c&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;write_read&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0x48&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;amp;&lt;/span&gt;&lt;span&gt;[&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0x00&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;amp;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;mut&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; buf&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;unwrap&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;…on your laptop, and have the bytes appear on a real I²C wire,
+addressed to a real chip, with the reply coming back into &lt;code&gt;buf&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;The Pico de Gallo book has &lt;a href=&quot;/pico-de-gallo/&quot;&gt;the full setup&lt;/a&gt; — what
+to assemble, how to flash the firmware, the pinout, and a tour of
+each interface. I won’t repeat any of that here. From this point I
+assume you have a Pico de Gallo plugged in, a TMP108 wired to the
+I²C connector, and the &lt;code&gt;gallo&lt;/code&gt; CLI installed.&lt;/p&gt;
+&lt;h2 id=&quot;feeling-the-bus-before-writing-a-line-of-code&quot;&gt;Feeling the bus before writing a line of code&lt;/h2&gt;
+&lt;p&gt;The first thing I do with any new chip is poke at it through the CLI.
+This is the equivalent of the “wiggle a probe at it” step from the
+hardware world, except it’s three commands.&lt;/p&gt;
+&lt;p&gt;Did the chip enumerate at the address I think it did?&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;shellscript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; gallo&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; i2c&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; scan&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;╭────┬────┬────┬────┬────┬────┬────┬────┬────┬────┬────┬────┬────┬────┬────┬────┬────╮&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;│&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;    │&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;  0&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;  1&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;  2&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;  3&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;  4&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;  5&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;  6&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;  7&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;  8&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;  9&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;  a&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;  b&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;  c&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;  d&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;  e&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;  f&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;├────┼────┼────┼────┼────┼────┼────┼────┼────┼────┼────┼────┼────┼────┼────┼────┼────┤&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;│&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;  │&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; RR&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; RR&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; RR&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; RR&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; RR&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; RR&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; RR&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; RR&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;│&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;  │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;│&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 2&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;  │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;│&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 3&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;  │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;│&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 4&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;  │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 48&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;│&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 5&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;  │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;│&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 6&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;  │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;│&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 7&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;  │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; RR&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; RR&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; RR&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; RR&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; RR&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; RR&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; RR&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; RR&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; │&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;╰────┴────┴────┴────┴────┴────┴────┴────┴────┴────┴────┴────┴────┴────┴────┴────┴────╯&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Yes. The TMP108 with its A0 pin to ground sits at 0x48, and there it
+is. If this had come back empty, I’d know it was wiring, not
+software, and I’d know it before I’d touched a Rust file.&lt;/p&gt;
+&lt;p&gt;Can I read its temperature register?&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;shellscript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; gallo&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; i2c&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; write-read&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-address&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0x48&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-bytes&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0x00&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-count&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 2&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;0x18&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0x40&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Two bytes, just as the datasheet promised. Register 0x00 is the
+temperature register; the top 12 bits of the returned 16 are the
+signed reading in 0.0625 °C/LSB. So 0x1840 → 0x184 → 388 → 388 ×
+0.0625 → &lt;strong&gt;24.25 °C&lt;/strong&gt;. The room I’m in is about 24 °C.&lt;/p&gt;
+&lt;p&gt;Three commands, no Rust, and I know:&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;My wiring works.&lt;/li&gt;
+&lt;li&gt;The address I expected is the address the chip enumerated at.&lt;/li&gt;
+&lt;li&gt;The data format matches the datasheet.&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;Those three facts cost me about a minute of reading effort each on a
+real MCU, every time something goes wrong, because they’re all
+entangled with everything else. Here they’re isolated and free.&lt;/p&gt;
+&lt;h2 id=&quot;reading-it-from-rust&quot;&gt;Reading it from Rust&lt;/h2&gt;
+&lt;p&gt;Now for the actual program. The &lt;a rel=&quot;external&quot; href=&quot;https://crates.io/crates/tmp108&quot;&gt;&lt;code&gt;tmp108&lt;/code&gt;
+crate&lt;/a&gt; on crates.io already exists
+— it’s a regular &lt;code&gt;embedded-hal&lt;/code&gt; driver, &lt;code&gt;#[no_std]&lt;/code&gt;, written for
+anything that implements &lt;code&gt;embedded_hal::i2c::I2c&lt;/code&gt;. Normally you’d
+pull it into a firmware project, build for a Cortex-M target, and
+flash. We’re going to pull it into a &lt;code&gt;std&lt;/code&gt; binary instead.&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;toml&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;[&lt;/span&gt;&lt;span&gt;dependencies&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;pico-de-gallo-hal&lt;/span&gt;&lt;span&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;0.5&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;tmp108&lt;/span&gt;&lt;span&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;0.5&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;use&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; pico_de_gallo_hal&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Hal&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;use&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; tmp108&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Tmp108&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;fn&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; main&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; anyhow&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Result&lt;/span&gt;&lt;span&gt;&amp;lt;&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;&amp;gt;&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;    let&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; hal&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Hal&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;new&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;    let&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; i2c&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; hal&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;i2c&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;    let&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; mut&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; tmp&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Tmp108&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;new_with_a0_gnd&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;i2c&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;    let&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; temperature&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; tmp&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;temperature&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;?&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;    println!&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;Temperature: &lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;temperature:.2&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; °C&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;    Ok&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;That’s the whole program. &lt;code&gt;cargo run&lt;/code&gt;, and the bytes go out, the
+reply comes back, and a number prints.&lt;/p&gt;
+&lt;p&gt;The interesting thing to notice is what isn’t there. The &lt;code&gt;tmp108&lt;/code&gt;
+crate doesn’t know that &lt;code&gt;pico-de-gallo&lt;/code&gt; exists. It has no
+conditional compilation for “host” or “USB.” Its only requirement is
+“give me something that implements &lt;code&gt;embedded_hal::i2c::I2c&lt;/code&gt;,” and
+&lt;code&gt;pico-de-gallo-hal&lt;/code&gt; does. The exact same &lt;code&gt;Tmp108::new_with_a0_gnd&lt;/code&gt;
+call, with the exact same crate, the exact same version, will run
+unmodified on an RP2350, an STM32, an nRF52, or any other chip that
+has an &lt;code&gt;embedded-hal&lt;/code&gt; I²C implementation.&lt;/p&gt;
+&lt;p&gt;This is not emulation. It’s not mocking. It’s not simulation. The
+bus is real. The chip is real. The driver is real. The only thing
+that’s different is what’s underneath the &lt;code&gt;I2c&lt;/code&gt; trait — and that’s
+the whole point of the trait existing in the first place.&lt;/p&gt;
+&lt;p&gt;One honest caveat on that portability claim: of the interfaces
+Pico de Gallo exposes, only &lt;strong&gt;I²C, SPI, GPIO, and &lt;code&gt;Delay&lt;/code&gt;&lt;/strong&gt; have
+stable, widely-adopted &lt;code&gt;embedded-hal&lt;/code&gt; traits today. The TMP108
+example above sails through because it’s I²C, and the alert
+examples in &lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/tmp108/tree/main/examples&quot;&gt;tmp108’s &lt;code&gt;examples/&lt;/code&gt;
+folder&lt;/a&gt;
+sail through because they only also need GPIO. A driver for, say,
+a 1-Wire temperature sensor or a UART-attached GPS module won’t be
+quite as plug-and-play — &lt;code&gt;embedded-hal&lt;/code&gt; doesn’t have stable
+abstractions for those yet, so each crate tends to invent its own.
+The “unmodified upstream driver” story is strongest for parts
+whose driver only needs I²C, SPI, GPIO, and timing. For everything
+else, the host-side loop still works; you just may have to do a
+bit of shimming.&lt;/p&gt;
+&lt;h2 id=&quot;the-dev-loop-side-by-side&quot;&gt;The dev loop, side by side&lt;/h2&gt;
+&lt;p&gt;Here’s the same edit-and-test cycle from above, redrawn against this
+program:&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;Edit a line of code.&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;cargo run&lt;/code&gt;.&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;That’s it. A debug build of this program takes under a second to
+recompile and start. There’s no flash step, no reset, no probe to
+attach. If the program panics, the stack trace points at the line
+that panicked, in source, with debug symbols, in the same terminal I
+just ran it from.&lt;/p&gt;
+&lt;p&gt;Other things that just work, because it’s &lt;code&gt;std&lt;/code&gt;:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;cargo test&lt;/code&gt; runs against the real chip.&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;cargo bench&lt;/code&gt; measures real round-trip latency over USB.&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;cargo flamegraph&lt;/code&gt; and &lt;code&gt;perf&lt;/code&gt; and &lt;code&gt;dtrace&lt;/code&gt; and Instruments all
+work, because it’s a normal native process.&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;println!&lt;/code&gt;, &lt;code&gt;dbg!&lt;/code&gt;, &lt;code&gt;eprintln!&lt;/code&gt;, &lt;code&gt;tracing&lt;/code&gt;, &lt;code&gt;env_logger&lt;/code&gt; — any
+of them. Whatever you’d use in a normal Rust program.&lt;/li&gt;
+&lt;li&gt;The debugger you actually like — &lt;code&gt;rust-lldb&lt;/code&gt;, &lt;code&gt;rust-gdb&lt;/code&gt;, the
+one built into your editor — attaches the way it always does.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;The obvious question at this point is what the catch is. We’ll
+get there.&lt;/p&gt;
+&lt;h2 id=&quot;what-having-std-actually-unlocks&quot;&gt;What having &lt;code&gt;std&lt;/code&gt; actually unlocks&lt;/h2&gt;
+&lt;p&gt;The temperature-printing program is the warm-up. The thing that
+makes this approach worth talking about is what becomes easy &lt;em&gt;next&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;Here is a small &lt;code&gt;ratatui&lt;/code&gt; dashboard that reads the TMP108 four times
+a second and plots a live sparkline of the last 60 samples
+alongside running min / avg / max:&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://balbi.sh/posts/writing-embedded-drivers-without-an-mcu/dashboard.png&quot; alt=&quot;Live TMP108 dashboard rendered in the terminal: the top row showscurrent temperature, minimum, average, and maximum across thewindow; the bottom panel is a sparkline of the last 60 samples,making short-term drift and the warm-up curve visible at aglance.&quot; /&gt;&lt;/p&gt;
+&lt;p&gt;The whole program is about 150 lines and uses three dependencies:
+&lt;code&gt;pico-de-gallo-hal&lt;/code&gt;, &lt;code&gt;tmp108&lt;/code&gt;, and &lt;code&gt;ratatui&lt;/code&gt;. The interesting bits
+look like this:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;const&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; HISTORY&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; usize&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 60&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;const&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; SAMPLE_INTERVAL&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Duration&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Duration&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;from_millis&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;250&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; hal&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Hal&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;new&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; i2c&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; hal&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;i2c&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; mut&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; tmp&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Tmp108&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;new_with_a0_gnd&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;i2c&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; mut&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; samples&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; VecDeque&lt;/span&gt;&lt;span&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;f32&lt;/span&gt;&lt;span&gt;&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; VecDeque&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;with_capacity&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;HISTORY&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; mut&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; next_sample&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Instant&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;now&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;loop&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    if&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Instant&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;now&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;gt;=&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; next_sample&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;        let&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; t&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; tmp&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;temperature&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;?&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;        if&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; samples&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;len&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ==&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; HISTORY&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;            samples&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;pop_front&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        }&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;        samples&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;push_back&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;t&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;        next_sample&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; +=&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; SAMPLE_INTERVAL&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;    terminal&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;draw&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;|&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;frame&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;|&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; draw&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;frame&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;amp;&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;samples&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;?&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;    //&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; ...event handling: quit on &amp;#39;q&amp;#39; or Esc&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The &lt;code&gt;draw&lt;/code&gt; function splits the screen vertically into a stats row
+and a sparkline:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;fn&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; draw&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;frame&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;amp;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;mut&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Frame&lt;/span&gt;&lt;span&gt;&amp;lt;&lt;/span&gt;&lt;span&gt;&amp;#39;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;_&lt;/span&gt;&lt;span&gt;&amp;gt;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; samples&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;amp;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;VecDeque&lt;/span&gt;&lt;span&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;f32&lt;/span&gt;&lt;span&gt;&amp;gt;&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;    let&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; chunks&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Layout&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;default&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;        .&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;direction&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Direction&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Vertical&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;        .&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;constraints&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;[&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Constraint&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;Length&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;3&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Constraint&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;Min&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;        .&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;split&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;frame&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;area&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;    frame&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;render_widget&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;stats&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;samples&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; chunks&lt;/span&gt;&lt;span&gt;[&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;    frame&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;render_widget&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;sparkline&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;samples&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; chunks&lt;/span&gt;&lt;span&gt;[&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;1&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;…and &lt;code&gt;sparkline&lt;/code&gt; rescales the float window into the integer bars
+that &lt;code&gt;ratatui::Sparkline&lt;/code&gt; wants, so even tiny drifts are visible:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;fn&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; sparkline&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;samples&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;amp;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;VecDeque&lt;/span&gt;&lt;span&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;f32&lt;/span&gt;&lt;span&gt;&amp;gt;&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Sparkline&lt;/span&gt;&lt;span&gt;&amp;lt;&lt;/span&gt;&lt;span&gt;&amp;#39;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;_&lt;/span&gt;&lt;span&gt;&amp;gt;&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;    let&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; bars&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Vec&lt;/span&gt;&lt;span&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;u64&lt;/span&gt;&lt;span&gt;&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; if&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; samples&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;is_empty&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;        Vec&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;new&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; else&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;        let&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; min&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; samples&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;iter&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;copied&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;fold&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;f32&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;INFINITY&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; f32&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;min&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;        let&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; max&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; samples&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;iter&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;copied&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;fold&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;f32&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;NEG_INFINITY&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; f32&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;max&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;        let&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; span&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;max&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; min&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;max&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;1&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;        samples&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;            .&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;iter&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;            .&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;map&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;|&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;t&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;|&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;t&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; min&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; /&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; span&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; *&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1000&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;round&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; as&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; u64&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;            .&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;collect&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;    Sparkline&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;default&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;        .&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;data&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;bars&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;        .&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;max&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;1000&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;        .&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;style&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Style&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;default&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;fg&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Color&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Yellow&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;        .&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;block&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Block&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;bordered&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;title&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; last 60 samples  (q to quit) &lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;That’s it. Read in a loop, push into a ring buffer, redraw. The
+total code is shorter than the LCD-init sequence I’d have written
+the first time I tried to do this on an MCU. And because it’s a
+normal terminal program, &lt;code&gt;Ctrl-C&lt;/code&gt; cleans up and exits.&lt;/p&gt;
+&lt;p&gt;Once you’re in this world, a lot of other things become “just write
+the program”:&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Data logging.&lt;/strong&gt; A few lines of &lt;code&gt;serde&lt;/code&gt; + &lt;code&gt;csv&lt;/code&gt; and every sample
+gets a wall-clock timestamp on disk. Post-process with whatever you
+like — &lt;code&gt;polars&lt;/code&gt;, &lt;code&gt;pandas&lt;/code&gt;, &lt;code&gt;jq&lt;/code&gt;, a quick shell pipeline:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; mut&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; wtr&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; csv&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Writer&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;from_path&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;temps.csv&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;?&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;wtr&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;write_record&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;[&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;timestamp_ms&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;temperature_c&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;?&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;//&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; inside the loop:&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;wtr&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;write_record&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span&gt;[&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;    chrono&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Utc&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;now&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;timestamp_millis&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;to_string&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;    format!&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;t:.4&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;?&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;strong&gt;Bus tracing.&lt;/strong&gt; Wrap the driver in a &lt;code&gt;tracing&lt;/code&gt; span and you get
+structured records of every transaction, every reading, every error,
+with timestamps and process metadata. Pipe it into
+&lt;code&gt;tracing-subscriber&lt;/code&gt;, &lt;code&gt;tokio-console&lt;/code&gt;, OpenTelemetry — pick your
+poison.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Stress testing.&lt;/strong&gt; Spin up a &lt;code&gt;tokio&lt;/code&gt; runtime, share the bus through
+a &lt;code&gt;Mutex&amp;lt;Bus&amp;gt;&lt;/code&gt;, and have a dozen tasks all reading and configuring
+the chip concurrently. See what falls over. This is something you
+&lt;em&gt;could&lt;/em&gt; do on the MCU, but it’s the kind of thing you’d never set up
+just to find out.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;A/B testing.&lt;/strong&gt; Run two versions of the driver against the same
+chip back-to-back, diff their outputs sample-for-sample. Catch a
+regression in the new version before it makes it anywhere near a
+production board.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Real CI.&lt;/strong&gt; This is the one I’m most excited about. &lt;code&gt;cargo test&lt;/code&gt;
+runs on a CI runner that has a Pico de Gallo plugged into it, with
+real chips wired up. Every PR exercises the driver against real
+silicon. No simulation. No “we’ll catch it in hardware testing
+later.” (More on CI in the &lt;a href=&quot;/pico-de-gallo/driver/testing.html&quot;&gt;testing
+chapter&lt;/a&gt; of the book.)&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Runnable examples in your crate.&lt;/strong&gt; This one flips the framing.
+So far we’ve talked about Pico de Gallo as something &lt;em&gt;consumers&lt;/em&gt; of
+a driver crate use. But it works just as well for the &lt;em&gt;author&lt;/em&gt; of
+the crate. Cargo lets you put a &lt;code&gt;examples/&lt;/code&gt; folder in your library
+and have each file be a binary; if those binaries can target a
+real, running version of your chip without anyone reaching for a
+soldering iron, they stop being “snippets you’d have to port to
+your board” and start being “things a reader can &lt;code&gt;cargo run&lt;/code&gt; after
+plugging in two cables.”&lt;/p&gt;
+&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/tmp108/tree/main/examples&quot;&gt;&lt;code&gt;tmp108&lt;/code&gt; crate’s
+examples&lt;/a&gt;
+are exactly this. There are five of them — one-shot read,
+continuous read, comparator-mode ALERT, interrupt-mode ALERT, and
+a &lt;code&gt;embedded-sensors-hal&lt;/code&gt; trait demo — and every single one starts
+with &lt;code&gt;let hal = Hal::new(); let i2c = hal.i2c();&lt;/code&gt; (the ALERT ones
+also grab a GPIO for the interrupt line). A reader who wants to
+understand any of the modes runs &lt;code&gt;cargo run --example oneshot&lt;/code&gt; and
+gets a real temperature back from a real chip. No board-bringup
+chapter. No “you’ll need to adapt this for your target.” The
+documentation &lt;em&gt;is&lt;/em&gt; the running program.&lt;/p&gt;
+&lt;p&gt;Each of these was technically possible before. Each one required
+setting up its own bespoke pipeline, often with a custom MCU build,
+a custom log format, and a custom analysis layer on top. With a real
+bus available to a real &lt;code&gt;std&lt;/code&gt; program, they all collapse into “use
+the crate that already exists.”&lt;/p&gt;
+&lt;h2 id=&quot;the-catch&quot;&gt;The catch&lt;/h2&gt;
+&lt;p&gt;One might ask, what’s the catch? Here is the honest list.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;USB latency.&lt;/strong&gt; Every transaction is a USB round-trip. In practice
+that’s about a millisecond. For polling a temperature sensor every
+250 ms, that’s invisible. For a tight register-poll loop at 100 kHz
+trying to catch a hardware event in software — no, that does not
+work, and pretending it does would be a lie. Use the chip’s &lt;code&gt;ALERT&lt;/code&gt;
+pin and an interrupt-driven path for that, which Pico de Gallo also
+supports via the GPIO &lt;code&gt;Wait&lt;/code&gt; impl.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Timing is host-mediated.&lt;/strong&gt; You cannot reproduce sub-millisecond
+interrupt-to-handler timing on a host. You can validate the protocol
+your interrupt handler implements, but not the latency of getting
+&lt;em&gt;to&lt;/em&gt; the handler. For that you eventually need the real MCU.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Single master, single bus.&lt;/strong&gt; The Pico de Gallo is the only master
+on the bus. You can’t reproduce a scenario where two different MCUs
+are arbitrating for the same wires.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;The driver still has to be &lt;code&gt;no_std&lt;/code&gt;.&lt;/strong&gt; Pico de Gallo lets you
+exercise the &lt;em&gt;logic&lt;/em&gt; of the driver in a comfortable environment. It
+does not validate that the driver compiles for your real target.
+You still need a one-line “build for &lt;code&gt;thumbv8m.main-none-eabihf&lt;/code&gt;”
+step in CI to catch accidentally pulling in &lt;code&gt;std&lt;/code&gt;. The &lt;code&gt;tmp108&lt;/code&gt;
+crate has &lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/tmp108/actions/workflows/nostd.yml&quot;&gt;exactly that
+job&lt;/a&gt;
+running on every push for this reason.&lt;/p&gt;
+&lt;p&gt;None of these are surprises. They’re the natural consequence of
+moving the dev environment off the target. The point is that for the
+work that &lt;em&gt;is&lt;/em&gt; portable — and a sensor driver is essentially all
+portable work — you don’t have to pay the cost of the target during
+development.&lt;/p&gt;
+&lt;h2 id=&quot;wrapping-up&quot;&gt;Wrapping up&lt;/h2&gt;
+&lt;p&gt;A device driver is protocol logic. Protocol logic doesn’t care what
+CPU is initiating the transactions. So write it where iteration is
+cheap, where you have a debugger and a test runner and a profiler,
+where you can wrap it in any visualization or analysis tool you
+want, and where adding “log every sample to a CSV” is two lines of
+code instead of two weeks of integration work.&lt;/p&gt;
+&lt;p&gt;Pico de Gallo is one way to do that. It happens to be the one I
+built, because nothing else existed that gave me exactly this. If
+you want to read more, the &lt;a href=&quot;/pico-de-gallo/&quot;&gt;book&lt;/a&gt; covers the
+hardware, the firmware, the wire protocol, and a full chapter on
+writing a driver from scratch against a different temperature chip
+(TMP102). The &lt;a rel=&quot;external&quot; href=&quot;https://crates.io/crates/tmp108&quot;&gt;&lt;code&gt;tmp108&lt;/code&gt; crate&lt;/a&gt; used
+in this post is on crates.io, and its
+&lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/tmp108/tree/main/examples&quot;&gt;&lt;code&gt;examples/&lt;/code&gt;&lt;/a&gt;
+directory is full of &lt;code&gt;cargo run --example&lt;/code&gt;-able programs that all
+target a real chip through Pico de Gallo. The full ratatui dashboard
+code lives in a tiny standalone project that you can copy and adapt.&lt;/p&gt;
+&lt;p&gt;If you build something with it — a driver, a logger, a CI rig, a
+dashboard for a chip you’ve been wanting to characterize — I’d love
+to hear about it.&lt;/p&gt;
+</content>
+  </entry>
+  
+</feed>

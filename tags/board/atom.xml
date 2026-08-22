@@ -1,0 +1,475 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+  <title>Felipe Balbi</title>
+  <subtitle>Notes on embedded systems, Rust, and the craft of writing software.</subtitle>
+  <link href="https://balbi.sh/tags/board/atom.xml" rel="self" type="application/atom+xml"/>
+  <link href="https://balbi.sh"/>
+  <generator uri="https://www.getzola.org/">Zola</generator>
+  <updated>2026-08-17T09:00:00+00:00</updated>
+  <id>https://balbi.sh/tags/board/atom.xml</id>
+  
+  <entry xml:lang="en">
+    <title>Tamal: Binding to Silicon</title>
+    <published>2026-08-17T09:00:00+00:00</published>
+    <updated>2026-08-17T09:00:00+00:00</updated>
+    <author><name>Felipe Balbi</name></author>
+    <link rel="alternate" href="https://balbi.sh/posts/tamal-arty/" type="text/html"/>
+    <id>https://balbi.sh/posts/tamal-arty/</id>
+    <summary type="html">&lt;p&gt;&lt;code&gt;system&lt;/code&gt; is a machine with no address.&lt;/p&gt;
+&lt;p&gt;That is what the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-top/&quot;&gt;last post&lt;/a&gt; left. A hundred and fifteen lines that wire a
+UART to a loader to two memories to an engine, and produce a serial line, a
+four-lane drive, three sidebands and a blinking LED — all of it generic in
+&lt;code&gt;dom&lt;/code&gt;, which is to say it never says how fast its clock runs, never names a
+package pin, and has no opinion about which fabric it is going to live on. It is
+a complete design and a homeless one.&lt;/p&gt;
+&lt;p&gt;This post gives it a home. &lt;code&gt;Tamal.Board.ArtyA7&lt;/code&gt; is fifty-one lines, most of them
+a type signature, and it does three things: it ties a real oscillator to a real
+domain, it wraps &lt;code&gt;system&lt;/code&gt; in &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-io/&quot;&gt;&lt;code&gt;espiPads&lt;/code&gt;&lt;/a&gt; so the four &lt;code&gt;IO&lt;/code&gt; lanes become four
+bidirectional package pins, and it gives every port a name that a place-and-route
+tool can match against a constraints file. Below it there is Verilog, and below
+that there is a bitstream, and below that there is a board.&lt;/p&gt;
+&lt;p&gt;It is also the last module. When this one is read, the stack is read.&lt;/p&gt;</summary>
+    
+    <content type="html">&lt;p&gt;&lt;code&gt;system&lt;/code&gt; is a machine with no address.&lt;/p&gt;
+&lt;p&gt;That is what the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-top/&quot;&gt;last post&lt;/a&gt; left. A hundred and fifteen lines that wire a
+UART to a loader to two memories to an engine, and produce a serial line, a
+four-lane drive, three sidebands and a blinking LED — all of it generic in
+&lt;code&gt;dom&lt;/code&gt;, which is to say it never says how fast its clock runs, never names a
+package pin, and has no opinion about which fabric it is going to live on. It is
+a complete design and a homeless one.&lt;/p&gt;
+&lt;p&gt;This post gives it a home. &lt;code&gt;Tamal.Board.ArtyA7&lt;/code&gt; is fifty-one lines, most of them
+a type signature, and it does three things: it ties a real oscillator to a real
+domain, it wraps &lt;code&gt;system&lt;/code&gt; in &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-io/&quot;&gt;&lt;code&gt;espiPads&lt;/code&gt;&lt;/a&gt; so the four &lt;code&gt;IO&lt;/code&gt; lanes become four
+bidirectional package pins, and it gives every port a name that a place-and-route
+tool can match against a constraints file. Below it there is Verilog, and below
+that there is a bitstream, and below that there is a board.&lt;/p&gt;
+&lt;p&gt;It is also the last module. When this one is read, the stack is read.&lt;/p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;/span&gt;&lt;h2 id=&quot;the-one-module-with-no-door&quot;&gt;The one module with no door&lt;/h2&gt;
+&lt;p&gt;Twenty-one posts ago the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-crc/&quot;&gt;CRC&lt;/a&gt; gave us an image that every module since has
+been read through: a module is a wall with a door in it, and the export list is
+the door. This one has no export list:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;module&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Tamal.Board.ArtyA7&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; where&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;import&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Clash.Annotations.TH&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;import&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Clash.Prelude&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;import&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Tamal.Domain&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Dom100&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;import&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Tamal.Io&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;espiPads&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;import&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Tamal.Top&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;system&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;module … where&lt;/code&gt;, with nothing in parentheses, exports everything. After twenty
+modules of carefully rationed public surface — the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-regfile/&quot;&gt;register file&lt;/a&gt;
+exporting four names and hiding &lt;code&gt;regIndex&lt;/code&gt;, the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-isa/&quot;&gt;ISA&lt;/a&gt; exporting its
+constructors but not its field widths, the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-io/&quot;&gt;pad boundary&lt;/a&gt; exporting two
+functions out of six definitions — the last one gives up on the idea entirely.&lt;/p&gt;
+&lt;p&gt;And that is right, because at this level the export list is no longer the door.
+There is only one definition in the file, &lt;code&gt;topEntity&lt;/code&gt;, and its visibility to
+other Haskell modules is beside the point: nothing imports a board shell. What
+&lt;em&gt;does&lt;/em&gt; matter is which of its arguments and results become ports on a chip, and
+that is decided by something else entirely, on the last line of the file. The
+wall is still there. The door has just moved out of Haskell.&lt;/p&gt;
+&lt;h2 id=&quot;the-names-are-the-ports&quot;&gt;The names are the ports&lt;/h2&gt;
+&lt;p&gt;Here is the signature, which is four-fifths of the module:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;topEntity&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;  &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;clk&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; :::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Clock&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Dom100&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;  &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;uart_rx&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; :::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Signal&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Dom100&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bit&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;  &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;io0&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; :::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BiSignalIn&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;#39;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;PullUp&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Dom100&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;  &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;io1&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; :::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BiSignalIn&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;#39;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;PullUp&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Dom100&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;  &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;io2&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; :::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BiSignalIn&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;#39;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;PullUp&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Dom100&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;  &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;io3&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; :::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BiSignalIn&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;#39;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;PullUp&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Dom100&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;  &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;alert_n&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; :::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Signal&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Dom100&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bit&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;io0&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; :::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BiSignalOut&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;#39;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;PullUp&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Dom100&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;io1&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; :::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BiSignalOut&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;#39;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;PullUp&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Dom100&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;io2&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; :::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BiSignalOut&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;#39;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;PullUp&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Dom100&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;io3&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; :::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BiSignalOut&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;#39;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;PullUp&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Dom100&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;uart_tx&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; :::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Signal&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Dom100&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bit&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;cs_n&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; :::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Signal&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Dom100&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bit&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;sck&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; :::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Signal&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Dom100&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bit&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;reset_n&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; :::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Signal&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Dom100&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bit&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;led&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; :::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Signal&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Dom100&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bit&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  )&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;a ::: t&lt;/code&gt; is a type-level annotation: a string literal attached to a type, which
+at the Haskell level means nothing at all — &lt;code&gt;&quot;clk&quot; ::: Clock Dom100&lt;/code&gt; &lt;em&gt;is&lt;/em&gt;
+&lt;code&gt;Clock Dom100&lt;/code&gt;, and every function that touches it behaves as though the label
+were not there. The label exists for one consumer, and it is the last line of
+the file:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;makeTopEntity &amp;#39;topEntity&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Template Haskell. At compile time, &lt;code&gt;makeTopEntity&lt;/code&gt; reads the signature of the
+named function, walks the argument and result types collecting those string
+annotations, and generates the &lt;code&gt;Synthesize&lt;/code&gt; annotation that tells Clash what to
+call each port in the emitted Verilog.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-tt-1&quot;&gt;&lt;a href=&quot;https://balbi.sh/posts/tamal-arty/#fn-tt&quot;&gt;[1]&lt;/a&gt;&lt;/sup&gt; The result is that this signature is
+not documentation of the interface; it &lt;em&gt;is&lt;/em&gt; the interface, and the names in it
+are the names a synthesis tool will look for.&lt;/p&gt;
+&lt;p&gt;Which makes the repetition in the middle of it the most interesting thing on the
+page. &lt;code&gt;io0&lt;/code&gt; appears twice — once as a &lt;code&gt;BiSignalIn&lt;/code&gt; argument and once as a
+&lt;code&gt;BiSignalOut&lt;/code&gt; result — and so do &lt;code&gt;io1&lt;/code&gt;, &lt;code&gt;io2&lt;/code&gt; and &lt;code&gt;io3&lt;/code&gt;. Seven arguments, nine
+results, and four of the names occur in both lists.&lt;/p&gt;
+&lt;p&gt;That is the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-io/&quot;&gt;pad post’s&lt;/a&gt; fusion, written out where you can see it. Clash
+matches a scalar &lt;code&gt;BiSignalIn&lt;/code&gt; argument with the scalar &lt;code&gt;BiSignalOut&lt;/code&gt; result
+derived from it and emits &lt;strong&gt;one&lt;/strong&gt; &lt;code&gt;inout&lt;/code&gt; port carrying both roles, so the two
+occurrences of &lt;code&gt;&quot;io0&quot;&lt;/code&gt; are not two ports with a name collision but one port
+described from both ends. Count what actually appears on the package and it is
+thirteen: &lt;code&gt;clk&lt;/code&gt;, &lt;code&gt;uart_rx&lt;/code&gt;, &lt;code&gt;alert_n&lt;/code&gt;, four &lt;code&gt;inout&lt;/code&gt; lanes, &lt;code&gt;uart_tx&lt;/code&gt;, &lt;code&gt;cs_n&lt;/code&gt;,
+&lt;code&gt;sck&lt;/code&gt;, &lt;code&gt;reset_n&lt;/code&gt;, &lt;code&gt;led&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;And the constraint that dominated the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-io/&quot;&gt;pad post&lt;/a&gt; is enforced again here, at
+the very top, for the same reason and with the same shape. The lanes are four
+scalar arguments and four scalar results, spelled out one at a time, because a
+&lt;code&gt;Vec 4&lt;/code&gt; of &lt;code&gt;BiSignal&lt;/code&gt;s does not fuse — it lowers to a plain input, keeping the
+read path and silently dropping the tri-state driver. The module’s own comment
+repeats the warning verbatim rather than referring you to &lt;code&gt;Tamal.Io&lt;/code&gt;, which is
+the correct instinct: a hazard that produces a working simulation and a dead pin
+is worth stating twice.&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;The one abstraction this project refuses to make, it refuses to make in two
+files, in the same words.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;h2 id=&quot;a-hundred-megahertz-written-down-once&quot;&gt;A hundred megahertz, written down once&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;Dom100&lt;/code&gt; comes from &lt;code&gt;Tamal.Domain&lt;/code&gt;, which is thirty-nine lines and almost
+entirely comment:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;createDomain&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  vSystem&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    {&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; vName&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;Dom100&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; vPeriod&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; hzToPeriod &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;100_000_000&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;createDomain&lt;/code&gt; is Template Haskell again, and what it generates is a &lt;em&gt;type&lt;/em&gt; —
+&lt;code&gt;Dom100&lt;/code&gt; — together with the &lt;code&gt;KnownDomain&lt;/code&gt; instance that carries its properties:
+the clock period, the active edge, whether the reset is synchronous or
+asynchronous and which polarity, and whether registers have defined power-up
+values. &lt;code&gt;vSystem&lt;/code&gt; is the stock set of answers and this record update changes two
+of them: the name, and the period, which &lt;code&gt;hzToPeriod&lt;/code&gt; converts from 100 MHz into
+the picoseconds Clash keeps internally — ten thousand of them, which is ten
+nanoseconds.&lt;/p&gt;
+&lt;p&gt;This is where a loop the series opened in its fourth post closes. The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-uart-baudgen/&quot;&gt;baud
+generator&lt;/a&gt; had a problem: it needed to know the system clock frequency
+in order to divide it, and it refused to be told, taking it instead from the
+domain:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;KnownDomain&lt;/span&gt;&lt;span&gt; dom &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; …&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;   --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; and then, inside: DomainPeriod dom&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;That post called it &lt;em&gt;reading the clock out of the type&lt;/em&gt;, and observed that the
+awkward &lt;code&gt;3.125&lt;/code&gt; at the heart of the accumulator — 100 MHz over 2 Mbaud over
+sixteen oversamples — was not a constant anybody wrote but a number that fell
+out of two facts stated far apart. This line is the first of those two facts, and
+it is the only place in the entire design where a frequency is written down. Move
+Tamal to a 50 MHz part, change &lt;code&gt;hzToPeriod 100_000_000&lt;/code&gt; here, and the baud
+generator’s accumulator increment changes to match without a single other edit.&lt;/p&gt;
+&lt;p&gt;The other domain in the file is a promise being kept quietly:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;createDomain&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  vSystem&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    {&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; vName&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;DomInput50&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; vPeriod&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; hzToPeriod &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;50_000_000&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;DomInput50&lt;/code&gt; is not used by the Arty. It is the 50 MHz oscillator on a Terasic
+Cyclone V board, and it exists because a second board shell — &lt;code&gt;Tamal.Board.CycloneV&lt;/code&gt;
+— feeds it into an Altera PLL that multiplies it up to the same &lt;code&gt;Dom100&lt;/code&gt; the
+Arty gets for free.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-pll-1&quot;&gt;&lt;a href=&quot;https://balbi.sh/posts/tamal-arty/#fn-pll&quot;&gt;[2]&lt;/a&gt;&lt;/sup&gt; Two boards, two oscillators, one system domain, and
+&lt;code&gt;system&lt;/code&gt; itself never learns which it is running on. That is the payoff of the
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-top/&quot;&gt;last post’s&lt;/a&gt; generic &lt;code&gt;dom&lt;/code&gt;, and it is why the board shells are shells: they
+are the only files in the project that know what silicon is.&lt;/p&gt;
+&lt;h2 id=&quot;the-reset-that-is-not-there&quot;&gt;The reset that is not there&lt;/h2&gt;
+&lt;p&gt;Four words in the &lt;code&gt;where&lt;/code&gt; clause are the design’s entire reset strategy:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; where&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  noReset &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; unsafeFromActiveHigh &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;pure &lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;False&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;pure False&lt;/code&gt; is a signal that is &lt;code&gt;False&lt;/code&gt; on every cycle for ever.
+&lt;code&gt;unsafeFromActiveHigh&lt;/code&gt; reinterprets a &lt;code&gt;Bool&lt;/code&gt; signal as a &lt;code&gt;Reset&lt;/code&gt; under the
+active-high convention, so this is a reset that is never asserted. Hand it to
+&lt;code&gt;withClockResetEnable&lt;/code&gt; and Clash, seeing that the reset network is constantly
+inactive, optimises it away entirely and emits &lt;strong&gt;no reset port&lt;/strong&gt;. Look at the
+signature again: there is no &lt;code&gt;rst&lt;/code&gt; among the thirteen pins.&lt;/p&gt;
+&lt;p&gt;A design with no reset sounds alarming until you ask what a reset is &lt;em&gt;for&lt;/em&gt;. It
+is for putting registers into a known state before the logic starts. On an FPGA
+that job is already done, and done more thoroughly than a reset network could do
+it: configuration loads the bitstream, and the bitstream contains an initial
+value for every flip-flop and every block RAM word in the design. The part comes
+out of configuration already in its initial state.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-init-1&quot;&gt;&lt;a href=&quot;https://balbi.sh/posts/tamal-arty/#fn-init&quot;&gt;[3]&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;p&gt;And the series has been quietly relying on that for a long time. The
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;engine’s&lt;/a&gt; &lt;code&gt;initState&lt;/code&gt; is the eight-phase machine idling at &lt;code&gt;Idle&lt;/code&gt; with
+its pins at &lt;code&gt;hiZ&lt;/code&gt; — a &lt;em&gt;value&lt;/em&gt;, not a sequence of reset assignments, and the
+shape post called &lt;code&gt;softInit&lt;/code&gt; “the reset a machine with no reset port performs in
+its own datapath”. The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-mem/&quot;&gt;memories&lt;/a&gt; are &lt;code&gt;blockRamPow2&lt;/code&gt; over a vector of zeros.
+The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-io/&quot;&gt;pad module’s&lt;/a&gt; &lt;code&gt;alertSync&lt;/code&gt; flops power up &lt;code&gt;high&lt;/code&gt;, which is &lt;code&gt;ALERT#&lt;/code&gt;
+deasserted. The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-uart-tx/&quot;&gt;transmitter’s&lt;/a&gt; &lt;code&gt;initTx&lt;/code&gt; idles the line high. Every one of
+those is an initial value that a reset would otherwise have had to establish, and
+every one of them was chosen, post by post, as though the design had no reset —
+because it does not, and this line is where that becomes true.&lt;/p&gt;
+&lt;p&gt;The &lt;code&gt;unsafe&lt;/code&gt; in &lt;code&gt;unsafeFromActiveHigh&lt;/code&gt; is a real warning, though not one that
+applies here. It exists because turning an arbitrary &lt;code&gt;Bool&lt;/code&gt; signal into a &lt;code&gt;Reset&lt;/code&gt;
+lets you build a reset that is itself generated by clocked logic, and releasing
+such a reset asynchronously across a large fabric is a classic way to have half
+your design come out of reset one cycle before the other half. Tying it to a
+constant sidesteps the whole hazard: there is no release, because there was no
+assertion.&lt;/p&gt;
+&lt;h2 id=&quot;four-lines-and-a-knot&quot;&gt;Four lines and a knot&lt;/h2&gt;
+&lt;p&gt;The body:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;topEntity clk uartRx io0 io1 io2 io3 alertN &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  withClockResetEnable clk noReset enableGen&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    $&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; let&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;txLine&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; lanesO&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; csO&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; sckO&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; rstO&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; ledOut&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; system uartRx ioIn alertIn&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;          (&lt;/span&gt;&lt;span&gt;d0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; d1&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; d2&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; d3&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; csPin&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; sckPin&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; rstPin&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; ioIn&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; alertIn&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;            espiPads lanesO csO sckO rstO alertN io0 io1 io2 io3&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;       in&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;d0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; d1&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; d2&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; d3&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; txLine&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; csPin&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; sckPin&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; rstPin&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; ledOut&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;withClockResetEnable clk noReset enableGen&lt;/code&gt; supplies the three implicit
+arguments that every &lt;code&gt;HiddenClockResetEnable dom&lt;/code&gt; constraint in the project has
+been carrying: the clock from the &lt;code&gt;clk&lt;/code&gt; port, the reset that is never asserted,
+and &lt;code&gt;enableGen&lt;/code&gt;, an enable that is always on. Everything inside the &lt;code&gt;$&lt;/code&gt; —
+&lt;code&gt;system&lt;/code&gt;, and through it the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-uart-top/&quot;&gt;UART&lt;/a&gt;, the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-loader/&quot;&gt;loader&lt;/a&gt;, both
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-mem/&quot;&gt;memories&lt;/a&gt;, the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;engine&lt;/a&gt;, and &lt;code&gt;espiPads&lt;/code&gt; with its two registers —
+runs on those three.&lt;/p&gt;
+&lt;p&gt;Then two &lt;code&gt;let&lt;/code&gt; bindings, and they are mutually recursive. &lt;code&gt;system&lt;/code&gt; is given
+&lt;code&gt;ioIn&lt;/code&gt; and &lt;code&gt;alertIn&lt;/code&gt;, which are results of &lt;code&gt;espiPads&lt;/code&gt;. &lt;code&gt;espiPads&lt;/code&gt; is given
+&lt;code&gt;lanesO&lt;/code&gt;, &lt;code&gt;csO&lt;/code&gt;, &lt;code&gt;sckO&lt;/code&gt; and &lt;code&gt;rstO&lt;/code&gt;, which are results of &lt;code&gt;system&lt;/code&gt;. Each binding’s
+inputs are the other’s outputs, and the two are written in the order that makes
+them read strangest.&lt;/p&gt;
+&lt;p&gt;This is the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-uart-top/&quot;&gt;elaboration-not-evaluation&lt;/a&gt; point one last time, and the
+last instance is the most physical. What the two lines describe is not a circular
+computation but the shape of a bus: the engine drives the lanes, the pads make
+that drive real, the far end drives back, the pads sample it, and the engine
+reads what it sampled. That is a loop in the world, so of course it is a loop in
+the source.&lt;/p&gt;
+&lt;p&gt;It is also a loop with a register in it, which is what makes it legal rather than
+oscillatory. Trace it: &lt;code&gt;lanesO&lt;/code&gt; is a projection of &lt;code&gt;busOut&lt;/code&gt;, and the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;shape
+post&lt;/a&gt; made a point of &lt;code&gt;busOut&lt;/code&gt; being a &lt;em&gt;projection and not a computation&lt;/em&gt;
+— the pin drives live in the engine’s &lt;code&gt;State&lt;/code&gt; and come out of a flip-flop.
+&lt;code&gt;espiPads&lt;/code&gt; turns them into a drive combinationally; &lt;code&gt;readFromBiSignal&lt;/code&gt; samples
+the net combinationally; and &lt;code&gt;ioIn&lt;/code&gt; then enters &lt;code&gt;BusIn&lt;/code&gt;, where the engine’s own
+state register catches it. One register, in the right place, and it is there
+because the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;engine post&lt;/a&gt; registered its pin outputs for timing reasons,
+not to make this line typecheck.&lt;/p&gt;
+&lt;p&gt;The last line reorders nine values into the nine-element result tuple, and the
+reordering is not cosmetic: it is what puts each value at the position whose
+&lt;code&gt;:::&lt;/code&gt; annotation names the port it belongs on. &lt;code&gt;d0&lt;/code&gt; is the drive side of &lt;code&gt;io0&lt;/code&gt;
+and must land in the slot labelled &lt;code&gt;&quot;io0&quot;&lt;/code&gt;. This is the least interesting line in
+the module and among the easiest to get catastrophically wrong, which is a fair
+description of pin binding in general.&lt;/p&gt;
+&lt;figure class=&quot;art-fig&quot; style=&quot;margin:2rem 0&quot;&gt;
+&lt;svg class=&quot;art&quot; viewBox=&quot;0 0 880 340&quot; role=&quot;img&quot; aria-labelledby=&quot;art-t art-d&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot;&gt;
+&lt;title id=&quot;art-t&quot;&gt;The Arty board shell wrapping system and espiPads, with named package pins&lt;/title&gt;
+&lt;desc id=&quot;art-d&quot;&gt;A large box labelled topEntity, Arty A7-100T, tagged Dom100, contains two blocks: system on the left and espiPads on the right. Between them, lanesOut with the cs, sck and rst sidebands runs left to right, and ioIn with alertIn runs right to left. Entering the big box from the left are clk on pin E3 and uart underscore rx on pin A9; uart underscore tx on pin D10 leaves to the left, and led on pin H5 leaves along the bottom. On the right, espiPads emits a BiSignalOut wire and receives a BiSignalIn wire, and the two meet at a junction and continue as a single accented line into a package pin block labelled io0 to io3, inout. Below it, the cs underscore n, sck and reset underscore n sidebands leave and alert underscore n enters.&lt;/desc&gt;
+&lt;style&gt;
+.art{max-width:880px;width:100%;height:auto;display:block;margin:0 auto}
+.art .bx{fill:var(--bg-dim);stroke:var(--fg-dim);stroke-width:1.6}
+.art .shell{fill:none;stroke:var(--fg-dim);stroke-width:1.8;stroke-dasharray:7 5}
+.art .pad{fill:var(--bg-dim);stroke:var(--accent);stroke-width:2.6}
+.art .w{stroke:var(--fg-dim);stroke-width:1.7;fill:none}
+.art .wa{stroke:var(--accent);stroke-width:2.4;fill:none}
+.art .m{fill:var(--fg-main);font-family:var(--mono);font-size:13.5px}
+.art .ma{fill:var(--accent);font-family:var(--mono);font-size:13px}
+.art .l{fill:var(--fg-dim);font-family:var(--mono);font-size:10px}
+.art .la{fill:var(--accent);font-family:var(--mono);font-size:10px}
+.art .s{fill:var(--fg-dim);font-family:var(--sans);font-size:11px}
+.art .ah{fill:var(--fg-dim)}
+.art .aha{fill:var(--accent)}
+&lt;/style&gt;
+&lt;defs&gt;
+&lt;marker id=&quot;art-a&quot; markerWidth=&quot;9&quot; markerHeight=&quot;7&quot; refX=&quot;8&quot; refY=&quot;3.5&quot; orient=&quot;auto&quot;&gt;&lt;path d=&quot;M0,0 L8,3.5 L0,7 Z&quot; class=&quot;ah&quot;/&gt;&lt;/marker&gt;
+&lt;marker id=&quot;art-aa&quot; markerWidth=&quot;9&quot; markerHeight=&quot;7&quot; refX=&quot;8&quot; refY=&quot;3.5&quot; orient=&quot;auto&quot;&gt;&lt;path d=&quot;M0,0 L8,3.5 L0,7 Z&quot; class=&quot;aha&quot;/&gt;&lt;/marker&gt;
+&lt;/defs&gt;
+&lt;!-- shell --&gt;
+&lt;rect class=&quot;shell&quot; x=&quot;150&quot; y=&quot;52&quot; width=&quot;460&quot; height=&quot;278&quot; rx=&quot;10&quot;/&gt;
+&lt;text class=&quot;s&quot; x=&quot;160&quot; y=&quot;72&quot;&gt;topEntity — Arty A7-100T&lt;/text&gt;
+&lt;text class=&quot;la&quot; x=&quot;600&quot; y=&quot;72&quot; text-anchor=&quot;end&quot;&gt;Dom100&lt;/text&gt;
+&lt;!-- inner blocks --&gt;
+&lt;rect class=&quot;bx&quot; x=&quot;180&quot; y=&quot;96&quot; width=&quot;180&quot; height=&quot;128&quot; rx=&quot;7&quot;/&gt;
+&lt;text class=&quot;m&quot; x=&quot;270&quot; y=&quot;166&quot; text-anchor=&quot;middle&quot;&gt;system&lt;/text&gt;
+&lt;rect class=&quot;bx&quot; x=&quot;420&quot; y=&quot;96&quot; width=&quot;160&quot; height=&quot;128&quot; rx=&quot;7&quot;/&gt;
+&lt;text class=&quot;m&quot; x=&quot;500&quot; y=&quot;166&quot; text-anchor=&quot;middle&quot;&gt;espiPads&lt;/text&gt;
+&lt;!-- left pins --&gt;
+&lt;text class=&quot;l&quot; x=&quot;88&quot; y=&quot;92&quot; text-anchor=&quot;end&quot;&gt;clk (E3)&lt;/text&gt;
+&lt;line class=&quot;w&quot; x1=&quot;96&quot; y1=&quot;88&quot; x2=&quot;144&quot; y2=&quot;88&quot; marker-end=&quot;url(#art-a)&quot;/&gt;
+&lt;text class=&quot;l&quot; x=&quot;88&quot; y=&quot;130&quot; text-anchor=&quot;end&quot;&gt;uart_rx (A9)&lt;/text&gt;
+&lt;line class=&quot;w&quot; x1=&quot;96&quot; y1=&quot;126&quot; x2=&quot;174&quot; y2=&quot;126&quot; marker-end=&quot;url(#art-a)&quot;/&gt;
+&lt;text class=&quot;l&quot; x=&quot;88&quot; y=&quot;194&quot; text-anchor=&quot;end&quot;&gt;uart_tx (D10)&lt;/text&gt;
+&lt;line class=&quot;w&quot; x1=&quot;180&quot; y1=&quot;190&quot; x2=&quot;100&quot; y2=&quot;190&quot; marker-end=&quot;url(#art-a)&quot;/&gt;
+&lt;!-- system &lt;-&gt; espiPads --&gt;
+&lt;text class=&quot;l&quot; x=&quot;390&quot; y=&quot;88&quot; text-anchor=&quot;middle&quot;&gt;lanesOut, cs, sck, rst&lt;/text&gt;
+&lt;line class=&quot;w&quot; x1=&quot;360&quot; y1=&quot;126&quot; x2=&quot;414&quot; y2=&quot;126&quot; marker-end=&quot;url(#art-a)&quot;/&gt;
+&lt;line class=&quot;w&quot; x1=&quot;420&quot; y1=&quot;158&quot; x2=&quot;366&quot; y2=&quot;158&quot; marker-end=&quot;url(#art-a)&quot;/&gt;
+&lt;text class=&quot;l&quot; x=&quot;390&quot; y=&quot;180&quot; text-anchor=&quot;middle&quot;&gt;ioIn&lt;/text&gt;
+&lt;text class=&quot;l&quot; x=&quot;390&quot; y=&quot;194&quot; text-anchor=&quot;middle&quot;&gt;alertIn&lt;/text&gt;
+&lt;!-- the fusion --&gt;
+&lt;text class=&quot;la&quot; x=&quot;622&quot; y=&quot;108&quot;&gt;BiSignalOut&lt;/text&gt;
+&lt;path class=&quot;wa&quot; d=&quot;M580,120 L666,120 L666,164 L580,164&quot; /&gt;
+&lt;text class=&quot;la&quot; x=&quot;622&quot; y=&quot;184&quot;&gt;BiSignalIn&lt;/text&gt;
+&lt;line class=&quot;wa&quot; x1=&quot;666&quot; y1=&quot;142&quot; x2=&quot;718&quot; y2=&quot;142&quot; marker-end=&quot;url(#art-aa)&quot;/&gt;
+&lt;circle cx=&quot;666&quot; cy=&quot;142&quot; r=&quot;4.5&quot; fill=&quot;var(--accent)&quot;/&gt;
+&lt;rect class=&quot;pad&quot; x=&quot;724&quot; y=&quot;114&quot; width=&quot;100&quot; height=&quot;56&quot; rx=&quot;4&quot;/&gt;
+&lt;text class=&quot;ma&quot; x=&quot;774&quot; y=&quot;139&quot; text-anchor=&quot;middle&quot;&gt;io0..io3&lt;/text&gt;
+&lt;text class=&quot;la&quot; x=&quot;774&quot; y=&quot;157&quot; text-anchor=&quot;middle&quot;&gt;inout&lt;/text&gt;
+&lt;!-- right pins --&gt;
+&lt;line class=&quot;w&quot; x1=&quot;580&quot; y1=&quot;198&quot; x2=&quot;690&quot; y2=&quot;198&quot; marker-end=&quot;url(#art-a)&quot;/&gt;
+&lt;text class=&quot;l&quot; x=&quot;696&quot; y=&quot;202&quot;&gt;cs_n, sck, reset_n&lt;/text&gt;
+&lt;line class=&quot;w&quot; x1=&quot;690&quot; y1=&quot;218&quot; x2=&quot;586&quot; y2=&quot;218&quot; marker-end=&quot;url(#art-a)&quot;/&gt;
+&lt;text class=&quot;l&quot; x=&quot;696&quot; y=&quot;222&quot;&gt;alert_n (K16)&lt;/text&gt;
+&lt;!-- led --&gt;
+&lt;line class=&quot;w&quot; x1=&quot;270&quot; y1=&quot;224&quot; x2=&quot;270&quot; y2=&quot;292&quot; /&gt;
+&lt;line class=&quot;w&quot; x1=&quot;270&quot; y1=&quot;292&quot; x2=&quot;690&quot; y2=&quot;292&quot; marker-end=&quot;url(#art-a)&quot;/&gt;
+&lt;text class=&quot;l&quot; x=&quot;696&quot; y=&quot;296&quot;&gt;led (H5)&lt;/text&gt;
+&lt;/svg&gt;
+&lt;figcaption style=&quot;text-align:center;color:var(--fg-dim);font-size:.9rem;margin-top:.85rem;font-family:var(--sans)&quot;&gt;Fifty-one lines, drawn. The shell supplies &lt;code&gt;Dom100&lt;/code&gt;, a reset that is never asserted and an enable that is always on, and inside it exactly two things happen: &lt;a href=&quot;https://balbi.sh/posts/tamal-top/&quot;&gt;&lt;code&gt;system&lt;/code&gt;&lt;/a&gt; computes and &lt;a href=&quot;https://balbi.sh/posts/tamal-io/&quot;&gt;&lt;code&gt;espiPads&lt;/code&gt;&lt;/a&gt; makes it physical. The accented detail on the right is the whole reason the lanes are written out one at a time — a &lt;code&gt;BiSignalIn&lt;/code&gt; argument and the &lt;code&gt;BiSignalOut&lt;/code&gt; result derived from it are the same wire seen from two sides, and Clash fuses the pair into one &lt;code&gt;inout&lt;/code&gt; port per lane. Wrap them in a &lt;code&gt;Vec&lt;/code&gt; and the fusion does not happen. Pin numbers are from the Arty A7-100T constraints file, not from the Haskell.&lt;/figcaption&gt;
+&lt;/figure&gt;
+&lt;h2 id=&quot;where-the-pins-actually-are&quot;&gt;Where the pins actually are&lt;/h2&gt;
+&lt;p&gt;The Haskell says &lt;code&gt;io0&lt;/code&gt;. It does not say &lt;em&gt;which ball of solder&lt;/em&gt;. That lives in a
+Vivado constraints file, and it is worth reading because it is the first place in
+this entire series where the design touches something physical:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;tcl&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;set_property -dict { PACKAGE_PIN E3  IOSTANDARD LVCMOS3&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;3&lt;/span&gt;&lt;span&gt; } [get_ports { clk }]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;create_clock -name sys_clk -period &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;10.000&lt;/span&gt;&lt;span&gt; [get_ports { clk }]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;set_property -dict { PACKAGE_PIN A9  IOSTANDARD LVCMOS3&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;3&lt;/span&gt;&lt;span&gt; } [get_ports { uart_rx }]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;set_property -dict { PACKAGE_PIN D1&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0&lt;/span&gt;&lt;span&gt; IOSTANDARD LVCMOS3&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;3&lt;/span&gt;&lt;span&gt; } [get_ports { uart_tx }]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;set_property -dict { PACKAGE_PIN G1&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;3&lt;/span&gt;&lt;span&gt; IOSTANDARD LVCMOS3&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;3&lt;/span&gt;&lt;span&gt; PULLUP TRUE } [get_ports { io0 }]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;set_property -dict { PACKAGE_PIN B1&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;1&lt;/span&gt;&lt;span&gt; IOSTANDARD LVCMOS3&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;3&lt;/span&gt;&lt;span&gt; PULLUP TRUE } [get_ports { io1 }]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;set_property -dict { PACKAGE_PIN A1&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;1&lt;/span&gt;&lt;span&gt; IOSTANDARD LVCMOS3&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;3&lt;/span&gt;&lt;span&gt; PULLUP TRUE } [get_ports { io2 }]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;set_property -dict { PACKAGE_PIN D1&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;2&lt;/span&gt;&lt;span&gt; IOSTANDARD LVCMOS3&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;3&lt;/span&gt;&lt;span&gt; PULLUP TRUE } [get_ports { io3 }]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;set_property -dict { PACKAGE_PIN D1&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;3&lt;/span&gt;&lt;span&gt; IOSTANDARD LVCMOS3&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;3&lt;/span&gt;&lt;span&gt; } [get_ports { sck }]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;set_property -dict { PACKAGE_PIN B1&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;8&lt;/span&gt;&lt;span&gt; IOSTANDARD LVCMOS3&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;3&lt;/span&gt;&lt;span&gt; } [get_ports { cs_n }]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;set_property -dict { PACKAGE_PIN A1&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;8&lt;/span&gt;&lt;span&gt; IOSTANDARD LVCMOS3&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;3&lt;/span&gt;&lt;span&gt; } [get_ports { reset_n }]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;set_property -dict { PACKAGE_PIN K1&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;6&lt;/span&gt;&lt;span&gt; IOSTANDARD LVCMOS3&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;3&lt;/span&gt;&lt;span&gt; PULLUP TRUE } [get_ports { alert_n }]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;set_property -dict { PACKAGE_PIN H5  IOSTANDARD LVCMOS3&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;3&lt;/span&gt;&lt;span&gt; } [get_ports { led }]&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Every &lt;code&gt;get_ports&lt;/code&gt; name in that file is a string from the &lt;code&gt;:::&lt;/code&gt; annotations three
+files away. There is no compiler between them. Rename &lt;code&gt;&quot;cs_n&quot;&lt;/code&gt; to &lt;code&gt;&quot;csn&quot;&lt;/code&gt; in the
+Haskell and this file goes on referring to a port that no longer exists, and you
+find out during implementation, or — worse — you do not, because the tool
+warned and you did not read the log.&lt;/p&gt;
+&lt;p&gt;Three things in it are worth pausing on.&lt;/p&gt;
+&lt;p&gt;The &lt;strong&gt;clock&lt;/strong&gt;: &lt;code&gt;E3&lt;/code&gt;, and &lt;code&gt;create_clock … -period 10.000&lt;/code&gt;. Ten nanoseconds. That
+number is &lt;code&gt;hzToPeriod 100_000_000&lt;/code&gt; written a second time, in a second language,
+with nothing checking that the two agree. Say 20.000 here and the design still
+builds; timing analysis simply grades it against a clock the board does not
+supply, and the failure — a part that meets timing on paper and misbehaves in the
+lab — is exactly the kind that costs a weekend.&lt;/p&gt;
+&lt;p&gt;The &lt;strong&gt;lanes&lt;/strong&gt;: &lt;code&gt;PULLUP TRUE&lt;/code&gt;, on all four. That is the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-io/&quot;&gt;pad post’s&lt;/a&gt;
+&lt;code&gt;BiSignalIn &#39;PullUp&lt;/code&gt; claim finally being made true. The type-level tag told the
+&lt;em&gt;simulator&lt;/em&gt; that an undriven net reads high, and the post noted that it generates
+no hardware and is a promise you have to keep somewhere else. Here is somewhere
+else. Two files, one physical fact, asserted in each and cross-checked by nobody
+— and if they disagree, the simulation is confident and wrong, which is the
+worst way to be wrong about a tri-state bus. &lt;code&gt;alert_n&lt;/code&gt; gets a pull-up too, for the
+same reason: an active-low sideband nobody is driving must read deasserted, not
+float into the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-io/&quot;&gt;synchroniser&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;And the &lt;strong&gt;layout&lt;/strong&gt;: &lt;code&gt;io0..io3&lt;/code&gt; on &lt;code&gt;G13/B11/A11/D12&lt;/code&gt;, &lt;code&gt;sck&lt;/code&gt;/&lt;code&gt;cs_n&lt;/code&gt;/&lt;code&gt;reset_n&lt;/code&gt; on
+&lt;code&gt;D13/B18/A18&lt;/code&gt;. Those are the two rows of a single Pmod header, and the comment in
+the file explains the choice — the whole eSPI bus on one connector, with ground
+and 3V3 on the header’s shared pins, so the rig reaches a device under test
+through &lt;em&gt;one cable&lt;/em&gt;. It is the least sophisticated decision in the entire project
+and possibly the one that will matter most on a bench.&lt;/p&gt;
+&lt;h2 id=&quot;what-we-read&quot;&gt;What we read&lt;/h2&gt;
+&lt;p&gt;Fifty-one lines, plus thirty-nine for the domain, and the design has an address.
+&lt;code&gt;Tamal.Board.ArtyA7&lt;/code&gt; has no export list because at this level the door is not the
+export list — it is the port list, and the port list is written as type-level
+string annotations on &lt;code&gt;topEntity&lt;/code&gt;’s arguments and results, turned into a
+&lt;code&gt;Synthesize&lt;/code&gt; annotation by &lt;code&gt;makeTopEntity&lt;/code&gt; on the file’s last line. Seven
+arguments, nine results, thirteen ports, because &lt;code&gt;io0&lt;/code&gt; through &lt;code&gt;io3&lt;/code&gt; each appear
+on both sides and each pair fuses into one &lt;code&gt;inout&lt;/code&gt;. &lt;code&gt;Dom100&lt;/code&gt; states the Arty’s
+100 MHz oscillator as a type, which is the single place a frequency is written in
+the whole project and the far end of the wire the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-uart-baudgen/&quot;&gt;baud generator&lt;/a&gt; read
+its period out of. &lt;code&gt;noReset&lt;/code&gt; is a reset that never asserts, so Clash emits no
+reset port and the design comes up in the initial values the bitstream loaded —
+which every module in the series was already written to make sensible. And the
+body is two mutually recursive bindings, &lt;code&gt;system&lt;/code&gt; giving &lt;code&gt;espiPads&lt;/code&gt; a drive and
+&lt;code&gt;espiPads&lt;/code&gt; giving &lt;code&gt;system&lt;/code&gt; a sample, a loop in the source because it is a loop on
+the board, broken by a register the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;engine&lt;/a&gt; placed for its own reasons
+long ago.&lt;/p&gt;
+&lt;p&gt;Then a constraints file says where. &lt;code&gt;E3&lt;/code&gt; for the clock and ten nanoseconds for
+its period; one Pmod for the whole bus; &lt;code&gt;PULLUP TRUE&lt;/code&gt; on the four lanes, keeping
+a promise the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-io/&quot;&gt;pad module’s&lt;/a&gt; type made and could not enforce.&lt;/p&gt;
+&lt;h2 id=&quot;the-whole-stack-from-the-bottom&quot;&gt;The whole stack, from the bottom&lt;/h2&gt;
+&lt;p&gt;This is the end of the descent, so it is worth looking back up it.&lt;/p&gt;
+&lt;p&gt;At the very bottom is &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-crc/&quot;&gt;&lt;code&gt;crc8Update&lt;/code&gt;&lt;/a&gt;, twenty-eight lines with no clock in
+them, a fold that unrolls into an LFSR. Above it the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-uart-baudgen/&quot;&gt;baud generator&lt;/a&gt;,
+which will not be told the clock rate and reads it out of a type; the
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-uart-tx/&quot;&gt;transmitter&lt;/a&gt;, the first module with &lt;code&gt;mealy&lt;/code&gt; at the top and a Mealy shape
+wearing Moore outputs; the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-uart-rx/&quot;&gt;receiver&lt;/a&gt;, its mirror, with a two-flop
+synchroniser, a falling-edge start detector and a three-sample majority vote; and
+the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-uart-top/&quot;&gt;five-line umbrella&lt;/a&gt; that generates one tick and fans it into both,
+making the loopback a structural certainty rather than a hope.&lt;/p&gt;
+&lt;p&gt;Then the transport. The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-loader-cobs/&quot;&gt;COBS codec&lt;/a&gt;, two pure step functions and one
+load-bearing ordering of two cases; the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-loader/&quot;&gt;loader&lt;/a&gt;, the first block to own
+a clock, peeling a frame with a one-byte holdback and dancing with block RAM
+latency across seven drain phases; and the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-mem/&quot;&gt;two memories&lt;/a&gt;, four lines of
+&lt;code&gt;blockRamPow2&lt;/code&gt; and three promises, tested against an eight-line oracle because
+the promises are what everything above depends on.&lt;/p&gt;
+&lt;p&gt;Then the engine, read outside-in and then inside-out. The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;map first&lt;/a&gt; —
+eight phases, one pure &lt;code&gt;step&lt;/code&gt;, seventeen state fields, eight closed boxes — then
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;one instruction per cycle&lt;/a&gt;, then &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-bus/&quot;&gt;the wire and the record&lt;/a&gt;. And then
+the boxes, opened in the order the engine reached for them: the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-isa/&quot;&gt;instruction
+set&lt;/a&gt; and its total decoder, proven over all 2³² words; the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-regfile/&quot;&gt;sixteen
+registers&lt;/a&gt; behind a private index function and a hardwired zero; the
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-compute/&quot;&gt;ALU and the comparator&lt;/a&gt;, eight operations and a taken branch; and the
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-serdes/&quot;&gt;serialiser&lt;/a&gt;, a &lt;code&gt;(value, enable)&lt;/code&gt; pair that is the whole of tri-state in
+two bits.&lt;/p&gt;
+&lt;p&gt;Then the formats, kept pure on purpose: the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-wire/&quot;&gt;wire&lt;/a&gt;, where a program becomes
+a CRC-checked, COBS-stuffed, zero-delimited frame; and the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-trace/&quot;&gt;trace&lt;/a&gt;, where a
+run becomes three record shapes and a ring that drops rather than tears.&lt;/p&gt;
+&lt;p&gt;And then out. The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-io/&quot;&gt;pads&lt;/a&gt;, where &lt;code&gt;(value, enable)&lt;/code&gt; becomes &lt;code&gt;Maybe Bit&lt;/code&gt; and a
+&lt;code&gt;Maybe Bit&lt;/code&gt; becomes a wire that floats; the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-top/&quot;&gt;top&lt;/a&gt;, where every module in the
+list above is joined and the engine finally gets a clock; and this shell, where
+the whole thing acquires a package pin. Twenty-two posts, one direction: from a
+byte-wide remainder to a bonded ball of solder, and every module in between read
+in full.&lt;/p&gt;
+&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-introducing/&quot;&gt;introduction&lt;/a&gt; said the pins are the hard part. Twenty-one posts
+later that has turned out to be true in a specific and slightly humbling way. The
+engine could be reasoned about — it is a pure function, and pure functions submit
+to property tests by the hundred thousand. The pins could not. The one place the
+project had to abandon its favourite abstraction, the one claim it could not
+check with a type, and the one number it had to write down twice in two languages
+are all in the last two posts. Everything above the pad boundary was a matter of
+getting the thinking right. The pad boundary is a matter of getting the &lt;em&gt;world&lt;/em&gt;
+right, and the world does not typecheck.&lt;/p&gt;
+&lt;p&gt;What comes next is not another module, because there are none left. The gateware
+is complete, it fits on an Arty, and it comes up blinking slowly and waiting for
+a program. So the next post stops reading code and starts running it: a real
+program loaded over a real serial link, a trigger, real eSPI packets on real
+wires with a real analyser watching them, and a drained ring decoded back into
+records. Everything this series has described, doing something.&lt;/p&gt;
+&lt;section class=&quot;footnotes&quot;&gt;
+&lt;ol class=&quot;footnotes-list&quot;&gt;
+&lt;li id=&quot;fn-tt&quot;&gt;
+&lt;p&gt;&lt;code&gt;Clash.Annotations.TH&lt;/code&gt;’s &lt;code&gt;makeTopEntity&lt;/code&gt; is a Template Haskell splice that
+runs at compile time on the &lt;em&gt;name&lt;/em&gt; of a function — hence the &lt;code&gt;&#39;topEntity&lt;/code&gt; quote
+— reifies its type, and walks it collecting &lt;code&gt;:::&lt;/code&gt; annotations to build a
+&lt;code&gt;Synthesize&lt;/code&gt; annotation with a &lt;code&gt;PortName&lt;/code&gt; for every argument and result. The
+alternative is writing that annotation by hand, which is entirely possible and
+substantially worse: it means maintaining a second, parallel description of the
+interface that the compiler will not check against the first, so adding an
+argument and forgetting to add its &lt;code&gt;PortName&lt;/code&gt; silently shifts every port after it
+by one. Deriving the annotation from the signature makes the signature the single
+source of truth. What no tool checks is the step &lt;em&gt;after&lt;/em&gt; that: the names it emits
+have to match the names in the constraints file, and nothing in either language
+knows the other file exists. Type-level strings get you as far as the edge of
+Haskell and then stop, which is a fair summary of the whole board-shell layer. &lt;a href=&quot;https://balbi.sh/posts/tamal-arty/#fr-tt-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id=&quot;fn-pll&quot;&gt;
+&lt;p&gt;&lt;code&gt;Tamal.Board.CycloneV&lt;/code&gt; is the same fifty lines with one difference: the
+Terasic C5G’s oscillator is 50 MHz, so the shell instantiates an Altera PLL —
+&lt;code&gt;alteraPllSync clk50 (unsafeFromActiveHigh (pure False))&lt;/code&gt; — which returns both a
+100 MHz &lt;code&gt;Clock Dom100&lt;/code&gt; and a &lt;code&gt;Reset Dom100&lt;/code&gt; derived from the PLL’s lock signal.
+That reset holds the design until the multiplied clock is stable and then
+releases, which is behaviourally the same as the Arty’s power-up &lt;code&gt;init&lt;/code&gt; and
+strictly safer, because it waits for a clock that is actually running rather than
+assuming one. The eSPI bus lands on the board’s 2×20 GPIO header instead of a
+Pmod, and the four lanes are four scalar &lt;code&gt;inout&lt;/code&gt;s for exactly the same reason.
+It is not scheduled for a post because it does not yet meet timing, and a board
+post about a design that does not close is a post about a build log. When it
+closes it will be short. &lt;a href=&quot;https://balbi.sh/posts/tamal-arty/#fr-pll-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id=&quot;fn-init&quot;&gt;
+&lt;p&gt;An FPGA’s registers are not undefined at power-up the way an ASIC’s are.
+Configuration writes the bitstream into the fabric, and the bitstream includes an
+initial value for every flip-flop, LUT-RAM location and block RAM word in the
+design; on Xilinx parts a global set/reset pulse at the end of configuration
+drives each register to its &lt;code&gt;INIT&lt;/code&gt; attribute. Clash models this with the domain’s
+&lt;code&gt;vInitBehavior&lt;/code&gt;, which &lt;code&gt;vSystem&lt;/code&gt; sets to &lt;code&gt;Defined&lt;/code&gt; — meaning &lt;code&gt;register&lt;/code&gt;’s
+initial-value argument and the contents of &lt;code&gt;blockRamPow2&lt;/code&gt;’s seed vector are real
+promises about cycle zero, not simulation conveniences. That is what makes an
+explicit reset network optional rather than mandatory, and why omitting it is a
+legitimate choice here and would be a bug on an ASIC, where the same code
+describes registers that come up holding whatever the silicon felt like. The
+trade is that a design with no reset port cannot be restarted without
+reconfiguring the part, which for a bench rig is not a limitation: the loader’s
+&lt;code&gt;TRIGGER&lt;/code&gt; restarts a &lt;em&gt;run&lt;/em&gt;, and a run is the only thing anyone wants to restart. &lt;a href=&quot;https://balbi.sh/posts/tamal-arty/#fr-init-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/section&gt;
+</content>
+  </entry>
+  
+</feed>

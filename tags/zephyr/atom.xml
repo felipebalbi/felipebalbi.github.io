@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+  <title>Felipe Balbi</title>
+  <subtitle>Notes on embedded systems, Rust, and the craft of writing software.</subtitle>
+  <link href="https://balbi.sh/tags/zephyr/atom.xml" rel="self" type="application/atom+xml"/>
+  <link href="https://balbi.sh"/>
+  <generator uri="https://www.getzola.org/">Zola</generator>
+  <updated>2026-08-19T09:00:00+00:00</updated>
+  <id>https://balbi.sh/tags/zephyr/atom.xml</id>
+  
+  <entry xml:lang="en">
+    <title>Pico de Gallo: Real Buses for Zephyr&#39;s native_sim</title>
+    <published>2026-08-19T09:00:00+00:00</published>
+    <updated>2026-08-19T09:00:00+00:00</updated>
+    <author><name>Felipe Balbi</name></author>
+    <link rel="alternate" href="https://balbi.sh/posts/pico-de-gallo-zephyr-native-sim/" type="text/html"/>
+    <id>https://balbi.sh/posts/pico-de-gallo-zephyr-native-sim/</id>
+    <summary type="html">&lt;p&gt;&lt;a href=&quot;/pico-de-gallo/&quot;&gt;Pico de Gallo&lt;/a&gt; turns an RP2350 into a USB-attached bridge so a
+host program can drive real I²C, SPI, UART, GPIO, PWM, ADC and 1-Wire
+without cross-compiling or flashing anything. Zephyr has always had
+real buses, of course. But &lt;code&gt;native_sim&lt;/code&gt; — the board you build when you
+want a Zephyr application to run as an ordinary process on your laptop
+— has not. There is now a Pico de Gallo module that gives it some.&lt;/p&gt;</summary>
+    
+    <content type="html">&lt;p&gt;&lt;a href=&quot;/pico-de-gallo/&quot;&gt;Pico de Gallo&lt;/a&gt; turns an RP2350 into a USB-attached bridge so a
+host program can drive real I²C, SPI, UART, GPIO, PWM, ADC and 1-Wire
+without cross-compiling or flashing anything. Zephyr has always had
+real buses, of course. But &lt;code&gt;native_sim&lt;/code&gt; — the board you build when you
+want a Zephyr application to run as an ordinary process on your laptop
+— has not. There is now a Pico de Gallo module that gives it some.&lt;/p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;/span&gt;&lt;h2 id=&quot;the-shape-of-it&quot;&gt;The shape of it&lt;/h2&gt;
+&lt;p&gt;The module is on &lt;code&gt;main&lt;/code&gt;. It ships a &lt;code&gt;pico_de_gallo&lt;/code&gt; shield whose I2C
+and SPI drivers forward Zephyr’s subsystem calls straight through
+&lt;a rel=&quot;external&quot; href=&quot;https://crates.io/crates/pico-de-gallo-ffi&quot;&gt;&lt;code&gt;pico-de-gallo-ffi&lt;/code&gt;&lt;/a&gt; to a board plugged into your laptop. The
+Zephyr board is &lt;code&gt;native_sim/native/64&lt;/code&gt; — nothing is cross-compiled,
+nothing is flashed. Corrosion builds the FFI as a &lt;code&gt;staticlib&lt;/code&gt; during
+the Zephyr build and links it into the native_simulator runner, so the
+&lt;code&gt;zephyr&lt;/code&gt; binary carries the USB transport inside it: no shared object
+to keep alongside it, no runtime library path to get right.&lt;/p&gt;
+&lt;h2 id=&quot;unmodified-upstream-drivers&quot;&gt;Unmodified upstream drivers&lt;/h2&gt;
+&lt;p&gt;That is the part worth the effort. &lt;code&gt;samples/i2c_bridge&lt;/code&gt; reads a TI
+TMP117 through Zephyr’s sensor API, using the in-tree &lt;code&gt;tmp117&lt;/code&gt; driver
+as-is:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;plain&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;Temperature: 23.500000 C&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;Temperature: 23.507812 C&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;samples/spi_nor_id&lt;/code&gt; does the same on SPI, bringing up a GigaDevice
+GD25Q16 with the stock &lt;code&gt;jedec,spi-nor&lt;/code&gt; driver and reading SFDP through
+the generic flash API:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;plain&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;&amp;lt;inf&amp;gt; spi_nor: nor@0: SFDP v 1.0 AP ff with 2 PH&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;&amp;lt;inf&amp;gt; spi_nor: nor@0: 2 MiBy flash&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;Flash device ready: nor@0&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;size:     2048 KiB&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;@000000:  FF 00 00 FF 7E AA 99 7E 51 00 01 05 92 00 20 62&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Those bytes are an iCE40 bitstream, read off real flash, by a Zephyr
+application running as a native process on the host. The sample is
+deliberately read-only: its overlay omits every write-capable
+devicetree gate, so initialisation issues nothing but &lt;code&gt;RDID&lt;/code&gt; and
+&lt;code&gt;RDSFDP&lt;/code&gt;. Both status registers read &lt;code&gt;0x00&lt;/code&gt; before and after, and the
+flash contents were byte-identical across the run.&lt;/p&gt;
+&lt;h2 id=&quot;what-reviewing-it-turned-up&quot;&gt;What reviewing it turned up&lt;/h2&gt;
+&lt;p&gt;Reading the module carefully produced six issues, and all six are now
+closed and merged. The sharpest was &lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/pico-de-gallo/issues/103&quot;&gt;#103&lt;/a&gt;: the SPI driver left
+&lt;code&gt;transceive_async&lt;/code&gt; and &lt;code&gt;iodev_submit&lt;/code&gt; NULL. Zephyr’s I2C subsystem
+NULL-checks its optional ops; SPI does not. That was a segfault waiting
+for anyone who enabled &lt;code&gt;CONFIG_SPI_RTIO&lt;/code&gt; — which arrives transitively
+via &lt;code&gt;CONFIG_SENSOR_ASYNC_API&lt;/code&gt;, so without asking for it. It is now a
+&lt;code&gt;BUILD_ASSERT&lt;/code&gt;, which turns an unsupported configuration into a build
+failure that names itself instead of a crash at runtime. &lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/pico-de-gallo/issues/111&quot;&gt;#111&lt;/a&gt;
+had the SPI driver calling &lt;code&gt;k_malloc&lt;/code&gt; while depending on nothing that
+provides a heap, so any application that did not set
+&lt;code&gt;CONFIG_HEAP_MEM_POOL_SIZE&lt;/code&gt; by hand failed to link. &lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/pico-de-gallo/issues/105&quot;&gt;#105&lt;/a&gt; was a
+pair of format-string defects in I2C error paths.&lt;/p&gt;
+&lt;p&gt;The other three were seams rather than code. &lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/pico-de-gallo/issues/108&quot;&gt;#108&lt;/a&gt;: the build
+hard-coded &lt;code&gt;libpico_de_gallo_ffi.so&lt;/code&gt; and assumed an ELF host, which is
+how the &lt;code&gt;staticlib&lt;/code&gt; decision above got made — macOS and Windows are
+supported &lt;code&gt;native_sim&lt;/code&gt; hosts too. &lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/pico-de-gallo/issues/107&quot;&gt;#107&lt;/a&gt;: the module fetched the
+FFI crate &lt;em&gt;from crates.io&lt;/em&gt; despite living in the same repository as it,
+so in-tree FFI edits changed nothing and the pin was invisible to
+&lt;code&gt;cargo-deny&lt;/code&gt; and the lockfile job. &lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/pico-de-gallo/issues/106&quot;&gt;#106&lt;/a&gt;: the generated C header
+exported no constants and no config enums, so every C consumer
+hard-coded magic numbers — &lt;code&gt;GALLO_NUM_GPIOS&lt;/code&gt; and friends are exported
+now.&lt;/p&gt;
+&lt;h2 id=&quot;where-it-stands&quot;&gt;Where it stands&lt;/h2&gt;
+&lt;p&gt;Coming along, and not done. There is no CI and no test suite yet. It
+wants Zephyr &lt;code&gt;main&lt;/code&gt; rather than a release, because the SPI driver reads
+&lt;code&gt;spi_config&lt;/code&gt; fields that no tagged version has. Two of the four samples
+cannot be built at all, since the IS31FL3743B driver they want is not
+upstream.&lt;/p&gt;
+&lt;p&gt;Chip select is the honest wart. Today the SPI driver forwards the child
+node’s &lt;code&gt;reg&lt;/code&gt; straight to the firmware as a GPIO pin index, so every
+transaction reconfigures whichever board GPIO that number happens to
+name — regardless of what you have wired there (&lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/pico-de-gallo/issues/104&quot;&gt;#104&lt;/a&gt;). The work
+in flight restructures the module around a multi-function device: an
+&lt;code&gt;odp,pico-de-gallo&lt;/code&gt; parent owning the single USB handle, with &lt;code&gt;-i2c&lt;/code&gt;,
+&lt;code&gt;-spi&lt;/code&gt; and a new &lt;code&gt;-gpio&lt;/code&gt; child beneath it, and chip select moved to
+ordinary &lt;code&gt;cs-gpios&lt;/code&gt; pointing at that GPIO sibling. That earns Zephyr’s
+own CS handling for free, and makes a devicetree wiring chip select to
+a &lt;em&gt;different&lt;/em&gt; board fail the build rather than assert CS on one board
+while clocking data on another. Not merged yet.&lt;/p&gt;
+&lt;p&gt;What is merged works against real silicon, with drivers nobody wrote
+for this. Upstreaming the module proper is tracked in &lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/pico-de-gallo/issues/98&quot;&gt;#98&lt;/a&gt;.&lt;/p&gt;
+&lt;h2 id=&quot;where-to-look&quot;&gt;Where to look&lt;/h2&gt;
+&lt;p&gt;The module does not have a chapter in the book yet. Until it does, the
+&lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/pico-de-gallo/blob/main/zephyr/README.md&quot;&gt;module README&lt;/a&gt; is the guide: prerequisites, workspace
+setup, both working samples, and a frank list of driver limitations.&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;docs: the &lt;a href=&quot;/pico-de-gallo/&quot;&gt;Pico de Gallo book&lt;/a&gt; · source: &lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/pico-de-gallo&quot;&gt;the repo&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;the C API the Zephyr drivers call: &lt;a rel=&quot;external&quot; href=&quot;https://crates.io/crates/pico-de-gallo-ffi&quot;&gt;&lt;code&gt;pico-de-gallo-ffi&lt;/code&gt;&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;underneath it: &lt;a rel=&quot;external&quot; href=&quot;https://crates.io/crates/pico-de-gallo-lib&quot;&gt;&lt;code&gt;pico-de-gallo-lib&lt;/code&gt;&lt;/a&gt; ·
+&lt;a rel=&quot;external&quot; href=&quot;https://crates.io/crates/pico-de-gallo-internal&quot;&gt;&lt;code&gt;pico-de-gallo-internal&lt;/code&gt;&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+</content>
+  </entry>
+  
+</feed>
