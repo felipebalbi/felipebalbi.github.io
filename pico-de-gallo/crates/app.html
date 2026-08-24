@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-988a4873.js";
+            window.path_to_searchindex_js = "../searchindex-28b25b14.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -320,6 +320,27 @@ exactly the situation <code>ping</code> exists to diagnose. See
 </tbody>
 </table>
 </div>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>The CLI is not protected by the Zephyr driver’s 1013-byte containment. A
+1015-byte TX-only SPI request reproduced a device-wide firmware-dispatcher
+wedge. Keep individual SPI payloads at or below 512 bytes; see
+<a href="../appendix/troubleshooting.html#buffertoolong-22">troubleshooting</a>.</p>
+</blockquote>
+<p><code>batch --cs &lt;PIN&gt;</code> accepts any <code>u8</code>. The pin is checked at run time
+against the GPIO count the connected device reports — not against a fixed
+range — before the operations are parsed and before anything is
+transmitted, so an out-of-range chip-select drives no pin:</p>
+<pre><code class="language-text">invalid SPI chip-select pin 7; device reports 4 GPIOs (valid 0..4)
+device reports num_gpios=0; no SPI chip-select pin is available
+</code></pre>
+<p>Every subcommand except <code>list</code> and <code>version</code> validates the firmware
+before doing anything else, and that validation supplies the count. If it
+fails — including a <code>device/info</code> timeout after 300 seconds — the error
+appears under <code>firmware validation failed</code>, never as an invalid
+chip-select. On this branch a successful validation still cannot prove
+wire-<em>shape</em> compatibility, because <code>DeviceInfo</code> changed while both peers
+report schema 0.6.1.</p>
 <p>See the <a href="../interfaces/spi.html">SPI chapter</a> and
 <a href="../interfaces/batching.html">Transaction Batching</a>.</p>
 <h3 id="gpio"><a class="header" href="#gpio"><code>gpio</code></a></h3>
@@ -330,7 +351,7 @@ exactly the situation <code>ping</code> exists to diagnose. See
 </thead>
 <tbody>
 <tr><td><code>get</code></td><td>Read the current level of a pin</td></tr>
-<tr><td><code>put</code></td><td>Drive a pin high or low</td></tr>
+<tr><td><code>put</code></td><td>Drive a pin high or low - <code>put --pin &lt;PIN&gt; --level &lt;high|low&gt;</code></td></tr>
 <tr><td><code>set-config</code></td><td>Set direction and pull resistor</td></tr>
 <tr><td><code>monitor</code></td><td>Subscribe to edge events until you stop the process</td></tr>
 </tbody>

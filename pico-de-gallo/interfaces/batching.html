@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-988a4873.js";
+            window.path_to_searchindex_js = "../searchindex-28b25b14.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -236,8 +236,14 @@ Read data (3 bytes):
 Read data (7 bytes):
   0000: ff ff ff 00 00 00 00                               .......
 </code></pre>
-<p>The <code>--cs</code> flag specifies which GPIO pin (0–3) is used as chip-select.
-The firmware asserts CS low before the first operation and deasserts it
+<p>The <code>--cs</code> flag specifies which GPIO pin is used as chip-select. Valid
+values are <code>0..num_gpios</code>, where <code>num_gpios</code> is the count the connected
+device reports in <code>device/info</code> — not a fixed range baked into the CLI.
+<code>gallo</code> validates the firmware on startup and checks <code>--cs</code> against that
+reported count <em>before</em> parsing the operations or transmitting anything,
+so an out-of-range chip-select drives no pin. A device reporting zero
+GPIOs produces its own distinct error rather than an out-of-range one.</p>
+<p>The firmware asserts CS low before the first operation and deasserts it
 after the last — all operations run atomically under chip-select.</p>
 <h4 id="available-spi-operations"><a class="header" href="#available-spi-operations">Available SPI operations</a></h4>
 <div class="table-wrapper">
@@ -341,7 +347,10 @@ use embedded_hal::spi::Operation;
 use pico_de_gallo_hal::Hal;
 
 fn read_spi_jedec(hal: &amp;Hal) -&gt; Result&lt;[u8; 3], Box&lt;dyn std::error::Error&gt;&gt; {
-    let mut spi = hal.spi_device(0);  // CS on GPIO 0
+    // `spi_device` returns a Result: the chip-select is checked against
+    // the device-reported GPIO count before the pin is driven, so an
+    // out-of-range pin is refused here rather than reconfigured.
+    let mut spi = hal.spi_device(0)?;  // CS on GPIO 0
     let mut id = [0u8; 3];
 
     // One USB round-trip: CS asserted, command sent, ID read, CS deasserted
@@ -414,14 +423,18 @@ from the request, so no framing is needed in the response.</p>
 </thead>
 <tbody>
 <tr><td>Maximum operations per batch</td><td>64 (<code>MAX_BATCH_OPS</code>)</td></tr>
-<tr><td>Maximum total payload</td><td>4096 bytes (<code>MAX_TRANSFER_SIZE</code>)</td></tr>
-<tr><td>Maximum response data</td><td>4096 bytes</td></tr>
+<tr><td>Protocol packet-buffer/argument bound</td><td>4096 bytes (<code>MAX_TRANSFER_SIZE</code>)</td></tr>
+<tr><td>Demonstrated end-to-end payload</td><td>Shape-dependent and below 4096; no general ceiling is published</td></tr>
 </tbody>
 </table>
 </div>
 <p>If a batch exceeds these limits, the firmware returns an error
 indicating which limit was violated and, for operation-level failures,
 which operation failed (zero-indexed).</p>
+<p><code>MAX_TRANSFER_SIZE</code> is a buffer and argument bound, not a guarantee that 4096
+bytes of application data fit through postcard-rpc and COBS framing. Request
+shape and response size both matter. See the measured SPI evidence in
+<a href="../appendix/troubleshooting.html#buffertoolong-22">Troubleshooting</a>.</p>
 
                     </main>
 

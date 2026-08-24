@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-988a4873.js";
+            window.path_to_searchindex_js = "../searchindex-28b25b14.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -247,16 +247,29 @@ firmware enforces instead of hard-coding copies:</p>
 #define GALLO_MAX_BATCH_OPS 64
 #define GALLO_NUM_GPIOS 4
 </code></pre>
-<p><code>GALLO_MAX_TRANSFER_SIZE</code> applies <strong>per direction</strong> — a write-then-read may
-carry that many bytes each way. Exceeding it yields <code>Status::BufferTooLong</code>.
+<p><code>GALLO_MAX_TRANSFER_SIZE</code> mirrors the protocol’s 4096-byte packet-buffer and
+local argument bound. It is <strong>not</strong> a guarantee that 4096 bytes of application
+payload can traverse the framed transport; deliverable size depends on the
+operation’s request and response shape. Exceeding the local bound yields
+<code>Status::BufferTooLong</code>, while a smaller framed request can still fail in
+transport. See the measured <a href="../interfaces/spi.html#holding-chip-select-and-the-fault-latch">SPI limits</a>.
 Exceeding <code>GALLO_MAX_BATCH_OPS</code> in <code>gallo_i2c_batch</code> or <code>gallo_spi_batch</code>
 yields <code>Status::InvalidArgument</code>.</p>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>The Zephyr driver’s 1013-byte containment does not apply to C callers. A
+1015-byte TX-only SPI request reproduced a device-wide firmware-dispatcher
+wedge. Until an operation-specific host limit exists, keep individual SPI
+payloads at or below 512 bytes; see <a href="../appendix/troubleshooting.html#buffertoolong-22">troubleshooting</a>.</p>
+</blockquote>
 <p><code>GALLO_NUM_GPIOS</code> bounds the valid pin indices, <code>0..GALLO_NUM_GPIOS</code>, which
-map to physical GPIO8–GPIO11 on the Pico 2 header. Anything at or above it
-yields <code>Status::GpioInvalidPin</code>. The same indices select the SPI chip select
-in <code>gallo_spi_batch</code>, so bound a chip select by this constant rather than a
-literal. Note the dedicated <code>SPI_CS</code> header pin (GPIO5) is not one of these
-and is not currently claimed by the firmware.</p>
+map to physical GPIO8-GPIO11 on the Pico 2 header. Anything at or above it
+yields <code>Status::GpioInvalidPin</code>. Note the dedicated <code>SPI_CS</code> header pin
+(GPIO5) is not one of these and is not currently claimed by the firmware.</p>
+<p>For the SPI chip select in <code>gallo_spi_batch</code>, prefer the <em>runtime</em> count
+from <code>gallo_num_gpios</code> over this compile-time constant — see below.
+<code>GALLO_NUM_GPIOS</code> is only this build’s default, and the library checks
+<code>cs_pin</code> against what the connected board actually reports.</p>
 <p>All three mirror constants in <code>pico-de-gallo-internal</code>, and a compile-time
 assertion in <code>pico-de-gallo-ffi</code> fails the build if they ever disagree.</p>
 <p>The header also names the integer values that the <code>gallo_*</code> entry points
@@ -302,11 +315,19 @@ Status gallo_version(const PicoDeGallo *gallo,
 
 Status gallo_get_device_info(const PicoDeGallo *gallo, GalloDeviceInfo *info);
 
+Status gallo_num_gpios(const PicoDeGallo *gallo, uint8_t *out_num_gpios);
+
 Status gallo_system_reset_subscriptions(const PicoDeGallo *gallo,
                                         uint8_t *out_reset);
 </code></pre>
 <p><code>gallo_get_device_info</code> returns firmware version, schema version, hardware
 revision, and a capability bitfield.</p>
+<p><code>gallo_num_gpios</code> returns the GPIO count the connected device reports —
+the runtime-authoritative bound for a pin index and for the SPI chip
+select. It performs one <code>device/info</code> round-trip on first use, bounded at
+300 seconds, and caches the value per handle; the round-trip also
+validates the firmware’s reported schema version. <code>*out_num_gpios</code> is
+written only on <code>Ok</code>, including a successful zero.</p>
 <p><code>gallo_system_reset_subscriptions</code> tears down any GPIO subscriptions
 left over from a previous host session and writes the reset count to
 <code>*out_reset</code> (which may be <code>NULL</code> if the caller does not need the
@@ -402,6 +423,48 @@ deasserts it after the last (or on error), providing atomic
 per-op failure, <code>*out_failed_op</code> (if non-NULL) receives the zero-based
 index. <code>BufferTooLong</code> means <code>out_buf</code> was too small; <code>*out_len</code> still
 receives the required capacity.</p>
+<h4 id="chip-select-preflight"><a class="header" href="#chip-select-preflight">Chip-select preflight</a></h4>
+<p><code>cs_pin</code> is validated against the device-reported GPIO count before any
+operation payload is translated and before anything is transmitted:</p>
+<pre><code class="language-c">uint8_t n = 0;
+Status s = gallo_num_gpios(gallo, &amp;n);   // writes n only on Ok
+</code></pre>
+<p><code>gallo_num_gpios</code> performs one <code>device/info</code> round-trip on first use —
+which also validates the firmware’s reported schema version — and caches
+the answer per handle. A device reporting zero is a success and writes
+zero; every error leaves your buffer untouched, so a sentinel written
+before the call is a reliable “was this populated?” check.</p>
+<p><code>gallo_spi_batch</code> returns:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Status</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>SpiInvalidCsPin</code> (−71)</td><td><code>cs_pin</code> is at or beyond the reported count</td></tr>
+<tr><td><code>SpiNoGpios</code> (−74)</td><td>the device reports zero GPIOs</td></tr>
+<tr><td><code>DeviceInfoFailed</code> (−62)</td><td>the count could not be read (transport/decode)</td></tr>
+<tr><td><code>DeviceInfoTimeout</code> (−75)</td><td><code>device/info</code> did not answer within 300 seconds</td></tr>
+<tr><td><code>LegacyFirmware</code> (−64)</td><td>the firmware has no <code>device/info</code> endpoint</td></tr>
+<tr><td><code>SchemaMismatch</code> (−63)</td><td>host and firmware disagree on the wire version</td></tr>
+</tbody>
+</table>
+</div>
+<p>The last four mean the host could not establish the valid range at all;
+they are never reported as an invalid chip-select. A refused chip-select
+drives no pin, sends nothing, leaves <code>*out_len</code> at zero, and never writes
+<code>*out_failed_op</code> — only a firmware-side per-operation failure does that.</p>
+<p>Ordering inside <code>gallo_spi_batch</code> is fixed: validate <code>gallo</code>, validate
+<code>out_len</code>, validate the top-level <code>ops</code>/<code>ops_count</code>/<code>out_capacity</code> shape,
+write <code>*out_len = 0</code>, resolve the GPIO count, classify <code>cs_pin</code>, translate
+the operation payloads, call the library once, then write outputs. A NULL
+<code>out_len</code> is therefore never dereferenced, and an invalid op <code>tag</code> or NULL
+<code>data</code> pointer is reported only after the device has been reached.</p>
+<blockquote>
+<p><strong>Schema-freeze caveat.</strong> On this branch a matching reported schema
+version does not prove wire-<em>shape</em> compatibility: <code>DeviceInfo</code> changed
+while both host and firmware still report 0.6.1.</p>
+</blockquote>
 <h3 id="gpio"><a class="header" href="#gpio">GPIO</a></h3>
 <pre><code class="language-c">Status gallo_gpio_get(const PicoDeGallo *gallo, uint8_t pin, bool *state);
 Status gallo_gpio_put(const PicoDeGallo *gallo, uint8_t pin, bool state);

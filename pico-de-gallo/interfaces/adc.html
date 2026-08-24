@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-988a4873.js";
+            window.path_to_searchindex_js = "../searchindex-28b25b14.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -256,6 +256,7 @@ millivolts with:</p>
 </span>enum AdcError {
     ConversionFailed,
     Other,
+    Unsupported,
 }
 <span class="boring">}</span></code></pre>
 <h2 id="cli"><a class="header" href="#cli">CLI</a></h2>
@@ -306,6 +307,7 @@ fn main() {
 <ul>
 <li><strong><code>ConversionFailed</code></strong> — the ADC hardware reported a conversion error.</li>
 <li><strong><code>Other</code></strong> — an unspecified ADC error.</li>
+<li><strong><code>Unsupported</code></strong> — ADC is not available on this hardware revision.</li>
 </ul>
 <pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {

@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-988a4873.js";
+            window.path_to_searchindex_js = "../searchindex-28b25b14.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -236,7 +236,34 @@ pg = gallo.open()
 print(pg.ping(123))
 print(pg.version().major, pg.version().minor, pg.version().patch)
 print(pg.device_info().hw_version)
+print(pg.device_info().num_gpios)
 </code></pre>
+<h2 id="gpio-count-and-the-spi-chip-select"><a class="header" href="#gpio-count-and-the-spi-chip-select">GPIO count and the SPI chip select</a></h2>
+<p><code>DeviceInfo.num_gpios</code> and <code>PycoDeGallo.num_gpios()</code> both report the GPIO
+count the connected board advertises. That is the runtime-authoritative
+bound for a pin index and for <code>spi_batch</code>’s <code>cs_pin</code>; do not hardcode 4.</p>
+<pre><code class="language-python">n = pg.num_gpios()          # one implicit device/info round-trip, then cached
+data = pg.spi_batch(0, ops) # cs_pin checked against n before anything is sent
+</code></pre>
+<p><code>spi_batch</code> resolves the count and classifies <code>cs_pin</code> before it converts
+the operation objects, so a refused chip-select costs nothing and drives
+no pin. All failures raise <code>RuntimeError</code>, with disjoint messages:</p>
+<pre><code class="language-text">invalid SPI chip-select pin 7; device reports 4 GPIOs (valid 0..4)
+device reports num_gpios=0; no SPI chip-select pin is available
+failed to determine num_gpios: device/info did not respond within 300 seconds ...
+</code></pre>
+<p>Messages beginning <code>failed to determine num_gpios</code> mean the host could
+not establish the valid range at all — transport failure, the 300-second
+<code>device/info</code> timeout, legacy firmware, or a schema mismatch. They are
+never phrased as a chip-select complaint. A failed lookup is not cached,
+so retrying is allowed.</p>
+<p>A <code>cs_pin</code> outside <code>0..=255</code> raises <code>OverflowError</code> during PyO3 argument
+extraction, before the device is contacted.</p>
+<blockquote>
+<p><strong>Schema-freeze caveat.</strong> On this branch a successful <code>validate()</code> or
+<code>open_strict()</code> does not prove wire-<em>shape</em> compatibility: <code>DeviceInfo</code>
+changed while both host and firmware still report schema 0.6.1.</p>
+</blockquote>
 <h2 id="enums-and-value-types"><a class="header" href="#enums-and-value-types">Enums and Value Types</a></h2>
 <p>The public Python names intentionally do <strong>not</strong> carry a <code>Py</code> prefix. You use
 plain Python-facing names like:</p>
@@ -267,6 +294,13 @@ pg.spi_set_config(
 )
 </code></pre>
 <h2 id="example-i2c-register-read"><a class="header" href="#example-i2c-register-read">Example: I<sup>2</sup>C Register Read</a></h2>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>Python SPI calls are not protected by the Zephyr driver’s 1013-byte
+containment. A 1015-byte TX-only request reproduced a device-wide firmware
+wedge. Keep individual SPI payloads at or below 512 bytes; see
+<a href="../appendix/troubleshooting.html#buffertoolong-22">troubleshooting</a>.</p>
+</blockquote>
 <pre><code class="language-python">import pyco_de_gallo as gallo
 
 pg = gallo.open()

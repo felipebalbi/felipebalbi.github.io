@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-988a4873.js";
+            window.path_to_searchindex_js = "../searchindex-28b25b14.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -302,6 +302,20 @@ against different wire schemas, <code>validate()</code> fails instead of letting
 mysterious decoding problems later.</p>
 <p><code>validate()</code> returns the <code>DeviceInfo</code> on success, so you can immediately inspect
 firmware version, hardware revision, and capability bits.</p>
+<p>The <code>device/info</code> round-trip is bounded at <strong>300 seconds</strong>. On expiry
+<code>validate()</code> returns <code>ValidateError::Timeout</code>, which is deliberately
+distinct from <code>ValidateError::Comms</code>: nothing failed at the transport
+layer, the request is simply still outstanding, so there is no transport
+error to carry. The bound is generous because firmware dispatch is serial
+and a legal maximum-length SPI batch can occupy it for about 275 seconds;
+the point is that the wait is finite, not that it is short.</p>
+<blockquote>
+<p><strong>Schema-freeze caveat.</strong> On this branch a successful <code>validate()</code> does
+not prove wire-<em>shape</em> compatibility: <code>DeviceInfo</code> changed while both
+host and firmware still report schema 0.6.1. Validation bounds how long
+you wait and checks the reported numbers; it cannot make those numbers
+trustworthy.</p>
+</blockquote>
 <pre class="playground"><code class="language-rust no_run">use pico_de_gallo_lib::PicoDeGallo;
 
 #[tokio::main]
@@ -330,6 +344,39 @@ async fn main() {
 <li><code>ValidateError::SchemaMismatch</code> — host and firmware do not agree on the wire
 schema.</li>
 </ul>
+<h2 id="num_gpios-and-the-spi-chip-select-bound"><a class="header" href="#num_gpios-and-the-spi-chip-select-bound"><code>num_gpios()</code> and the SPI Chip-Select Bound</a></h2>
+<p><code>num_gpios().await</code> returns the GPIO count the connected device reports.
+That is the runtime-authoritative bound for a chip-select index; prefer it
+over the compile-time <code>NUM_GPIOS</code>, which is only this build’s default.</p>
+<p>The value is resolved lazily. A cache miss performs one implicit
+<code>validate()</code> — so the same 300-second bound and the same schema check
+apply — and stores the result. Handles cloned from the same connection
+share that cache, so a warm lookup costs no USB traffic. A failed lookup
+is not cached, so the next call retries. A reported count of zero is a
+legitimate, cacheable answer rather than a miss.</p>
+<p><code>spi_batch(cs_pin, ops)</code> uses that bound to refuse a bad chip-select
+<em>before</em> it encodes anything or transmits an <code>spi/batch</code> request, and
+returns <code>SpiBatchCallError</code>:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Variant</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>DeviceInfo(ValidateError)</code></td><td>The count could not be established — transport, 300-second timeout, legacy firmware, or schema mismatch. <strong>Never</strong> a chip-select complaint.</td></tr>
+<tr><td><code>NoGpios</code></td><td>The device reports zero GPIOs. Distinct from an out-of-range index.</td></tr>
+<tr><td><code>InvalidCsPin { cs, num_gpios }</code></td><td><code>cs</code> is at or beyond the reported count. Carries the caller’s index verbatim.</td></tr>
+<tr><td><code>Comms(HostErr)</code></td><td>The <code>spi/batch</code> request itself failed at the transport layer.</td></tr>
+<tr><td><code>Endpoint(SpiBatchError)</code></td><td>The firmware executed the batch and refused or failed an operation, with <code>failed_op</code>.</td></tr>
+</tbody>
+</table>
+</div>
+<p>A local refusal transmits nothing, drives no pin, and never fabricates a
+<code>failed_op</code> index. A cached count belongs to the handle that learned it:
+if the board is unplugged, that handle keeps the byte and a
+plausible-looking request will reach the batch RPC and fail with <code>Comms</code>.
+The client never rebinds itself to a different board, and a freshly
+constructed handle starts cold.</p>
 <h2 id="gpio-topic-subscriptions"><a class="header" href="#gpio-topic-subscriptions">GPIO Topic Subscriptions</a></h2>
 <p>GPIO edge events are push-based topics, not request/response endpoints.</p>
 <p>The flow is:</p>
@@ -380,7 +427,7 @@ host already has a buffer waiting when the first edge arrives.</p>
 <tr><td><code>spi_write</code></td><td><code>contents</code></td><td>Write bytes to the SPI bus</td></tr>
 <tr><td><code>spi_transfer</code></td><td><code>contents</code></td><td>Full-duplex SPI transfer</td></tr>
 <tr><td><code>spi_flush</code></td><td>—</td><td>Flush pending SPI traffic</td></tr>
-<tr><td><code>spi_batch</code></td><td><code>cs_pin</code>, <code>ops</code></td><td>Execute atomic multi-step SPI traffic under chip-select</td></tr>
+<tr><td><code>spi_batch</code></td><td><code>cs_pin</code>, <code>ops</code></td><td>Execute atomic multi-step SPI traffic under chip-select (see below)</td></tr>
 <tr><td><code>spi_set_config</code></td><td><code>spi_frequency</code>, <code>spi_phase</code>, <code>spi_polarity</code></td><td>Set SPI timing and mode</td></tr>
 <tr><td><code>spi_get_config</code></td><td>—</td><td>Read back the active SPI configuration</td></tr>
 <tr><td><code>uart_read</code></td><td><code>count</code>, <code>timeout_ms</code></td><td>Read up to <code>count</code> bytes with timeout</td></tr>
@@ -399,8 +446,9 @@ host already has a buffer waiting when the first edge arrives.</p>
 <tr><td><code>gpio_subscribe</code></td><td><code>pin</code>, <code>edge</code></td><td>Ask firmware to monitor a pin for edge events</td></tr>
 <tr><td><code>gpio_unsubscribe</code></td><td><code>pin</code></td><td>Stop firmware-side monitoring</td></tr>
 <tr><td><code>version</code></td><td>—</td><td>Read the firmware version</td></tr>
-<tr><td><code>device_info</code></td><td>—</td><td>Read firmware version, schema version, HW revision, and capabilities</td></tr>
+<tr><td><code>device_info</code></td><td>—</td><td>Read firmware version, schema version, HW revision, capabilities, and runtime GPIO count</td></tr>
 <tr><td><code>validate</code></td><td>—</td><td>Perform a strict schema compatibility check and return <code>DeviceInfo</code></td></tr>
+<tr><td><code>num_gpios</code></td><td>—</td><td>Read the device-reported GPIO count; validates lazily on the first call, then caches</td></tr>
 <tr><td><code>pwm_set_duty_cycle</code></td><td><code>channel</code>, <code>duty</code></td><td>Set a raw PWM duty-cycle value</td></tr>
 <tr><td><code>pwm_get_duty_cycle</code></td><td><code>channel</code></td><td>Read current and maximum PWM duty</td></tr>
 <tr><td><code>pwm_enable</code></td><td><code>channel</code></td><td>Enable the PWM slice behind a channel</td></tr>
@@ -418,6 +466,13 @@ host already has a buffer waiting when the first edge arrives.</p>
 </tbody>
 </table>
 </div>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>The Rust library is not protected by the Zephyr driver’s 1013-byte
+containment. A 1015-byte TX-only SPI request reproduced a device-wide
+firmware-dispatcher wedge. Keep individual SPI payloads at or below 512 bytes;
+see <a href="../appendix/troubleshooting.html#buffertoolong-22">troubleshooting</a>.</p>
+</blockquote>
 <p>For the full API surface, field docs, and current signatures, use the crate
 reference on <a href="https://docs.rs/pico-de-gallo-lib">docs.rs</a>.</p>
 

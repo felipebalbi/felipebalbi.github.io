@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-988a4873.js";
+            window.path_to_searchindex_js = "../searchindex-28b25b14.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -197,8 +197,8 @@ second interface exists only for WebUSB descriptors.</li>
 <code>system_profiler SPUSBDataType</code> (macOS) for VID <code>045E</code> and
 PID <code>067D</code>.</li>
 </ol>
-<h3 id="gallo-ping-fails-with-a-comms-error"><a class="header" href="#gallo-ping-fails-with-a-comms-error"><code>gallo ping</code> fails with a comms error</a></h3>
-<p>A successful <code>gallo list</code> followed by a failing <code>gallo ping</code>
+<h3 id="gallo-version-fails-with-a-comms-error"><a class="header" href="#gallo-version-fails-with-a-comms-error"><code>gallo version</code> fails with a comms error</a></h3>
+<p>A successful <code>gallo list</code> followed by a failing <code>gallo version</code>
 usually means another process has the device open — typically a
 previous <code>gallo</code> instance that didn’’t exit cleanly, or a Python
 script holding a <code>PycoDeGallo</code>. Close it.</p>
@@ -206,15 +206,36 @@ script holding a <code>PycoDeGallo</code>. Close it.</p>
 <p>The host library was built against a different
 <code>SCHEMA_VERSION_MINOR</code> than the running firmware. Re-flash the
 matching firmware release, or upgrade/downgrade the host crates
-to match. See <a href="../internals/releases.html">Releases &amp; Compatibility</a>.</p>
+to match. See <a href="../internals/releases.html">Releases &amp; Compatibility</a>.
+On the <code>zephyr</code> branch, matching schema 0.6.1 does not prove wire-shape
+compatibility; see the schema-freeze warning on that page.</p>
 <h3 id="legacyfirmware-status-code-64"><a class="header" href="#legacyfirmware-status-code-64"><code>LegacyFirmware</code> (status code −64)</a></h3>
 <p>The firmware is too old to answer <code>device/info</code>. Re-flash a
 recent firmware build.</p>
 <h2 id="peripheral-errors"><a class="header" href="#peripheral-errors">Peripheral Errors</a></h2>
 <h3 id="unsupported-status-code-65"><a class="header" href="#unsupported-status-code-65"><code>Unsupported</code> (status code −65)</a></h3>
 <p>The peripheral exists in the protocol but isn’’t wired on this
-hardware revision. Check the capability bitfield from
-<code>gallo info</code>. See <a href="../hardware/revisions.html">Revisions</a>.</p>
+hardware revision. Confirm discovery with <code>gallo list</code> and firmware
+communication with <code>gallo version</code>, then see
+<a href="../hardware/revisions.html">Revisions</a>.</p>
+<h3 id="gpiotimeout-status-code-70"><a class="header" href="#gpiotimeout-status-code-70"><code>GpioTimeout</code> (status code −70)</a></h3>
+<p>A bounded GPIO wait expired before the requested level or edge arrived.
+Check the wiring and increase the timeout only if the expected event is slow.</p>
+<h3 id="spiinvalidcspin-status-code-71"><a class="header" href="#spiinvalidcspin-status-code-71"><code>SpiInvalidCsPin</code> (status code −71)</a></h3>
+<p>The chip-select index is outside <code>0..num_gpios</code>. Query the connected device’s
+runtime GPIO count and choose an index below it.</p>
+<h3 id="spicspinunavailable-status-code-72"><a class="header" href="#spicspinunavailable-status-code-72"><code>SpiCsPinUnavailable</code> (status code −72)</a></h3>
+<p>The selected chip-select pin is explicitly configured as an input. Configure
+it as an output, or select another user GPIO.</p>
+<h3 id="spicspinmonitored-status-code-73"><a class="header" href="#spicspinmonitored-status-code-73"><code>SpiCsPinMonitored</code> (status code −73)</a></h3>
+<p>The selected chip-select pin has an active GPIO event subscription. Unsubscribe
+it before using the pin as chip-select.</p>
+<h3 id="spinogpios-status-code-74"><a class="header" href="#spinogpios-status-code-74"><code>SpiNoGpios</code> (status code −74)</a></h3>
+<p>The device reports zero user GPIOs, so no firmware-managed SPI chip-select is
+available. Use a device or firmware build that exposes user GPIOs.</p>
+<h3 id="deviceinfotimeout-status-code-75"><a class="header" href="#deviceinfotimeout-status-code-75"><code>DeviceInfoTimeout</code> (status code −75)</a></h3>
+<p>The <code>device/info</code> query did not complete within 300 seconds. Check the USB
+connection and peer compatibility before retrying.</p>
 <h3 id="i²c-nack-18"><a class="header" href="#i²c-nack-18">I²C <code>Nack</code> (−18)</a></h3>
 <p>The target didn’’t acknowledge. Common causes:</p>
 <ul>
@@ -228,9 +249,31 @@ at 3.3 V on the bus pads).</li>
 <p>Usually a wiring issue (long stub leads, no pull-ups, multi-master
 collisions). Try a slower clock with <code>gallo i2c set-config --frequency standard</code>.</p>
 <h3 id="buffertoolong-22"><a class="header" href="#buffertoolong-22"><code>BufferTooLong</code> (−22)</a></h3>
-<p>The firmware caps a single transfer at 4096 bytes. Split larger
-transfers, or use batch operations to keep them in one USB
-round-trip even when broken into smaller chunks.</p>
+<p>Two different limits are involved here, and conflating them is a common
+source of confusion:</p>
+<ul>
+<li><strong>The protocol constant, 4096 bytes</strong> (<code>MAX_TRANSFER_SIZE</code>). This is the
+firmware’s per-packet <strong>buffer budget</strong>, not a usable payload size — the
+same buffer must also hold the postcard-rpc header, the length varint and
+the COBS framing, and it covers the request frame <em>and</em> the response
+frame.</li>
+<li><strong>The usable payload, which is smaller and shape-dependent.</strong> In measured SPI
+tests, 4096-byte TX-only and 3072-byte full-duplex requests passed their local
+checks, reached the transport, and failed <code>-ECOMM</code>.</li>
+</ul>
+<p>Split larger transfers. Batch operations still occupy one framed request and
+response; batching does not make an otherwise undeliverable aggregate fit.</p>
+<p>The Zephyr SPI driver rejects clocked lengths above 1013 bytes. That is
+containment, not a duplex-capacity guarantee: TX-only 1013 succeeded, TX-only
+1015 wedges the dispatcher, and 1014 was not tested. Full duplex succeeded at
+512, failed at 3072, and was not tested from 513 through 1013. Applications
+needing a documented-safe duplex size must use 512 bytes or less. Do not infer
+1013-byte duplex support from <code>PDG_SPI_MAX_BUFFER</code>.</p>
+<p>The Zephyr limit does not protect CLI, Rust, C, Python, or MCP callers. In the
+reproduced SPI tests the device resumed after USB re-enumeration (<code>usbipd detach</code>/attach on Windows/WSL). This is an observation, not proof that detach
+cancels the handler. On Linux/macOS reconnect the cable or use USB
+unbind/rebind; power-cycle if unavailable or ineffective.
+<code>system/reset-subscriptions</code> cannot run while dispatch is blocked.</p>
 <h3 id="gpio-wrongdirection-28"><a class="header" href="#gpio-wrongdirection-28">GPIO <code>WrongDirection</code> (−28)</a></h3>
 <p>You read from a pin configured as output (or vice versa). Call
 <code>gpio_set_config</code> first with the matching direction.</p>

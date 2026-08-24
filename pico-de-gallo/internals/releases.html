@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-988a4873.js";
+            window.path_to_searchindex_js = "../searchindex-28b25b14.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -192,6 +192,7 @@ understanding which pieces move together.</p>
 <tr><td><code>pico-de-gallo-hal</code></td><td><code>hal-v*</code></td></tr>
 <tr><td><code>pico-de-gallo-ffi</code></td><td><code>ffi-v*</code></td></tr>
 <tr><td><code>gallo</code> CLI</td><td><code>application-v*</code></td></tr>
+<tr><td><code>gallo-mcp</code></td><td><code>mcp-v*</code></td></tr>
 <tr><td><code>pyco-de-gallo</code></td><td><code>pyco-v*</code></td></tr>
 <tr><td><code>pico-de-gallo-firmware</code></td><td><code>firmware-v*</code></td></tr>
 <tr><td>hardware artifacts</td><td><code>hardware-v*</code></td></tr>
@@ -225,6 +226,7 @@ release cycle.</p>
 <li><code>pico-de-gallo-hal</code>,</li>
 <li><code>pico-de-gallo-ffi</code>,</li>
 <li><code>pico-de-gallo-app</code>,</li>
+<li><code>pico-de-gallo-mcp</code>,</li>
 <li><code>pyco-de-gallo</code>.</li>
 </ul>
 <blockquote class="blockquote-tag blockquote-tag-important">
@@ -232,6 +234,16 @@ release cycle.</p>
 <p>Nothing enforces wire coupling for you. If a protocol change lands without its
 matching host and firmware version bumps, users will feel it.</p>
 </blockquote>
+<h3 id="pending-spi-chip-select-schema-change"><a class="header" href="#pending-spi-chip-select-schema-change">Pending SPI chip-select schema change</a></h3>
+<p>This branch appends <code>SpiError::{InvalidCsPin, CsPinUnavailable, CsPinMonitored}</code> and adds the final <code>DeviceInfo::num_gpios</code> field. Versions
+are intentionally unchanged because the maintainer performs the lockstep bump
+in a separate release commit. This branch must not be tagged or released until
+that bump lands.</p>
+<p><code>PicoDeGallo::validate()</code> cannot detect this mismatch: matching schema 0.6.1
+is not evidence of wire-shape compatibility on this branch. Do not mix
+branch-built and released components. Build the host and firmware from the
+same commit, or keep both on a published release. See the detailed
+<a href="./wire-protocol.html#schema-versioning">schema-freeze warning</a>.</p>
 <h2 id="how-users-check-compatibility"><a class="header" href="#how-users-check-compatibility">How users check compatibility</a></h2>
 <p>There are two main compatibility checks:</p>
 <ul>
@@ -242,6 +254,11 @@ and capabilities.</li>
 </ul>
 <p>For most users, <code>gallo version</code> is the first stop. For library users,
 <code>validate()</code> is the guardrail you call before doing real work.</p>
+<blockquote>
+<p><strong>Warning.</strong> During the schema freeze described above, successful validation
+does not prove wire-shape compatibility. Matching reported versions can still
+identify incompatible branch-built and released components.</p>
+</blockquote>
 <h2 id="i-flashed-new-firmware-and-now-my-host-is-broken"><a class="header" href="#i-flashed-new-firmware-and-now-my-host-is-broken">“I flashed new firmware and now my host is broken”</a></h2>
 <p>That usually means the firmware and host were built against different versions
 of <code>pico-de-gallo-internal</code>.</p>
@@ -253,10 +270,11 @@ of <code>pico-de-gallo-internal</code>.</p>
 </ul>
 <p>The fix is simple: upgrade the matching host component for the firmware you
 flashed, or downgrade the firmware to the host release you are using.</p>
-<blockquote class="blockquote-tag blockquote-tag-caution">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M4.47.22A.749.749 0 0 1 5 0h6c.199 0 .389.079.53.22l4.25 4.25c.141.14.22.331.22.53v6a.749.749 0 0 1-.22.53l-4.25 4.25A.749.749 0 0 1 11 16H5a.749.749 0 0 1-.53-.22L.22 11.53A.749.749 0 0 1 0 11V5c0-.199.079-.389.22-.53Zm.84 1.28L1.5 5.31v5.38l3.81 3.81h5.38l3.81-3.81V5.31L10.69 1.5ZM8 4a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 4Zm0 8a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Caution</p>
-<p>The protocol is typed, not best-effort. A mismatched pair is expected to fail
-fast instead of guessing.</p>
+<blockquote>
+<p><strong>Warning.</strong> The protocol is typed, but a mismatched pair is not guaranteed to
+fail fast. Because postcard-rpc response keys include the response schema, a
+mismatched peer may wait indefinitely. See the
+<a href="./wire-protocol.html#schema-versioning">wire-protocol warning</a>.</p>
 </blockquote>
 <h2 id="msrv-and-release-hygiene"><a class="header" href="#msrv-and-release-hygiene">MSRV and release hygiene</a></h2>
 <p>The workspace tracks Rust 1.90 as its MSRV, and CI checks it explicitly. That

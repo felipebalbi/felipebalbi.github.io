@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-988a4873.js";
+            window.path_to_searchindex_js = "../searchindex-28b25b14.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -179,8 +179,12 @@
                         <h1 id="status-code-reference"><a class="header" href="#status-code-reference">Status Code Reference</a></h1>
 <p>Every <code>gallo_*</code> FFI function (except the lifecycle calls
 <code>gallo_init</code>, <code>gallo_init_with_serial_number</code>, and <code>gallo_free</code>)
-returns a <code>Status</code> value. <code>Status</code> is a C enum backed by
-<code>int32_t</code>.</p>
+returns a <code>Status</code> value. For C11/C17, cbindgen emits
+<code>typedef int32_t Status</code> together with integer constants, rather than making
+<code>Status</code> a true C <code>enum</code> type. To catch appended statuses at compile time,
+cast the scrutinee (<code>switch ((enum Status)x)</code>), omit any <code>default:</code> label
+inside the switch, and build with <code>-Werror=switch</code>. A post-switch fallback
+for an unknown numeric value is intentional and correct.</p>
 <ul>
 <li><strong><code>Ok</code> (0)</strong> — success.</li>
 <li><strong>Negative values</strong> — errors, grouped roughly by peripheral.</li>
@@ -273,9 +277,22 @@ that doesn’t appear in your header means success.</p>
 <tr><td><code>SpiBatchFailed</code></td><td style="text-align: right">−67</td><td>SPI batch transaction failed</td></tr>
 <tr><td><code>SpiTransferFailed</code></td><td style="text-align: right">−68</td><td>SPI full-duplex transfer failed</td></tr>
 <tr><td><code>SystemResetSubscriptionsFailed</code></td><td style="text-align: right">−69</td><td><code>system/reset-subscriptions</code> call failed</td></tr>
+<tr><td><code>GpioTimeout</code></td><td style="text-align: right">−70</td><td>GPIO wait timed out</td></tr>
+<tr><td><code>SpiInvalidCsPin</code></td><td style="text-align: right">−71</td><td>SPI chip-select index is outside the reported GPIO range</td></tr>
+<tr><td><code>SpiCsPinUnavailable</code></td><td style="text-align: right">−72</td><td>SPI chip-select pin is configured as an input</td></tr>
+<tr><td><code>SpiCsPinMonitored</code></td><td style="text-align: right">−73</td><td>SPI chip-select pin is monitored for GPIO events</td></tr>
+<tr><td><code>SpiNoGpios</code></td><td style="text-align: right">−74</td><td>Device reports zero GPIOs, so no chip-select pin exists</td></tr>
+<tr><td><code>DeviceInfoTimeout</code></td><td style="text-align: right">−75</td><td><code>device/info</code> did not respond within 300 seconds</td></tr>
 </tbody>
 </table>
 </div>
+<p><code>SpiInvalidCsPin</code> (−71) and <code>SpiNoGpios</code> (−74) are host-side refusals: the
+chip-select was rejected before anything was transmitted, and no pin was
+driven. <code>DeviceInfoFailed</code> (−62), <code>SchemaMismatch</code> (−63),
+<code>LegacyFirmware</code> (−64) and <code>DeviceInfoTimeout</code> (−75) mean the host could
+not establish the device-reported GPIO count at all. Those four are never
+reported as a chip-select error: a failure to learn the valid range is not
+a complaint about the caller’s pin.</p>
 <h2 id="source-of-truth"><a class="header" href="#source-of-truth">Source of Truth</a></h2>
 <p>The enum lives in
 <a href="https://github.com/OpenDevicePartnership/pico-de-gallo/blob/main/crates/pico-de-gallo-ffi/src/lib.rs"><code>crates/pico-de-gallo-ffi/src/lib.rs</code></a>

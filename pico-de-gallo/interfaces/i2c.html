@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-988a4873.js";
+            window.path_to_searchindex_js = "../searchindex-28b25b14.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -213,17 +213,23 @@ supply your own.</p>
 </div>
 <p>The firmware defaults to Standard mode.</p>
 <h2 id="cli"><a class="header" href="#cli">CLI</a></h2>
-<pre><code class="language-console">$ gallo i2c help
+<pre><code class="language-console">$ gallo i2c --help
 I2C access methods
+
+Usage: gallo i2c &lt;COMMAND&gt;
 
 Commands:
   scan        Scan I2C bus for existing devices
   read        Read bytes through the I2C bus from device at given address
   write       Write bytes through I2C bus to device at given address
-  write-read  Write bytes followed by read bytes
-  set-config  Set I2C bus configuration (frequency)
-  get-config  Get current I2C bus configuration
-  batch       Execute multiple I2C operations in a single transfer
+  write-read  Write bytes follwed by read bytes
+  set-config  Set I2C bus parameters
+  get-config  Query the current I2C bus configuration
+  batch       Execute multiple I2C operations in a single USB transfer
+  help        Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help  Print help
 </code></pre>
 <h3 id="scanning"><a class="header" href="#scanning">Scanning</a></h3>
 <blockquote class="blockquote-tag blockquote-tag-warning">
@@ -352,14 +358,13 @@ side; FFI returns negative <code>Status</code> values:</p>
 <tr><th>Variant</th><th>Meaning</th></tr>
 </thead>
 <tbody>
-<tr><td><code>Nack</code></td><td>Target did not acknowledge</td></tr>
-<tr><td><code>BusError</code></td><td>I²C bus protocol error</td></tr>
+<tr><td><code>Bus</code></td><td>Unexpected condition on the I²C bus</td></tr>
+<tr><td><code>NoAcknowledge</code></td><td>Target did not acknowledge</td></tr>
 <tr><td><code>ArbitrationLoss</code></td><td>Lost arbitration to another master</td></tr>
 <tr><td><code>Overrun</code></td><td>Data overrun on read</td></tr>
 <tr><td><code>BufferTooLong</code></td><td>Request exceeds firmware buffer limit</td></tr>
 <tr><td><code>AddressOutOfRange</code></td><td>Address outside the 7-bit range</td></tr>
-<tr><td><code>Unsupported</code></td><td>Returned by firmware builds without I²C</td></tr>
-<tr><td><code>Other</code></td><td>Catch-all</td></tr>
+<tr><td><code>Other</code></td><td>Unspecified firmware error</td></tr>
 </tbody>
 </table>
 </div>

@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-988a4873.js";
+            window.path_to_searchindex_js = "../searchindex-28b25b14.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -188,16 +188,20 @@ DMA-backed full-duplex mode.</p>
 <tr><td>SCK</td><td>GPIO 6</td><td>v1.0+</td></tr>
 <tr><td>MOSI (TX)</td><td>GPIO 7</td><td>v1.0+</td></tr>
 <tr><td>MISO (RX)</td><td>GPIO 4</td><td>v1.0+</td></tr>
-<tr><td>CS</td><td>GPIO 5</td><td>v1.1+</td></tr>
+<tr><td>SPI_CS net</td><td>GPIO 5</td><td>v1.1+</td></tr>
 </tbody>
 </table>
 </div>
-<blockquote class="blockquote-tag blockquote-tag-note">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p>On v1.0 the dedicated CS line isn’t routed to any header. You
-can still drive chip-select from any of the user GPIO pins
-(0–3) via the <code>spi_device(cs_pin)</code> HAL accessor or by toggling
-a GPIO manually around the SPI ops.</p>
+<blockquote>
+<p><strong>Note for non-Zephyr host APIs.</strong> GPIO 5 is physically routed as SPI_CS on v1.1, but firmware
+never claims or drives it on either revision. The only firmware-managed
+chip-select mechanism uses user GPIO indices in <code>0..num_gpios</code>, where
+<code>num_gpios</code> is device-reported and currently 4. Those indices map to
+RP2350 GPIO 8–11 and work with <code>spi/batch</code>, the fallible
+<code>spi_device(cs_pin)</code> HAL accessor, and equivalent host surfaces. Manually
+toggling a GPIO around separate SPI operations is also possible, but it
+does not hold chip-select atomically across the sequence as <code>spi/batch</code>
+does.</p>
 </blockquote>
 <h2 id="operations"><a class="header" href="#operations">Operations</a></h2>
 <div class="table-wrapper">
@@ -234,7 +238,7 @@ a GPIO manually around the SPI ops.</p>
 </div>
 <p>The firmware defaults to mode 0.</p>
 <h2 id="cli"><a class="header" href="#cli">CLI</a></h2>
-<pre><code class="language-console">$ gallo spi help
+<pre><code class="language-console">$ gallo spi --help
 SPI access methods
 
 Usage: gallo spi &lt;COMMAND&gt;
@@ -289,14 +293,134 @@ rather than silently masked:</p>
 $ gallo spi set-config --frequency 1000000 --mode 4
 error: invalid value '4' for '--mode &lt;MODE&gt;': 4 is not in 0..=3
 </code></pre>
+<p><code>--first-transition</code> and <code>--idle-low</code> are presence-only boolean flags; neither
+takes a value, and each defaults to <code>false</code> when omitted.</p>
 <h3 id="batch-atomic-under-cs"><a class="header" href="#batch-atomic-under-cs">Batch (Atomic Under CS)</a></h3>
 <p>A single transaction with chip-select held low for the duration:</p>
 <pre><code class="language-console">$ gallo spi batch --cs 0 --op write:0x9f --op read:3
 Read data (3 bytes):
   0000: ef 40 18                                           .@.
 </code></pre>
-<p>The <code>--cs</code> flag picks which user GPIO (0–3) drives chip-select.
-See <a href="./batching.html">Transaction Batching</a>.</p>
+<p>The <code>--cs</code> flag picks which user GPIO drives chip-select. Firmware validates
+the encoded operations first, then requires the index to be inside
+<code>0..DeviceInfo::num_gpios</code>, not monitored for GPIO events, and not explicitly
+configured as an input. These refusals occur before chip-select is driven:
+an invalid index does not touch any pin, and the other refusals leave the
+selected pin’s direction, level, and pull unchanged.</p>
+<p>For an accepted transaction, firmware configures the pin as an output, drives
+it high, asserts it low for the batch, and deasserts it high after execution
+even when an SPI operation fails. The prior direction and level are <strong>not</strong>
+restored, but a pull configured through <code>gpio/set-config</code> is preserved.
+Firmware predating this contract may instead reconfigure an explicit input
+pin. See <a href="./batching.html">Transaction Batching</a>.</p>
+<h3 id="zephyr-chip-select-standard-cs-gpios"><a class="header" href="#zephyr-chip-select-standard-cs-gpios">Zephyr chip select: standard <code>cs-gpios</code></a></h3>
+<p>The Zephyr SPI controller driver does <strong>not</strong> use the batch endpoint. It uses
+<code>spi/transfer</code> and drives every chip-select edge through the
+<code>odp,pico-de-gallo-gpio</code> child, using ordinary Zephyr <code>cs-gpios</code>. A child
+node’s <code>reg</code> therefore has its standard Zephyr meaning: an index into the
+controller’s <code>cs-gpios</code> array.</p>
+<pre><code class="language-dts">#include &lt;zephyr/dt-bindings/gpio/gpio.h&gt;
+
+&amp;pdg0 {
+	status = "okay";
+	serial-number = "REPLACE_WITH_YOUR_PICO_DE_GALLO_SERIAL";
+};
+
+&amp;pdg_gpio0 {
+	status = "okay";
+};
+
+&amp;pdg_spi0 {
+	status = "okay";
+	cs-gpios = &lt;&amp;pdg_gpio0 0 GPIO_ACTIVE_LOW&gt;;
+};
+</code></pre>
+<p>The SPI controller is a direct child of the <code>pdg0</code> multi-function-device
+parent: <code>pdg0</code> owns the board selection and the USB connection, and the SPI
+controller borrows that connection rather than opening its own.</p>
+<p><code>cs-gpios</code> is <strong>required</strong> on every enabled controller; there is no native-CS
+fallback and a missing property fails devicetree processing. Every entry must
+target an enabled <code>odp,pico-de-gallo-gpio</code> controller under the <em>same</em>
+<code>odp,pico-de-gallo</code> parent. A foreign GPIO controller, a disabled sibling, and
+a Pico de Gallo GPIO controller belonging to a <em>different</em> parent are each
+rejected at build time with an assertion naming the <code>cs-gpios</code> array index. The
+cross-parent case is the important one: it is a real, enabled Pico de Gallo
+GPIO port on a <em>different physical board</em>, so chip select would be driven on
+one board while data was clocked on another. Because chip select actuates a
+pin, the parent of an enabled controller must also declare <code>serial-number</code>.</p>
+<p>The pin cell is a firmware user GPIO index in the same namespace this page
+describes — 0–3 on current firmware, not an RP2350 GPIO number and not a header
+pin number. <code>GPIO_ACTIVE_LOW</code> is typical; <code>GPIO_ACTIVE_HIGH</code> is permitted,
+because GPIO logical polarity determines the physical edge. The SPI operation
+flag <code>SPI_CS_ACTIVE_HIGH</code> remains rejected with <code>-ENOTSUP</code>.</p>
+<h4 id="what-this-costs"><a class="header" href="#what-this-costs">What this costs</a></h4>
+<p>Chip select is no longer atomic with the data phase. An ordinary successful
+transceive is <strong>four</strong> USB round trips:</p>
+<pre><code class="language-text">spi/set-config -&gt; gpio/put(assert) -&gt; spi/transfer -&gt; gpio/put(deassert)
+</code></pre>
+<p>Any of them can fail independently, and host death after the assert can leave
+chip select asserted; a fresh session can deassert ordinary residue. Only RPCs that <em>return</em> have defined behaviour — an RPC that never
+returns leaves the call pending forever with no errno and no cleanup.</p>
+<p>A non-returning 1015-byte TX-only request reproduced a device-wide dispatcher
+wedge. In those tests the device resumed after USB re-enumeration (<code>usbipd detach</code>/attach on Windows/WSL). This is an observed procedure, not proof that
+detach cancels the handler. On Linux/macOS reconnect the cable or use USB
+unbind/rebind; power-cycle if re-enumeration is unavailable or ineffective.
+<code>system/reset-subscriptions</code> cannot run while the dispatcher is blocked.</p>
+<p>Zephyr also collapses a child’s <code>spi-cs-setup-delay-ns</code> and
+<code>spi-cs-hold-delay-ns</code> into a single
+<code>DIV_ROUND_UP(MAX(setup_ns, hold_ns), 1000)</code> microsecond value and applies that
+same delay after the assert and before the deassert. Microsecond waits between
+millisecond USB round trips cannot provide meaningful nanosecond timing.</p>
+<p>Read-only and write-only transfers become <strong>full-duplex</strong> transfers of
+<code>max(tx_len, rx_len)</code> bytes, with zero-filled TX or discarded RX respectively.</p>
+<p>Declaring a pin in <code>cs-gpios</code> makes the SPI driver the sole <em>driver path</em> for
+that pin’s mode; it is not an ownership reservation. The application must give
+SPI <strong>exclusive ownership</strong> of every declared chip-select pin, because a direct
+GPIO consumer can otherwise reconfigure or drive it between SPI operations.</p>
+<h4 id="holding-chip-select-and-the-fault-latch"><a class="header" href="#holding-chip-select-and-the-fault-latch">Holding chip select, and the fault latch</a></h4>
+<p><code>SPI_HOLD_ON_CS</code> requires <code>SPI_LOCK_ON</code> and returns <code>-ENOTSUP</code> without it:
+holding chip select while another configuration could select a second slave
+would leave two peripherals selected at once. A successful hold commits the
+received data and keeps both the line asserted and the bus locked until
+<code>spi_release()</code> is called with that same configuration. A thread or process
+that never releases strands both. A transceive using a different configuration
+then blocks forever; there is no timeout and no watchdog recovery. HOLD without
+LOCK is rejected because it would release the controller while CS remained
+asserted, allowing a second peripheral to be selected and causing MISO
+contention. On the M5 fixture MOSI and MISO are shorted, so this is not
+hypothetical.</p>
+<p>Received data is committed only after the deassert that ends the transaction is
+acknowledged, or immediately on a successful deliberate hold. A transfer that
+succeeds but whose deassert fails returns the deassert errno and does <strong>not</strong>
+commit RX: the peripheral may still be selected.</p>
+<p>If a forced deassert returns an error the driver cannot tell whether the line
+went inactive, so the controller <strong>latches</strong>. Every later transceive then
+returns <code>-EHOSTDOWN</code> before issuing any configuration, chip-select edge or
+clocking. Only a <code>spi_release()</code> whose checked deassert succeeds clears it.</p>
+<p>Other errors a caller can see: <code>-ENODEV</code>, <code>-EINVAL</code>, <code>-ENOTSUP</code>, <code>-EMSGSIZE</code>
+(over <strong>1013 bytes</strong>). This is a Zephyr containment limit, not a duplex-capacity
+guarantee: TX-only 1013 succeeded, TX-only 1015 wedges the firmware dispatcher,
+and 1014 was not tested. Full duplex succeeded at 512, failed at 3072, and was
+not tested from 513 through 1013. Applications needing a documented-safe duplex
+size must use 512 bytes or less. Do not infer 1013-byte duplex support from
+<code>PDG_SPI_MAX_BUFFER</code>; the protocol’s 4096-byte constant is a packet-buffer and
+argument bound, not a demonstrated end-to-end payload guarantee),
+<code>-ENOMEM</code>, <code>-EIO</code> / <code>-ECOMM</code> / <code>-EPROTO</code>, <code>-EACCES</code> (a
+chip-select pin the firmware records as an explicit input) and <code>-EBUSY</code> (a
+chip-select pin under a live firmware GPIO event subscription). Stacked drivers
+collapse these into a generic not-ready error — <code>jedec,spi-nor</code>, for instance,
+reports <code>-ENODEV</code> for any transfer failure — so the controller’s own log line
+is the only authoritative diagnosis.</p>
+<p><code>gallo spi batch</code> and the host <code>spi_batch</code> APIs described above are unchanged
+and remain fully supported; only the Zephyr module stopped using them.
+<code>zephyr/README.md</code> in the repository remains the detailed module guide.</p>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>The 1013-byte containment exists only in the Zephyr driver. CLI, Rust, C,
+Python, and MCP SPI calls can still reach the 1015-byte device-wide wedge.
+Keep individual SPI payloads at or below 512 bytes until an operation-specific
+host limit is derived; see <a href="../appendix/troubleshooting.html#buffertoolong-22">troubleshooting</a>.</p>
+</blockquote>
 <h2 id="rust-library"><a class="header" href="#rust-library">Rust Library</a></h2>
 <pre class="playground"><code class="language-rust no_run">use pico_de_gallo_lib::{PicoDeGallo, SpiBatchOp, SpiPhase, SpiPolarity};
 
@@ -333,13 +457,45 @@ chip-select yourself.</li>
 <li><strong><code>hal.spi_device(cs_pin)</code></strong> — an <code>SpiDevice</code> that automatically
 drives the given GPIO as chip-select around every transaction.</li>
 </ul>
+<h2 id="host-chip-select-preflight"><a class="header" href="#host-chip-select-preflight">Host chip-select preflight</a></h2>
+<p>Every host surface checks the chip-select index against the GPIO count
+the connected device reports in <code>device/info</code>, <em>before</em> the pin is driven
+and before any <code>spi/batch</code> request is transmitted. The bound is therefore
+runtime-authoritative: it comes from the board, not from a compile-time
+constant.</p>
+<p>The count is resolved lazily. The first call that needs it performs one
+implicit validated <code>device/info</code> round-trip — bounded at 300 seconds —
+and caches the result for the lifetime of the connection; handles cloned
+from the same connection share that cache. A failed lookup is not cached,
+so the next call retries.</p>
+<p>The failure modes stay disjoint, which is the point:</p>
+<ul>
+<li>the index is at or beyond the reported count → invalid chip-select;</li>
+<li>the device reports zero GPIOs → its own distinct error, for every index;</li>
+<li>the count could not be established (transport failure, 300-second
+timeout, legacy firmware, schema mismatch) → a communications /
+compatibility error, <strong>never</strong> an invalid chip-select. Misreporting a
+metadata failure as a bad argument would send you hunting for a bug in
+your own code.</li>
+</ul>
+<p>A refused chip-select drives no pin and transmits nothing, so the pin
+keeps whatever direction you configured.</p>
+<blockquote>
+<p><strong>Schema-freeze caveat.</strong> On this branch, a successful validation does
+not prove wire-<em>shape</em> compatibility: <code>DeviceInfo</code> changed while both
+host and firmware still report schema 0.6.1. Validation bounds how long
+you wait and checks the reported numbers; it cannot make those numbers
+trustworthy.</p>
+</blockquote>
 <pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use embedded_hal::spi::{Operation, SpiDevice};
 use pico_de_gallo_hal::Hal;
 
 fn read_jedec(hal: &amp;Hal) -&gt; [u8; 3] {
-    let mut spi = hal.spi_device(0);
+    // `spi_device` returns a Result: the chip-select is validated against
+    // the device-reported GPIO count before the pin is driven.
+    let mut spi = hal.spi_device(0).expect("CS 0 is valid on this board");
     let mut id = [0u8; 3];
 
     // One transaction; CS asserted for the whole thing; batched into
@@ -391,9 +547,11 @@ print("JEDEC:", id_bytes.hex())
 <tr><th>Variant</th><th>Meaning</th></tr>
 </thead>
 <tbody>
-<tr><td><code>BufferTooLong</code></td><td>Request exceeds firmware buffer limit</td></tr>
-<tr><td><code>Unsupported</code></td><td>Returned by firmware builds without SPI</td></tr>
+<tr><td><code>BufferTooLong</code></td><td>Request exceeds a local operation limit or framed transport budget; usable payload is shape-dependent</td></tr>
 <tr><td><code>Other</code></td><td>Catch-all for firmware-reported SPI failure</td></tr>
+<tr><td><code>InvalidCsPin</code></td><td>Chip-select index outside <code>0..DeviceInfo::num_gpios</code></td></tr>
+<tr><td><code>CsPinUnavailable</code></td><td>Chip-select pin is explicitly configured as an input</td></tr>
+<tr><td><code>CsPinMonitored</code></td><td>Chip-select pin is monitored for GPIO events</td></tr>
 </tbody>
 </table>
 </div>

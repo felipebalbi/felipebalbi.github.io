@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-988a4873.js";
+            window.path_to_searchindex_js = "../searchindex-28b25b14.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -202,7 +202,7 @@ from.</p>
 <tbody>
 <tr><td><code>ping</code></td><td>Echo a <code>u32</code>. Useful for liveness checks.</td></tr>
 <tr><td><code>version</code></td><td>Firmware version triple (major / minor / patch).</td></tr>
-<tr><td><code>device/info</code></td><td>Firmware version + schema version + capability bitfield.</td></tr>
+<tr><td><code>device/info</code></td><td>Firmware version + schema version + capability bitfield + runtime GPIO count.</td></tr>
 <tr><td><code>i2c/read</code></td><td>Read N bytes from a target address.</td></tr>
 <tr><td><code>i2c/write</code></td><td>Write bytes to a target address.</td></tr>
 <tr><td><code>i2c/write-read</code></td><td>Write then read on the same target (repeated start).</td></tr>
@@ -214,7 +214,7 @@ from.</p>
 <tr><td><code>spi/write</code></td><td>Clock out bytes (MOSI).</td></tr>
 <tr><td><code>spi/transfer</code></td><td>Full-duplex transfer of equal-length TX and RX.</td></tr>
 <tr><td><code>spi/flush</code></td><td>Wait for any in-flight DMA SPI ops to complete.</td></tr>
-<tr><td><code>spi/batch</code></td><td>Sequence of SPI ops under chip-select in one round-trip.</td></tr>
+<tr><td><code>spi/batch</code></td><td>Sequence of SPI ops under chip-select in one round-trip. See the chip-select contract below.</td></tr>
 <tr><td><code>spi/set-config</code></td><td>Set frequency, CPHA, and CPOL.</td></tr>
 <tr><td><code>spi/get-config</code></td><td>Query current SPI configuration.</td></tr>
 <tr><td><code>uart/read</code></td><td>Read with timeout.</td></tr>
@@ -250,6 +250,12 @@ from.</p>
 </tbody>
 </table>
 </div>
+<h3 id="spibatch-chip-select-contract"><a class="header" href="#spibatch-chip-select-contract"><code>spi/batch</code> chip-select contract</a></h3>
+<p>A valid <code>cs_pin</code> is inside <code>0..DeviceInfo::num_gpios</code>, is not being
+monitored for GPIO events, and is not explicitly configured as an input.
+Refusals return <code>InvalidCsPin</code>, <code>CsPinMonitored</code>, and <code>CsPinUnavailable</code>
+respectively, and <strong>leave the pin unchanged</strong>. An accepted pin is driven
+as an output and left deasserted high.</p>
 <h2 id="topics-server--client-push"><a class="header" href="#topics-server--client-push">Topics (server → client push)</a></h2>
 <div class="table-wrapper">
 <table>

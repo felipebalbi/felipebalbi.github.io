@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-988a4873.js";
+            window.path_to_searchindex_js = "../searchindex-28b25b14.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -382,7 +382,7 @@ Every tool except <code>list_devices</code> accepts an optional <code>serial_num
 <tbody>
 <tr><td><code>list_devices</code></td><td>List connected Pico de Gallo boards</td></tr>
 <tr><td><code>status</code></td><td>Which board is reachable, why not when none is, plus firmware/schema version</td></tr>
-<tr><td><code>device_info</code></td><td>Firmware version, schema version, capabilities</td></tr>
+<tr><td><code>device_info</code></td><td>Firmware version, schema version, capabilities, runtime GPIO count</td></tr>
 <tr><td><code>version</code></td><td>Firmware version</td></tr>
 <tr><td><code>ping</code></td><td>Echo a value (liveness check)</td></tr>
 </tbody>
@@ -422,6 +422,27 @@ Every tool except <code>list_devices</code> accepts an optional <code>serial_num
 </tbody>
 </table>
 </div>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>MCP SPI tools are not protected by the Zephyr driver’s 1013-byte containment.
+A 1015-byte TX-only request reproduced a device-wide firmware-dispatcher
+wedge. Keep individual SPI payloads at or below 512 bytes; see
+<a href="../appendix/troubleshooting.html#buffertoolong-22">troubleshooting</a>.</p>
+</blockquote>
+<p><code>spi_batch</code> takes <code>cs</code> as a <code>u8</code> and runs its steps in a fixed order:
+parse every operation payload, connect exactly once, read the GPIO count
+from the <code>DeviceInfo</code> that connection already validated, classify <code>cs</code>,
+then call the library once. No second metadata query is issued.</p>
+<p>Parsing comes first on purpose. <code>connect</code> runs
+<code>system_reset_subscriptions</code>, which tears down every GPIO subscription on
+the board — including ones owned by other host processes — so a malformed
+request must not reach it. A payload that fails to parse returns
+<code>-32602</code> (invalid params) without connecting.</p>
+<p>An out-of-range <code>cs</code> and a device reporting zero GPIOs are also <code>-32602</code>,
+with distinct messages, and nothing is transmitted. A failure to
+establish the count — transport, 300-second <code>device/info</code> timeout, legacy
+firmware, or schema mismatch — is <code>-32603</code> (internal error), never
+<code>-32602</code>: it is not a complaint about your argument.</p>
 <h3 id="uart"><a class="header" href="#uart">uart</a></h3>
 <div class="table-wrapper">
 <table>

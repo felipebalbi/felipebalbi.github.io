@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-988a4873.js";
+            window.path_to_searchindex_js = "../searchindex-28b25b14.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -223,9 +223,10 @@ the same effort and a strict superset.</li>
 ambiguity. Adapter boards (informally called “toppings”) can be
 designed against a stable connector instead of wrangling seven
 separate jumper bundles.</li>
-<li><strong>All 20 firmware signals routed.</strong> v1.0 only brings out 13 of
-the firmware’s 20 GPIO signals. UART, SPI chip-select, 1-Wire,
-and the three ADC inputs are physically absent on v1.0.</li>
+<li><strong>All implemented peripheral signals routed.</strong> UART, 1-Wire, and
+the three ADC inputs are physically absent on v1.0. v1.1 also
+routes the PCB’s SPI_CS net from RP2350 GPIO 5, but current
+firmware never claims or drives that pad.</li>
 <li><strong>On-board passives.</strong>
 <ul>
 <li>4.7 kΩ pull-ups on I²C (no more dangling resistors).</li>
@@ -258,13 +259,17 @@ that in mind.</p>
 </p>
 
 <p>The v1.0 board predates the consolidated header and lacks routing
-for UART (GPIO 0–1), SPI CS (GPIO 5), 1-Wire (GPIO 16), and ADC
-(GPIO 26–28). The firmware still validates inputs and returns
-<code>Unsupported</code> for those endpoints, so calling them won’t crash —
-you just won’t get data.</p>
+for UART (GPIO 0-1), 1-Wire (GPIO 16), and ADC (GPIO 26-28).
+Firmware validates those endpoints and returns <code>Unsupported</code>, so
+calling them won’t crash — you just won’t get data.</p>
 <p>If you’re stuck on v1.0 and need one of the missing signals, you
 can solder a wire directly to the corresponding Pico 2 castellated
-pad. It’s not pretty, but it works.</p>
+pad. It’s not pretty, but it works for UART, 1-Wire, and ADC.</p>
+<p>SPI_CS is different. Its physical GPIO 5 net is present on the v1.1
+header but absent on v1.0, and current firmware does not claim or
+drive GPIO 5 on either revision. Soldering to that pad does not make
+it usable as firmware-controlled chip-select; use a user GPIO index
+reported by <code>device/info</code> instead.</p>
 <h2 id="identifying-your-board"><a class="header" href="#identifying-your-board">Identifying Your Board</a></h2>
 <p>The fastest way to tell what revision firmware you’re running:</p>
 <pre><code class="language-console">$ gallo version
