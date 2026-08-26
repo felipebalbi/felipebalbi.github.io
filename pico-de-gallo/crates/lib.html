@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-29a567ba.js";
+            window.path_to_searchindex_js = "../searchindex-3cf68a46.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -413,7 +413,7 @@ host already has a buffer waiting when the first edge arrives.</p>
 <tr><td><code>i2c_write</code></td><td><code>address</code>, <code>contents</code></td><td>Write bytes to an I<sup>2</sup>C target</td></tr>
 <tr><td><code>i2c_write_read</code></td><td><code>address</code>, <code>contents</code>, <code>count</code></td><td>Write, then read with a repeated start</td></tr>
 <tr><td><code>i2c_scan</code></td><td><code>include_reserved</code></td><td>Scan the I<sup>2</sup>C bus for responding addresses</td></tr>
-<tr><td><code>i2c_batch</code></td><td><code>address</code>, <code>ops</code></td><td>Execute several I<sup>2</sup>C operations in one USB transfer</td></tr>
+<tr><td><code>i2c_batch</code></td><td><code>address</code>, <code>ops</code></td><td>Execute one bus transaction: no STOP between adjacent same-direction operations, repeated START on direction changes, and one final STOP</td></tr>
 <tr><td><code>i2c_set_config</code></td><td><code>frequency</code></td><td>Set the I<sup>2</sup>C clock frequency</td></tr>
 <tr><td><code>i2c_get_config</code></td><td>—</td><td>Read back the active I<sup>2</sup>C frequency</td></tr>
 <tr><td><code>spi_read</code></td><td><code>count</code></td><td>Read bytes from the SPI bus</td></tr>

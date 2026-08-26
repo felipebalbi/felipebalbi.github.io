@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-29a567ba.js";
+            window.path_to_searchindex_js = "../searchindex-3cf68a46.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -177,19 +177,21 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="transaction-batching"><a class="header" href="#transaction-batching">Transaction Batching</a></h1>
-<p>When talking to I<sup>2</sup>C or SPI devices, a single logical operation
-often requires <strong>multiple bus transactions</strong> — for example, writing a
+<p>When talking to I<sup>2</sup>C or SPI devices, a single logical transaction
+often requires <strong>multiple bus operations</strong> — for example, writing a
 register address and then reading back its value. Without batching, each
-of these operations is a separate USB round-trip:</p>
+operation is a separate USB round-trip:</p>
 <pre><code class="language-text">Host ──write──▸ USB ──▸ Firmware ──▸ I²C bus    (~1 ms)
 Host ◂──ack──── USB ◂── Firmware ◂── I²C bus    (~1 ms)
 Host ──read───▸ USB ──▸ Firmware ──▸ I²C bus    (~1 ms)
 Host ◂──data─── USB ◂── Firmware ◂── I²C bus    (~1 ms)
                                             Total: ~4 ms
 </code></pre>
-<p>Transaction batching packs all operations into a <strong>single USB
-transfer</strong>. The firmware executes them back-to-back on the bus and
-returns all results at once:</p>
+<p>Transaction batching packs all operations into a <strong>single USB transfer</strong>
+and preserves one bus-level transaction. For I<sup>2</sup>C, the firmware
+sends one START before the first operation, repeated STARTs only when the
+direction changes, and one STOP after the last operation. It returns all
+results at once:</p>
 <pre><code class="language-text">Host ──[write, read]──▸ USB ──▸ Firmware ──▸ I²C bus    (~1 ms)
 Host ◂──[data]──────── USB ◂── Firmware ◂── I²C bus    (~1 ms)
                                             Total: ~2 ms
@@ -205,14 +207,17 @@ specifies one bus operation.</p>
 Read data (2 bytes):
   0000: 19 80                                              ..
 </code></pre>
-<p>Write 3 bytes to an EEPROM at address 0x50, then read them back:</p>
-<pre><code class="language-console">$ gallo i2c batch -a 0x50 --op write:0x00,0x10,0xab,0xcd,0xef --op write:0x00,0x10 --op read:3
-Read data (3 bytes):
-  0000: ab cd ef                                           ...
+<p>Send a two-byte EEPROM address and three data bytes as one gather write:</p>
+<pre><code class="language-console">$ gallo i2c batch -a 0x50 --op write:0x00,0x10 --op write:0xab,0xcd,0xef
+Batch complete (no read data)
 </code></pre>
-<p>The operations execute as a single I<sup>2</sup>C transaction — the bus
-is not released between them (no STOP condition until the batch
-completes).</p>
+<p>The adjacent writes above produce the byte sequence <code>00 10 ab cd ef</code>
+under one address phase; there is no STOP or repeated START between them.
+In general, the operations execute as a single I<sup>2</sup>C transaction:
+the bus is not released until the batch completes, and each direction
+change (write-to-read or read-to-write) produces a documented repeated
+START and re-addressing. This requires firmware from schema 0.7 or newer.
+Older firmware executes every operation as a separate transaction.</p>
 <h4 id="available-i2c-operations"><a class="header" href="#available-i2c-operations">Available I<sup>2</sup>C operations</a></h4>
 <div class="table-wrapper">
 <table>
@@ -312,9 +317,13 @@ implementations use batch endpoints automatically.</p>
 <p>When you call <code>I2c::transaction()</code> or <code>SpiDevice::transaction()</code> from
 the HAL crate, the implementation encodes all operations into a single
 batch request, sends it over USB, and unpacks the results — all
-transparently.</p>
+transparently. The firmware also preserves the corresponding bus-level
+transaction: I<sup>2</sup>C operations follow the START, repeated-START,
+and STOP rules above, while SPI operations remain under one chip-select
+assertion.</p>
 <p>This means any existing device driver that uses the standard
-<code>embedded-hal</code> transaction API gets the performance benefit for free:</p>
+<code>embedded-hal</code> transaction API gets the bus-level transaction semantics
+and the performance benefit for free:</p>
 <pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use embedded_hal::i2c::I2c;
@@ -325,7 +334,7 @@ fn read_tmp102(hal: &amp;Hal) -&gt; Result&lt;f32, Box&lt;dyn std::error::Error&
     let mut i2c = hal.i2c();
     let mut buf = [0u8; 2];
 
-    // This entire transaction is ONE USB round-trip
+    // This is one USB round-trip and one I2C transaction
     i2c.transaction(
         0x48,
         &amp;mut [
@@ -363,8 +372,7 @@ fn read_spi_jedec(hal: &amp;Hal) -&gt; Result&lt;[u8; 3], Box&lt;dyn std::error:
 }
 <span class="boring">}</span></code></pre>
 <h3 id="before-vs-after"><a class="header" href="#before-vs-after">Before vs. After</a></h3>
-<p>Consider an EEPROM page write that requires a write-enable command
-followed by the actual page write, then a status poll:</p>
+<p>Consider a logical bus transaction containing three operations:</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -376,7 +384,8 @@ followed by the actual page write, then a status poll:</p>
 </tbody>
 </table>
 </div>
-<p>The improvement grows with the number of operations in each transaction.</p>
+<p>The latency improvement grows with the number of operations. Unlike
+separate calls, the batch also preserves one bus-level transaction.</p>
 <h2 id="wire-format-details"><a class="header" href="#wire-format-details">Wire Format Details</a></h2>
 <p>For those interested in the protocol internals, batch operations use
 postcard serialization. Each <code>I2cBatchOp</code> or <code>SpiBatchOp</code> is serialized
@@ -425,12 +434,14 @@ from the request, so no framing is needed in the response.</p>
 <tr><td>Maximum operations per batch</td><td>64 (<code>MAX_BATCH_OPS</code>)</td></tr>
 <tr><td>Protocol packet-buffer/argument bound</td><td>4096 bytes (<code>MAX_TRANSFER_SIZE</code>)</td></tr>
 <tr><td>Demonstrated end-to-end payload</td><td>Shape-dependent and below 4096; no general ceiling is published</td></tr>
+<tr><td>Zero-length I²C writes</td><td>Rejected with <code>ZeroLengthWrite</code> before bus access</td></tr>
 </tbody>
 </table>
 </div>
-<p>If a batch exceeds these limits, the firmware returns an error
-indicating which limit was violated and, for operation-level failures,
-which operation failed (zero-indexed).</p>
+<p>If a batch violates these constraints, the firmware returns an error
+indicating which constraint was violated. Validation failures report the
+exact zero-indexed operation; an I<sup>2</sup>C bus failure applies to the
+atomic transaction as a whole and reports operation index 0.</p>
 <p><code>MAX_TRANSFER_SIZE</code> is a buffer and argument bound, not a guarantee that 4096
 bytes of application data fit through postcard-rpc and COBS framing. Request
 shape and response size both matter. See the measured SPI evidence in

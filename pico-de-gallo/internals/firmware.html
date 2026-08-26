@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-29a567ba.js";
+            window.path_to_searchindex_js = "../searchindex-3cf68a46.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -331,6 +331,26 @@ cargo build --release --locked --target thumbv8m.main-none-eabihf \
 <li>ADC reads are single-shot samples on GPIO 26-29 in firmware, with board
 routing exposing ADC0-2 on current hardware.</li>
 </ul>
+<h3 id="i²c-batch-transaction-handling"><a class="header" href="#i²c-batch-transaction-handling">I²C batch transaction handling</a></h3>
+<p><code>i2c/batch</code> uses two decode passes. The first validates the operation count,
+encoding, declared count, total read size, and every write payload before the
+bus is accessed. A malformed operation or zero-length write therefore reports
+the exact offending index without putting a START on the bus.</p>
+<p>After validation, the handler borrows the I<sup>2</sup>C peripheral and shared
+scratch buffer as disjoint fields. Its second pass materialises the decoded
+list into a <code>heapless::Vec&lt;Operation, MAX_BATCH_OPS&gt;</code>, carving non-overlapping
+read slices from the scratch buffer while write operations borrow their
+request data.</p>
+<p>The handler then makes one
+<code>embedded_hal_async::i2c::I2c::transaction()</code> call for the entire list.
+Adjacent same-direction operations have no intervening STOP or repeated
+START, a direction change re-addresses under a documented repeated START,
+and only the last operation carries a STOP. The repeated START is documented
+by the RP2350 vendor SVD: <code>IC_CON</code> resets to <code>0x00000065</code> with
+<code>IC_RESTART_EN</code> (bit 5) set, and embassy-rp does not write that register.</p>
+<p>Because a bus error is returned for the atomic transaction as a whole,
+firmware reports it with <code>failed_op = 0</code>. Pre-bus validation errors retain
+their exact zero-based operation index.</p>
 <h3 id="spi-chip-select-arbitration"><a class="header" href="#spi-chip-select-arbitration">SPI chip-select arbitration</a></h3>
 <p><code>spi/batch</code> validates the operation count, encoding, declared count, and
 total read size before inspecting its chip-select pin. These checks therefore

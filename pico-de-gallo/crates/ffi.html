@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-29a567ba.js";
+            window.path_to_searchindex_js = "../searchindex-3cf68a46.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -371,14 +371,18 @@ Status gallo_i2c_batch(const PicoDeGallo *gallo,
                        size_t *out_len,
                        uint16_t *out_failed_op);  // may be NULL
 </code></pre>
-<p>Operations run sequentially with a STOP between each (this is <em>not</em>
-repeated-start; for write-then-read to the same device use
-<code>gallo_i2c_write_read</code>). Concatenated read data is written to <code>out_buf</code>
-and the total length to <code>*out_len</code>. On failure, <code>*out_failed_op</code> (if
-non-NULL) receives the zero-based index of the operation that failed,
-and the status reflects the underlying I<sup>2</sup>C error
-(<code>I2cNack</code>, <code>I2cBusError</code>, etc.). <code>BufferTooLong</code> means <code>out_buf</code> was
-too small; <code>*out_len</code> still receives the required capacity.</p>
+<p>The batch executes as a single I<sup>2</sup>C transaction. A START and address
+precede the first operation; adjacent operations of the same type are sent back
+to back with no STOP and no repeated START between them, so two adjacent Write
+ops form one gather write; a direction change emits a repeated START and
+re-addresses the target; and only the last operation is followed by a STOP.</p>
+<p>This requires firmware built from schema 0.7 or newer. Older firmware executes
+each operation as a separate transaction. Zero-length writes are rejected.</p>
+<p>Concatenated read data is written to <code>out_buf</code> and the total length to
+<code>*out_len</code>. On failure, <code>*out_failed_op</code> (if non-NULL) receives the zero-based
+index of the operation that failed, and the status reflects the underlying
+I<sup>2</sup>C error (<code>I2cNack</code>, <code>I2cBusError</code>, etc.). <code>BufferTooLong</code> means
+<code>out_buf</code> was too small; <code>*out_len</code> still receives the required capacity.</p>
 <h3 id="spi"><a class="header" href="#spi">SPI</a></h3>
 <pre><code class="language-c">Status gallo_spi_read(const PicoDeGallo *gallo, uint8_t *buf, size_t len);
 Status gallo_spi_write(const PicoDeGallo *gallo, const uint8_t *buf, size_t len);

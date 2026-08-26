@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-29a567ba.js";
+            window.path_to_searchindex_js = "../searchindex-3cf68a46.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -256,6 +256,23 @@ are push-style messages declared with <code>topics!</code>.</p>
 </table>
 </div>
 <p>For the full list, see the <a href="../appendix/endpoints.html">Endpoint Catalog</a>.</p>
+<h2 id="i²c-batch-framing-contract"><a class="header" href="#i²c-batch-framing-contract">I²C batch framing contract</a></h2>
+<p><code>i2c/batch</code> executes the complete operation list as one I<sup>2</sup>C
+transaction:</p>
+<ul>
+<li>a START and address precede the first operation,</li>
+<li>adjacent operations of the same type run back to back without a STOP or
+repeated START; two adjacent writes therefore form one gather write,</li>
+<li>a direction change emits a repeated START and re-addresses the target,</li>
+<li>a STOP follows the last operation, and only the last operation.</li>
+</ul>
+<p>The repeated START on a direction change is documented by the RP2350 vendor
+SVD: the DesignWare <code>IC_CON</code> register resets to <code>0x00000065</code>, with
+<code>IC_RESTART_EN</code> (bit 5) set, and embassy-rp does not write that register.</p>
+<p>Validation errors report the exact zero-based operation index in
+<code>I2cBatchError.failed_op</code>. A bus failure applies to the atomic transaction as
+a whole and cannot be attributed to one operation, so it reports
+<code>failed_op = 0</code>.</p>
 <h2 id="spi-chip-select-contract"><a class="header" href="#spi-chip-select-contract">SPI chip-select contract</a></h2>
 <p><code>SpiError</code> is serialized by variant index. The deployed indices are:</p>
 <div class="table-wrapper">

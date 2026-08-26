@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-29a567ba.js";
+            window.path_to_searchindex_js = "../searchindex-3cf68a46.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -192,7 +192,7 @@ supply your own.</p>
 <tr><td><strong>Write</strong></td><td>Write bytes to a device at the given address</td></tr>
 <tr><td><strong>Write-Read</strong></td><td>Write then read on the same target (repeated start, no STOP between)</td></tr>
 <tr><td><strong>Scan</strong></td><td>Probe every address on the bus</td></tr>
-<tr><td><strong>Batch</strong></td><td>Send a sequence of read/write ops as a single USB transaction</td></tr>
+<tr><td><strong>Batch</strong></td><td>One I²C transaction; repeated START on direction change; final STOP only</td></tr>
 <tr><td><strong>Set Config</strong></td><td>Change the bus clock frequency at runtime</td></tr>
 <tr><td><strong>Get Config</strong></td><td>Query the current bus configuration</td></tr>
 </tbody>
@@ -273,7 +273,14 @@ $ gallo i2c get-config
 Frequency: Fast (400 kHz)
 </code></pre>
 <h3 id="batch"><a class="header" href="#batch">Batch</a></h3>
-<p>A single USB round-trip for a multi-op transaction:</p>
+<p>One USB round-trip carries one multi-operation I²C transaction. A START
+and address precede the first operation. Adjacent operations in the same
+direction run back to back without a STOP or repeated START, so adjacent
+writes form one gather write. A direction change emits a documented
+repeated START and re-addressing, and only the final operation is followed
+by a STOP.</p>
+<p>This bus framing requires firmware from schema 0.7 or newer. Older
+firmware executes each operation as a separate transaction.</p>
 <pre><code class="language-console">$ gallo i2c batch -a 0x48 --op write:0x00 --op read:2
 Read data (2 bytes):
   0000: 19 80                                              ..
@@ -295,7 +302,7 @@ async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     let raw = u16::from_be_bytes([data[0], data[1]]);
     println!("raw = 0x{raw:04x}");
 
-    // Same transaction, batched
+    // Same bus framing as i2c_write_read above: write, repeated START, read, STOP.
     let ops = [
         I2cBatchOp::Write { data: &amp;[0x00] },
         I2cBatchOp::Read { len: 2 },
@@ -322,8 +329,11 @@ fn read_tmp102(hal: &amp;Hal) {
     println!("Temperature: {celsius:.2} °C");
 }
 <span class="boring">}</span></code></pre>
-<p><code>I2c::transaction()</code> is automatically batched into a single USB
-round-trip — see <a href="./batching.html">Transaction Batching</a>.</p>
+<p><code>I2c::transaction()</code> sends all operations in one USB round-trip and,
+with schema 0.7 or newer firmware, executes them as one I²C transaction.
+Adjacent same-direction operations run without an intervening STOP; a
+direction change emits a documented repeated START. See
+<a href="./batching.html">Transaction Batching</a>.</p>
 <h2 id="c-ffi"><a class="header" href="#c-ffi">C (FFI)</a></h2>
 <pre><code class="language-c">#include "pico_de_gallo.h"
 #include &lt;stdio.h&gt;

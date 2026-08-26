@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-29a567ba.js";
+            window.path_to_searchindex_js = "../searchindex-3cf68a46.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -207,7 +207,7 @@ from.</p>
 <tr><td><code>i2c/write</code></td><td>Write bytes to a target address.</td></tr>
 <tr><td><code>i2c/write-read</code></td><td>Write then read on the same target (repeated start).</td></tr>
 <tr><td><code>i2c/scan</code></td><td>Probe every address on the bus.</td></tr>
-<tr><td><code>i2c/batch</code></td><td>Sequence of I²C ops in one USB round-trip.</td></tr>
+<tr><td><code>i2c/batch</code></td><td>One I²C transaction: gather same-direction ops, repeated START on direction changes, one final STOP. See the contract below.</td></tr>
 <tr><td><code>i2c/set-config</code></td><td>Set I²C frequency (<code>I2cFrequency</code> enum).</td></tr>
 <tr><td><code>i2c/get-config</code></td><td>Query current I²C frequency.</td></tr>
 <tr><td><code>spi/read</code></td><td>Clock in N bytes (MISO).</td></tr>
@@ -250,6 +250,13 @@ from.</p>
 </tbody>
 </table>
 </div>
+<h3 id="i2cbatch-transaction-contract"><a class="header" href="#i2cbatch-transaction-contract"><code>i2c/batch</code> transaction contract</a></h3>
+<p>Firmware schema 0.7 and newer executes the entire batch as one I²C
+transaction. A START and address precede the first operation. Adjacent
+operations in the same direction run back to back without a STOP or repeated
+START, so two adjacent writes form one gather write. A direction change emits
+a repeated START and re-addresses the target. Only the final operation is
+followed by a STOP. Zero-length writes are rejected.</p>
 <h3 id="spibatch-chip-select-contract"><a class="header" href="#spibatch-chip-select-contract"><code>spi/batch</code> chip-select contract</a></h3>
 <p>A valid <code>cs_pin</code> is inside <code>0..DeviceInfo::num_gpios</code>, is not being
 monitored for GPIO events, and is not explicitly configured as an input.
