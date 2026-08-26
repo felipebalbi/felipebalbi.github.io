@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3cf68a46.js";
+            window.path_to_searchindex_js = "../searchindex-1a4931aa.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -220,7 +220,7 @@ applications.</p>
 <tr><td><code>spi()</code></td><td><code>Spi</code></td><td>Raw SPI bus handle</td></tr>
 <tr><td><code>spi_device(cs_pin)</code></td><td><code>Result&lt;SpiDev, SpiHalError&gt;</code></td><td>SPI device handle that manages chip-select for you; validates <code>cs_pin</code> before driving it</td></tr>
 <tr><td><code>num_gpios()</code></td><td><code>Result&lt;u8, HalInitError&gt;</code></td><td>Device-reported GPIO count — the runtime bound for a pin index or chip select</td></tr>
-<tr><td><code>uart()</code></td><td><code>Uart</code></td><td>UART handle implementing <code>embedded_io</code> and <code>embedded_io_async</code></td></tr>
+<tr><td><code>uart()</code></td><td><code>Uart</code></td><td>UART handle implementing <code>embedded_io</code> and <code>embedded_io_async</code> (0.6 by default, additive 0.7 — see <a href="#feature-flags">Feature Flags</a>)</td></tr>
 <tr><td><code>gpio(pin)</code></td><td><code>Gpio</code></td><td>GPIO pin handle implementing digital traits</td></tr>
 <tr><td><code>pwm_channel(channel)</code></td><td><code>PwmChannel</code></td><td>PWM channel handle implementing <code>SetDutyCycle</code></td></tr>
 <tr><td><code>delay()</code></td><td><code>Delay</code></td><td>Delay provider</td></tr>
@@ -260,6 +260,8 @@ the returned handles implement the relevant blocking and async traits directly.<
 </tbody>
 </table>
 </div>
+<p>The UART row is feature-gated by <code>embedded-io</code> major version — see
+<a href="#feature-flags">Feature Flags</a> below.</p>
 <p>And two project-specific surfaces sit alongside the trait-based ones:</p>
 <div class="table-wrapper">
 <table>
@@ -272,6 +274,28 @@ the returned handles implement the relevant blocking and async traits directly.<
 </tbody>
 </table>
 </div>
+<h2 id="feature-flags"><a class="header" href="#feature-flags">Feature Flags</a></h2>
+<p><code>embedded-io</code> 0.6 and 0.7 are both supported through additive features:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Feature</th><th>Default</th><th><code>hal.uart()</code> implements</th></tr>
+</thead>
+<tbody>
+<tr><td><code>embedded-io-07</code></td><td>no</td><td><code>embedded-io</code> 0.7 + <code>embedded-io-async</code> 0.7 traits</td></tr>
+<tr><td><code>embedded-io-06</code></td><td>yes</td><td><code>embedded-io</code> 0.6 + <code>embedded-io-async</code> 0.6 traits</td></tr>
+</tbody>
+</table>
+</div>
+<pre><code class="language-toml"># 0.6 only (default)
+pico-de-gallo-hal = "0.7"
+
+# 0.7 only
+pico-de-gallo-hal = { version = "0.7", default-features = false, features = ["embedded-io-07"] }
+
+# both majors at once
+pico-de-gallo-hal = { version = "0.7", features = ["embedded-io-07"] }
+</code></pre>
 <h2 id="minimal-example"><a class="header" href="#minimal-example">Minimal Example</a></h2>
 <pre class="playground"><code class="language-rust no_run">use embedded_hal::i2c::I2c;
 use pico_de_gallo_hal::Hal;
