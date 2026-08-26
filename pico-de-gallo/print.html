@@ -38,7 +38,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-3518afc8.js";
+            window.path_to_searchindex_js = "searchindex-1a42546b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-2de855f1.js"></script>
@@ -4840,6 +4840,33 @@ launch the server with whatever environment they have and rarely set
 on stdout. <code>RUST_LOG</code> still controls verbosity when you set it, and
 overrides the default entirely: <code>RUST_LOG=error</code> silences the warning,
 <code>RUST_LOG=gallo_mcp=debug</code> adds the per-call board-lock tracing.</p>
+<h2 id="protocol-revisions"><a class="header" href="#protocol-revisions">Protocol revisions</a></h2>
+<p><code>gallo-mcp</code> supports every MCP revision its SDK knows — <code>2024-11-05</code>,
+<code>2025-03-26</code>, <code>2025-06-18</code>, <code>2025-11-25</code>, and <code>2026-07-28</code> — and
+negotiates during <code>initialize</code>: it echoes the revision the client asks
+for when it is one of those, and otherwise falls back to <code>2025-11-25</code>.
+The <code>initialize</code> result identifies the server as <code>gallo-mcp</code> with this
+crate’s version.</p>
+<p>The <strong>tool surface does not vary by revision.</strong> The same 43 tools, with
+the same names, arguments, annotations, and JSON payloads, are served to
+every client. What changes is the envelope around them:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th></th><th><code>2025-11-25</code> and older</th><th><code>2026-07-28</code></th></tr>
+</thead>
+<tbody>
+<tr><td><code>resultType</code> on results</td><td>absent</td><td><code>"complete"</code></td></tr>
+<tr><td><code>ttlMs</code> / <code>cacheScope</code> cache hints</td><td>absent</td><td>present</td></tr>
+<tr><td><code>server/discover</code></td><td>not available</td><td>answered</td></tr>
+</tbody>
+</table>
+</div>
+<p>A client that negotiates <code>2026-07-28</code> may therefore start with a
+stateless <code>server/discover</code> instead of <code>initialize</code>, and will see the
+SEP-2322 result discriminator and SEP-2549 cache hints on every result.
+Everything else — tool payloads, the <code>serial_number</code> echo, error
+mapping — is byte-for-byte identical across revisions.</p>
 <h2 id="choosing-a-board"><a class="header" href="#choosing-a-board">Choosing a board</a></h2>
 <p>Every tool except <code>list_devices</code> takes an optional <code>serial_number</code>, and
 every response that came from a board names the board it came from:</p>
