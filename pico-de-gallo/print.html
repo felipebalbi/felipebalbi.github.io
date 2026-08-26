@@ -38,7 +38,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-28b25b14.js";
+            window.path_to_searchindex_js = "searchindex-29a567ba.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-2de855f1.js"></script>
@@ -840,8 +840,6 @@ Error: schema mismatch (firmware v0.5.0, host expects v0.4.x)
 <p>The fix is to update whichever side is behind. See
 <a href="#releases--compatibility">Releases &amp; Compatibility</a> for the rules
 on which versions are compatible.</p>
-<p>On the <code>zephyr</code> branch, also read the schema-freeze warning there: matching
-schema 0.6.1 does not prove that branch-built and released peers are compatible.</p>
 <h2 id="next-1"><a class="header" href="#next-1">Next</a></h2>
 <p>You’re up and running. Pick an interface to play with — start
 with <a href="#i²c">I²C</a> or <a href="#gpio">GPIO</a>,
@@ -1140,11 +1138,32 @@ side; FFI returns negative <code>Status</code> values:</p>
 <tr><td><code>BufferTooLong</code></td><td>Request exceeds firmware buffer limit</td></tr>
 <tr><td><code>AddressOutOfRange</code></td><td>Address outside the 7-bit range</td></tr>
 <tr><td><code>Other</code></td><td>Unspecified firmware error</td></tr>
+<tr><td><code>ZeroLengthWrite</code></td><td>Write requested with an empty payload</td></tr>
 </tbody>
 </table>
 </div>
 <p>The full status-code mapping for FFI lives in
-<a href="#status-code-reference"><code>appendix/status-codes.md</code></a>.</p>
+<a href="#status-code-reference"><code>appendix/status-codes.md</code></a>.
+<code>ZeroLengthWrite</code> maps to <code>InvalidArgument</code> (-5).</p>
+<h2 id="zero-length-writes-are-not-supported"><a class="header" href="#zero-length-writes-are-not-supported">Zero-Length Writes Are Not Supported</a></h2>
+<p>A write with an empty payload — the address-only <code>START + ADDR + STOP</code>
+probe that some I²C stacks use for bus scanning — is rejected by the
+firmware with <code>ZeroLengthWrite</code>. This applies to <code>i2c/write</code> and to any
+<code>Write</code> operation inside an <code>i2c/batch</code>; the batch is refused as a whole
+during validation, so no earlier operation in it reaches the bus.</p>
+<p>The restriction is a hardware limitation, not a firmware policy choice.
+The RP2040/RP2350 <code>DW_apb_i2c</code> block drives the address phase only as a
+side effect of pushing data into <code>IC_DATA_CMD</code>, so there is no way to
+emit an address without at least one payload byte. See
+<a href="https://github.com/rp-rs/rp-hal/issues/678">rp-rs/rp-hal#678</a> and
+<a href="https://github.com/embassy-rs/embassy/issues/4474">embassy-rs/embassy#4474</a>.</p>
+<p>To probe for a device, use a 1-byte read instead:</p>
+<pre><code class="language-bash">gallo i2c read --address 0x48 --count 1   # NoAcknowledge =&gt; absent
+gallo i2c scan                            # or scan the whole bus
+</code></pre>
+<p><code>i2c/scan</code> already probes this way. Note that a read probe is not
+semantically identical to a write probe: a write-only device may
+acknowledge its write address while refusing a read address.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="spi"><a class="header" href="#spi">SPI</a></h1>
 <p>Pico de Gallo drives the RP2350’s <strong>SPI0</strong> controller in
@@ -1450,13 +1469,6 @@ your own code.</li>
 </ul>
 <p>A refused chip-select drives no pin and transmits nothing, so the pin
 keeps whatever direction you configured.</p>
-<blockquote>
-<p><strong>Schema-freeze caveat.</strong> On this branch, a successful validation does
-not prove wire-<em>shape</em> compatibility: <code>DeviceInfo</code> changed while both
-host and firmware still report schema 0.6.1. Validation bounds how long
-you wait and checks the reported numbers; it cannot make those numbers
-trustworthy.</p>
-</blockquote>
 <pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use embedded_hal::spi::{Operation, SpiDevice};
@@ -3447,9 +3459,7 @@ device reports num_gpios=0; no SPI chip-select pin is available
 before doing anything else, and that validation supplies the count. If it
 fails — including a <code>device/info</code> timeout after 300 seconds — the error
 appears under <code>firmware validation failed</code>, never as an invalid
-chip-select. On this branch a successful validation still cannot prove
-wire-<em>shape</em> compatibility, because <code>DeviceInfo</code> changed while both peers
-report schema 0.6.1.</p>
+chip-select.</p>
 <p>See the <a href="#spi">SPI chapter</a> and
 <a href="#transaction-batching">Transaction Batching</a>.</p>
 <h3 id="gpio-1"><a class="header" href="#gpio-1"><code>gpio</code></a></h3>
@@ -3674,13 +3684,6 @@ layer, the request is simply still outstanding, so there is no transport
 error to carry. The bound is generous because firmware dispatch is serial
 and a legal maximum-length SPI batch can occupy it for about 275 seconds;
 the point is that the wait is finite, not that it is short.</p>
-<blockquote>
-<p><strong>Schema-freeze caveat.</strong> On this branch a successful <code>validate()</code> does
-not prove wire-<em>shape</em> compatibility: <code>DeviceInfo</code> changed while both
-host and firmware still report schema 0.6.1. Validation bounds how long
-you wait and checks the reported numbers; it cannot make those numbers
-trustworthy.</p>
-</blockquote>
 <pre class="playground"><code class="language-rust no_run">use pico_de_gallo_lib::PicoDeGallo;
 
 #[tokio::main]
@@ -4015,11 +4018,6 @@ learn the valid range is a connectivity or compatibility problem, not an
 argument problem.</p>
 <p><code>num_gpios()</code> returns <code>HalInitError::Validate(_)</code> on failure, including
 <code>ValidateError::Timeout</code>. Failures are not cached, so retrying is fine.</p>
-<blockquote>
-<p><strong>Schema-freeze caveat.</strong> On this branch a successful validation does
-not prove wire-<em>shape</em> compatibility: <code>DeviceInfo</code> changed while both
-host and firmware still report schema 0.6.1.</p>
-</blockquote>
 <h2 id="when-to-reach-for-this-crate"><a class="header" href="#when-to-reach-for-this-crate">When to Reach for This Crate</a></h2>
 <p>Use <code>pico-de-gallo-hal</code> when you want to:</p>
 <ul>
@@ -4314,11 +4312,6 @@ write <code>*out_len = 0</code>, resolve the GPIO count, classify <code>cs_pin</
 the operation payloads, call the library once, then write outputs. A NULL
 <code>out_len</code> is therefore never dereferenced, and an invalid op <code>tag</code> or NULL
 <code>data</code> pointer is reported only after the device has been reached.</p>
-<blockquote>
-<p><strong>Schema-freeze caveat.</strong> On this branch a matching reported schema
-version does not prove wire-<em>shape</em> compatibility: <code>DeviceInfo</code> changed
-while both host and firmware still report 0.6.1.</p>
-</blockquote>
 <h3 id="gpio-2"><a class="header" href="#gpio-2">GPIO</a></h3>
 <pre><code class="language-c">Status gallo_gpio_get(const PicoDeGallo *gallo, uint8_t pin, bool *state);
 Status gallo_gpio_put(const PicoDeGallo *gallo, uint8_t pin, bool state);
@@ -4593,11 +4586,6 @@ never phrased as a chip-select complaint. A failed lookup is not cached,
 so retrying is allowed.</p>
 <p>A <code>cs_pin</code> outside <code>0..=255</code> raises <code>OverflowError</code> during PyO3 argument
 extraction, before the device is contacted.</p>
-<blockquote>
-<p><strong>Schema-freeze caveat.</strong> On this branch a successful <code>validate()</code> or
-<code>open_strict()</code> does not prove wire-<em>shape</em> compatibility: <code>DeviceInfo</code>
-changed while both host and firmware still report schema 0.6.1.</p>
-</blockquote>
 <h2 id="enums-and-value-types"><a class="header" href="#enums-and-value-types">Enums and Value Types</a></h2>
 <p>The public Python names intentionally do <strong>not</strong> carry a <code>Py</code> prefix. You use
 plain Python-facing names like:</p>
@@ -6458,17 +6446,6 @@ moves to the major version.</p>
 <li>change a request or response type,</li>
 <li>append a new wire enum variant.</li>
 </ul>
-<blockquote>
-<p><strong>Warning</strong> — schema freeze on the <code>zephyr</code> branch.
-This branch intentionally changes the shape of <code>SpiError</code> and <code>DeviceInfo</code>
-<strong>without</strong> changing the reported schema version. Mixed peers are therefore
-incompatible even when both sides report the same schema: a new host cannot
-decode an old eight-field <code>DeviceInfo</code>, while an old decoder accepts only the
-eight-field prefix of a new response. Because postcard-rpc response keys
-include the response schema, a mismatched peer may wait indefinitely rather
-than fail fast. This branch is not releasable or taggable until the
-maintainer performs the lockstep version bump required by AGENTS.md §6.5.</p>
-</blockquote>
 <h2 id="hostfirmware-compatibility-checks"><a class="header" href="#hostfirmware-compatibility-checks">Host/firmware compatibility checks</a></h2>
 <p>The host library exposes <code>PicoDeGallo::validate()</code>. It calls <code>device/info</code>,
 reads the firmware’s schema version, and rejects mismatches early.</p>
@@ -6477,9 +6454,19 @@ reads the firmware’s schema version, and rejects mismatches early.</p>
 <li><code>LegacyFirmware</code> when the firmware is too old to support <code>device/info</code>, or</li>
 <li><code>SchemaMismatch</code> when the host and firmware disagree on the schema version.</li>
 </ul>
-<p>For released components with honest schema versions, this turns an otherwise
-confusing runtime failure into an explicit compatibility error. It cannot detect
-the intentional schema freeze described above.</p>
+<p>This turns an otherwise confusing runtime failure into an explicit
+compatibility error.</p>
+<p>Validation compares reported <em>version numbers</em>. It is only as trustworthy as
+the discipline that keeps those numbers honest: a schema bump is what makes a
+shape change visible, which is why appending even a single wire enum variant
+requires one.</p>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>Call <code>validate()</code> before doing real work. A mismatched pair is not guaranteed
+to fail fast on its own: postcard-rpc response keys include the response
+schema, so a peer that disagrees about a response type may wait indefinitely
+rather than return an error.</p>
+</blockquote>
 <h2 id="lockstep-releases-for-protocol-changes"><a class="header" href="#lockstep-releases-for-protocol-changes">Lockstep releases for protocol changes</a></h2>
 <p>A wire change is never just one crate. Per the project rules, the same release
 cycle must update:</p>
@@ -6721,14 +6708,16 @@ understanding which pieces move together.</p>
 </div>
 <h2 id="what-drives-a-release"><a class="header" href="#what-drives-a-release">What drives a release?</a></h2>
 <p>Releases are <strong>manual</strong>. A maintainer bumps each crate’s
-<code>[package].version</code>, updates the cross-crate dependency specs and the
-<code>CHANGELOG.md</code>, merges to <code>main</code>, and then pushes one tag per component. The
-tag-triggered <code>release-*.yml</code> workflows publish to crates.io / PyPI and build
-the binary artifacts.</p>
+<code>[package].version</code>, updates the cross-crate dependency specs and each
+changed crate’s <code>crates/&lt;crate&gt;/CHANGELOG.md</code>, merges to <code>main</code>, and then
+pushes one tag per component. The tag-triggered <code>release-*.yml</code> workflows
+publish to crates.io / PyPI and build the binary artifacts.</p>
+<p>There is no root changelog. Every crate owns its own, and the Zephyr module
+uses <code>zephyr/CHANGELOG.md</code>.</p>
 <p>Contributors still land Conventional Commits with crate scopes such as
 <code>feat(internal): ...</code> or <code>fix(firmware): ...</code> — that scoped history is what a
-maintainer reads when hand-writing the CHANGELOG and deciding which crates to
-bump.</p>
+maintainer reads when hand-writing those changelogs and deciding which crates
+to bump.</p>
 <blockquote class="blockquote-tag blockquote-tag-tip">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>Tip</p>
 <p>The scope is not decoration. It tells the release author what changed in each
@@ -6754,16 +6743,17 @@ release cycle.</p>
 <p>Nothing enforces wire coupling for you. If a protocol change lands without its
 matching host and firmware version bumps, users will feel it.</p>
 </blockquote>
-<h3 id="pending-spi-chip-select-schema-change"><a class="header" href="#pending-spi-chip-select-schema-change">Pending SPI chip-select schema change</a></h3>
-<p>This branch appends <code>SpiError::{InvalidCsPin, CsPinUnavailable, CsPinMonitored}</code> and adds the final <code>DeviceInfo::num_gpios</code> field. Versions
-are intentionally unchanged because the maintainer performs the lockstep bump
-in a separate release commit. This branch must not be tagged or released until
-that bump lands.</p>
-<p><code>PicoDeGallo::validate()</code> cannot detect this mismatch: matching schema 0.6.1
-is not evidence of wire-shape compatibility on this branch. Do not mix
-branch-built and released components. Build the host and firmware from the
-same commit, or keep both on a published release. See the detailed
-<a href="#schema-versioning">schema-freeze warning</a>.</p>
+<h3 id="schema-07-is-on-main-but-not-yet-published"><a class="header" href="#schema-07-is-on-main-but-not-yet-published">Schema 0.7 is on <code>main</code> but not yet published</a></h3>
+<p><code>main</code> carries schema <strong>0.7</strong>: <code>SpiError</code> gained <code>InvalidCsPin</code>,
+<code>CsPinUnavailable</code>, and <code>CsPinMonitored</code>, <code>DeviceInfo</code> gained a final
+<code>num_gpios</code> field, and <code>I2cError</code> gained <code>ZeroLengthWrite</code>. The lockstep
+version bump for those changes has landed, so <code>pico-de-gallo-internal</code> reports
+0.7 honestly.</p>
+<p>The newest <em>published</em> release is still schema 0.6. That is a normal,
+detectable mismatch rather than a hazard: a host built from <code>main</code> and a
+released firmware disagree on the reported schema, so <code>validate()</code> returns
+<code>SchemaMismatch</code> and the two refuse to talk. Build both sides from the same
+commit, or keep both on a published release.</p>
 <h2 id="how-users-check-compatibility"><a class="header" href="#how-users-check-compatibility">How users check compatibility</a></h2>
 <p>There are two main compatibility checks:</p>
 <ul>
@@ -6774,11 +6764,6 @@ and capabilities.</li>
 </ul>
 <p>For most users, <code>gallo version</code> is the first stop. For library users,
 <code>validate()</code> is the guardrail you call before doing real work.</p>
-<blockquote>
-<p><strong>Warning.</strong> During the schema freeze described above, successful validation
-does not prove wire-shape compatibility. Matching reported versions can still
-identify incompatible branch-built and released components.</p>
-</blockquote>
 <h2 id="i-flashed-new-firmware-and-now-my-host-is-broken"><a class="header" href="#i-flashed-new-firmware-and-now-my-host-is-broken">“I flashed new firmware and now my host is broken”</a></h2>
 <p>That usually means the firmware and host were built against different versions
 of <code>pico-de-gallo-internal</code>.</p>
@@ -6794,7 +6779,7 @@ flashed, or downgrade the firmware to the host release you are using.</p>
 <p><strong>Warning.</strong> The protocol is typed, but a mismatched pair is not guaranteed to
 fail fast. Because postcard-rpc response keys include the response schema, a
 mismatched peer may wait indefinitely. See the
-<a href="#schema-versioning">wire-protocol warning</a>.</p>
+<a href="#hostfirmware-compatibility-checks">wire-protocol warning</a>.</p>
 </blockquote>
 <h2 id="msrv-and-release-hygiene"><a class="header" href="#msrv-and-release-hygiene">MSRV and release hygiene</a></h2>
 <p>The workspace tracks Rust 1.90 as its MSRV, and CI checks it explicitly. That
@@ -7073,9 +7058,7 @@ script holding a <code>PycoDeGallo</code>. Close it.</p>
 <p>The host library was built against a different
 <code>SCHEMA_VERSION_MINOR</code> than the running firmware. Re-flash the
 matching firmware release, or upgrade/downgrade the host crates
-to match. See <a href="#releases--compatibility">Releases &amp; Compatibility</a>.
-On the <code>zephyr</code> branch, matching schema 0.6.1 does not prove wire-shape
-compatibility; see the schema-freeze warning on that page.</p>
+to match. See <a href="#releases--compatibility">Releases &amp; Compatibility</a>.</p>
 <h3 id="legacyfirmware-status-code-64"><a class="header" href="#legacyfirmware-status-code-64"><code>LegacyFirmware</code> (status code −64)</a></h3>
 <p>The firmware is too old to answer <code>device/info</code>. Re-flash a
 recent firmware build.</p>

@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-28b25b14.js";
+            window.path_to_searchindex_js = "../searchindex-29a567ba.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -259,11 +259,6 @@ never phrased as a chip-select complaint. A failed lookup is not cached,
 so retrying is allowed.</p>
 <p>A <code>cs_pin</code> outside <code>0..=255</code> raises <code>OverflowError</code> during PyO3 argument
 extraction, before the device is contacted.</p>
-<blockquote>
-<p><strong>Schema-freeze caveat.</strong> On this branch a successful <code>validate()</code> or
-<code>open_strict()</code> does not prove wire-<em>shape</em> compatibility: <code>DeviceInfo</code>
-changed while both host and firmware still report schema 0.6.1.</p>
-</blockquote>
 <h2 id="enums-and-value-types"><a class="header" href="#enums-and-value-types">Enums and Value Types</a></h2>
 <p>The public Python names intentionally do <strong>not</strong> carry a <code>Py</code> prefix. You use
 plain Python-facing names like:</p>

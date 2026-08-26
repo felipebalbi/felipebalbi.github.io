@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-28b25b14.js";
+            window.path_to_searchindex_js = "../searchindex-29a567ba.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -460,11 +460,6 @@ write <code>*out_len = 0</code>, resolve the GPIO count, classify <code>cs_pin</
 the operation payloads, call the library once, then write outputs. A NULL
 <code>out_len</code> is therefore never dereferenced, and an invalid op <code>tag</code> or NULL
 <code>data</code> pointer is reported only after the device has been reached.</p>
-<blockquote>
-<p><strong>Schema-freeze caveat.</strong> On this branch a matching reported schema
-version does not prove wire-<em>shape</em> compatibility: <code>DeviceInfo</code> changed
-while both host and firmware still report 0.6.1.</p>
-</blockquote>
 <h3 id="gpio"><a class="header" href="#gpio">GPIO</a></h3>
 <pre><code class="language-c">Status gallo_gpio_get(const PicoDeGallo *gallo, uint8_t pin, bool *state);
 Status gallo_gpio_put(const PicoDeGallo *gallo, uint8_t pin, bool state);

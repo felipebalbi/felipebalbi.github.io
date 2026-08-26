@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-28b25b14.js";
+            window.path_to_searchindex_js = "../searchindex-29a567ba.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -201,14 +201,16 @@ understanding which pieces move together.</p>
 </div>
 <h2 id="what-drives-a-release"><a class="header" href="#what-drives-a-release">What drives a release?</a></h2>
 <p>Releases are <strong>manual</strong>. A maintainer bumps each crate’s
-<code>[package].version</code>, updates the cross-crate dependency specs and the
-<code>CHANGELOG.md</code>, merges to <code>main</code>, and then pushes one tag per component. The
-tag-triggered <code>release-*.yml</code> workflows publish to crates.io / PyPI and build
-the binary artifacts.</p>
+<code>[package].version</code>, updates the cross-crate dependency specs and each
+changed crate’s <code>crates/&lt;crate&gt;/CHANGELOG.md</code>, merges to <code>main</code>, and then
+pushes one tag per component. The tag-triggered <code>release-*.yml</code> workflows
+publish to crates.io / PyPI and build the binary artifacts.</p>
+<p>There is no root changelog. Every crate owns its own, and the Zephyr module
+uses <code>zephyr/CHANGELOG.md</code>.</p>
 <p>Contributors still land Conventional Commits with crate scopes such as
 <code>feat(internal): ...</code> or <code>fix(firmware): ...</code> — that scoped history is what a
-maintainer reads when hand-writing the CHANGELOG and deciding which crates to
-bump.</p>
+maintainer reads when hand-writing those changelogs and deciding which crates
+to bump.</p>
 <blockquote class="blockquote-tag blockquote-tag-tip">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>Tip</p>
 <p>The scope is not decoration. It tells the release author what changed in each
@@ -234,16 +236,17 @@ release cycle.</p>
 <p>Nothing enforces wire coupling for you. If a protocol change lands without its
 matching host and firmware version bumps, users will feel it.</p>
 </blockquote>
-<h3 id="pending-spi-chip-select-schema-change"><a class="header" href="#pending-spi-chip-select-schema-change">Pending SPI chip-select schema change</a></h3>
-<p>This branch appends <code>SpiError::{InvalidCsPin, CsPinUnavailable, CsPinMonitored}</code> and adds the final <code>DeviceInfo::num_gpios</code> field. Versions
-are intentionally unchanged because the maintainer performs the lockstep bump
-in a separate release commit. This branch must not be tagged or released until
-that bump lands.</p>
-<p><code>PicoDeGallo::validate()</code> cannot detect this mismatch: matching schema 0.6.1
-is not evidence of wire-shape compatibility on this branch. Do not mix
-branch-built and released components. Build the host and firmware from the
-same commit, or keep both on a published release. See the detailed
-<a href="./wire-protocol.html#schema-versioning">schema-freeze warning</a>.</p>
+<h3 id="schema-07-is-on-main-but-not-yet-published"><a class="header" href="#schema-07-is-on-main-but-not-yet-published">Schema 0.7 is on <code>main</code> but not yet published</a></h3>
+<p><code>main</code> carries schema <strong>0.7</strong>: <code>SpiError</code> gained <code>InvalidCsPin</code>,
+<code>CsPinUnavailable</code>, and <code>CsPinMonitored</code>, <code>DeviceInfo</code> gained a final
+<code>num_gpios</code> field, and <code>I2cError</code> gained <code>ZeroLengthWrite</code>. The lockstep
+version bump for those changes has landed, so <code>pico-de-gallo-internal</code> reports
+0.7 honestly.</p>
+<p>The newest <em>published</em> release is still schema 0.6. That is a normal,
+detectable mismatch rather than a hazard: a host built from <code>main</code> and a
+released firmware disagree on the reported schema, so <code>validate()</code> returns
+<code>SchemaMismatch</code> and the two refuse to talk. Build both sides from the same
+commit, or keep both on a published release.</p>
 <h2 id="how-users-check-compatibility"><a class="header" href="#how-users-check-compatibility">How users check compatibility</a></h2>
 <p>There are two main compatibility checks:</p>
 <ul>
@@ -254,11 +257,6 @@ and capabilities.</li>
 </ul>
 <p>For most users, <code>gallo version</code> is the first stop. For library users,
 <code>validate()</code> is the guardrail you call before doing real work.</p>
-<blockquote>
-<p><strong>Warning.</strong> During the schema freeze described above, successful validation
-does not prove wire-shape compatibility. Matching reported versions can still
-identify incompatible branch-built and released components.</p>
-</blockquote>
 <h2 id="i-flashed-new-firmware-and-now-my-host-is-broken"><a class="header" href="#i-flashed-new-firmware-and-now-my-host-is-broken">“I flashed new firmware and now my host is broken”</a></h2>
 <p>That usually means the firmware and host were built against different versions
 of <code>pico-de-gallo-internal</code>.</p>
@@ -274,7 +272,7 @@ flashed, or downgrade the firmware to the host release you are using.</p>
 <p><strong>Warning.</strong> The protocol is typed, but a mismatched pair is not guaranteed to
 fail fast. Because postcard-rpc response keys include the response schema, a
 mismatched peer may wait indefinitely. See the
-<a href="./wire-protocol.html#schema-versioning">wire-protocol warning</a>.</p>
+<a href="./wire-protocol.html#hostfirmware-compatibility-checks">wire-protocol warning</a>.</p>
 </blockquote>
 <h2 id="msrv-and-release-hygiene"><a class="header" href="#msrv-and-release-hygiene">MSRV and release hygiene</a></h2>
 <p>The workspace tracks Rust 1.90 as its MSRV, and CI checks it explicitly. That

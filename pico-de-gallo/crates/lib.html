@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-28b25b14.js";
+            window.path_to_searchindex_js = "../searchindex-29a567ba.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -309,13 +309,6 @@ layer, the request is simply still outstanding, so there is no transport
 error to carry. The bound is generous because firmware dispatch is serial
 and a legal maximum-length SPI batch can occupy it for about 275 seconds;
 the point is that the wait is finite, not that it is short.</p>
-<blockquote>
-<p><strong>Schema-freeze caveat.</strong> On this branch a successful <code>validate()</code> does
-not prove wire-<em>shape</em> compatibility: <code>DeviceInfo</code> changed while both
-host and firmware still report schema 0.6.1. Validation bounds how long
-you wait and checks the reported numbers; it cannot make those numbers
-trustworthy.</p>
-</blockquote>
 <pre class="playground"><code class="language-rust no_run">use pico_de_gallo_lib::PicoDeGallo;
 
 #[tokio::main]

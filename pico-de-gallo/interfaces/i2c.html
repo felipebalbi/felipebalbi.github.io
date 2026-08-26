@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-28b25b14.js";
+            window.path_to_searchindex_js = "../searchindex-29a567ba.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -365,11 +365,32 @@ side; FFI returns negative <code>Status</code> values:</p>
 <tr><td><code>BufferTooLong</code></td><td>Request exceeds firmware buffer limit</td></tr>
 <tr><td><code>AddressOutOfRange</code></td><td>Address outside the 7-bit range</td></tr>
 <tr><td><code>Other</code></td><td>Unspecified firmware error</td></tr>
+<tr><td><code>ZeroLengthWrite</code></td><td>Write requested with an empty payload</td></tr>
 </tbody>
 </table>
 </div>
 <p>The full status-code mapping for FFI lives in
-<a href="../appendix/status-codes.html"><code>appendix/status-codes.md</code></a>.</p>
+<a href="../appendix/status-codes.html"><code>appendix/status-codes.md</code></a>.
+<code>ZeroLengthWrite</code> maps to <code>InvalidArgument</code> (-5).</p>
+<h2 id="zero-length-writes-are-not-supported"><a class="header" href="#zero-length-writes-are-not-supported">Zero-Length Writes Are Not Supported</a></h2>
+<p>A write with an empty payload — the address-only <code>START + ADDR + STOP</code>
+probe that some I²C stacks use for bus scanning — is rejected by the
+firmware with <code>ZeroLengthWrite</code>. This applies to <code>i2c/write</code> and to any
+<code>Write</code> operation inside an <code>i2c/batch</code>; the batch is refused as a whole
+during validation, so no earlier operation in it reaches the bus.</p>
+<p>The restriction is a hardware limitation, not a firmware policy choice.
+The RP2040/RP2350 <code>DW_apb_i2c</code> block drives the address phase only as a
+side effect of pushing data into <code>IC_DATA_CMD</code>, so there is no way to
+emit an address without at least one payload byte. See
+<a href="https://github.com/rp-rs/rp-hal/issues/678">rp-rs/rp-hal#678</a> and
+<a href="https://github.com/embassy-rs/embassy/issues/4474">embassy-rs/embassy#4474</a>.</p>
+<p>To probe for a device, use a 1-byte read instead:</p>
+<pre><code class="language-bash">gallo i2c read --address 0x48 --count 1   # NoAcknowledge =&gt; absent
+gallo i2c scan                            # or scan the whole bus
+</code></pre>
+<p><code>i2c/scan</code> already probes this way. Note that a read probe is not
+semantically identical to a write probe: a write-only device may
+acknowledge its write address while refusing a read address.</p>
 
                     </main>
 

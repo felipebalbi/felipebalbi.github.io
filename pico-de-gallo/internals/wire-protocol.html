@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-28b25b14.js";
+            window.path_to_searchindex_js = "../searchindex-29a567ba.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -304,17 +304,6 @@ moves to the major version.</p>
 <li>change a request or response type,</li>
 <li>append a new wire enum variant.</li>
 </ul>
-<blockquote>
-<p><strong>Warning</strong> — schema freeze on the <code>zephyr</code> branch.
-This branch intentionally changes the shape of <code>SpiError</code> and <code>DeviceInfo</code>
-<strong>without</strong> changing the reported schema version. Mixed peers are therefore
-incompatible even when both sides report the same schema: a new host cannot
-decode an old eight-field <code>DeviceInfo</code>, while an old decoder accepts only the
-eight-field prefix of a new response. Because postcard-rpc response keys
-include the response schema, a mismatched peer may wait indefinitely rather
-than fail fast. This branch is not releasable or taggable until the
-maintainer performs the lockstep version bump required by AGENTS.md §6.5.</p>
-</blockquote>
 <h2 id="hostfirmware-compatibility-checks"><a class="header" href="#hostfirmware-compatibility-checks">Host/firmware compatibility checks</a></h2>
 <p>The host library exposes <code>PicoDeGallo::validate()</code>. It calls <code>device/info</code>,
 reads the firmware’s schema version, and rejects mismatches early.</p>
@@ -323,9 +312,19 @@ reads the firmware’s schema version, and rejects mismatches early.</p>
 <li><code>LegacyFirmware</code> when the firmware is too old to support <code>device/info</code>, or</li>
 <li><code>SchemaMismatch</code> when the host and firmware disagree on the schema version.</li>
 </ul>
-<p>For released components with honest schema versions, this turns an otherwise
-confusing runtime failure into an explicit compatibility error. It cannot detect
-the intentional schema freeze described above.</p>
+<p>This turns an otherwise confusing runtime failure into an explicit
+compatibility error.</p>
+<p>Validation compares reported <em>version numbers</em>. It is only as trustworthy as
+the discipline that keeps those numbers honest: a schema bump is what makes a
+shape change visible, which is why appending even a single wire enum variant
+requires one.</p>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>Call <code>validate()</code> before doing real work. A mismatched pair is not guaranteed
+to fail fast on its own: postcard-rpc response keys include the response
+schema, so a peer that disagrees about a response type may wait indefinitely
+rather than return an error.</p>
+</blockquote>
 <h2 id="lockstep-releases-for-protocol-changes"><a class="header" href="#lockstep-releases-for-protocol-changes">Lockstep releases for protocol changes</a></h2>
 <p>A wire change is never just one crate. Per the project rules, the same release
 cycle must update:</p>

@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-28b25b14.js";
+            window.path_to_searchindex_js = "../searchindex-29a567ba.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -338,9 +338,7 @@ device reports num_gpios=0; no SPI chip-select pin is available
 before doing anything else, and that validation supplies the count. If it
 fails — including a <code>device/info</code> timeout after 300 seconds — the error
 appears under <code>firmware validation failed</code>, never as an invalid
-chip-select. On this branch a successful validation still cannot prove
-wire-<em>shape</em> compatibility, because <code>DeviceInfo</code> changed while both peers
-report schema 0.6.1.</p>
+chip-select.</p>
 <p>See the <a href="../interfaces/spi.html">SPI chapter</a> and
 <a href="../interfaces/batching.html">Transaction Batching</a>.</p>
 <h3 id="gpio"><a class="header" href="#gpio"><code>gpio</code></a></h3>

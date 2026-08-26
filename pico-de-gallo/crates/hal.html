@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-28b25b14.js";
+            window.path_to_searchindex_js = "../searchindex-29a567ba.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -350,11 +350,6 @@ learn the valid range is a connectivity or compatibility problem, not an
 argument problem.</p>
 <p><code>num_gpios()</code> returns <code>HalInitError::Validate(_)</code> on failure, including
 <code>ValidateError::Timeout</code>. Failures are not cached, so retrying is fine.</p>
-<blockquote>
-<p><strong>Schema-freeze caveat.</strong> On this branch a successful validation does
-not prove wire-<em>shape</em> compatibility: <code>DeviceInfo</code> changed while both
-host and firmware still report schema 0.6.1.</p>
-</blockquote>
 <h2 id="when-to-reach-for-this-crate"><a class="header" href="#when-to-reach-for-this-crate">When to Reach for This Crate</a></h2>
 <p>Use <code>pico-de-gallo-hal</code> when you want to:</p>
 <ul>
