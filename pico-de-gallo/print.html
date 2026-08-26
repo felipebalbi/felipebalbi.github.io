@@ -38,7 +38,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-1a4931aa.js";
+            window.path_to_searchindex_js = "searchindex-3518afc8.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-2de855f1.js"></script>
@@ -1161,6 +1161,29 @@ probe that some I²C stacks use for bus scanning — is rejected by the
 firmware with <code>ZeroLengthWrite</code>. This applies to <code>i2c/write</code> and to any
 <code>Write</code> operation inside an <code>i2c/batch</code>; the batch is refused as a whole
 during validation, so no earlier operation in it reaches the bus.</p>
+<p>Every host surface also refuses it locally, before the request is
+transmitted, so the call fails immediately instead of spending a USB
+round-trip to be told no:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Surface</th><th>Refusal</th></tr>
+</thead>
+<tbody>
+<tr><td><code>pico-de-gallo-lib</code></td><td><code>PicoDeGalloError::Endpoint(I2cError::ZeroLengthWrite)</code></td></tr>
+<tr><td><code>pico-de-gallo-hal</code></td><td><code>I2cHalError::I2c(ZeroLengthWrite)</code>, whose <code>ErrorKind</code> is <code>Other</code></td></tr>
+<tr><td>C FFI</td><td><code>Status::InvalidArgument</code> (-5); for a batch, <code>*out_failed_op</code> names the operation</td></tr>
+<tr><td><code>pyco-de-gallo</code></td><td><code>RuntimeError</code> carrying the same message</td></tr>
+<tr><td><code>gallo-mcp</code></td><td>An invalid-argument error naming the offending operation</td></tr>
+<tr><td><code>gallo</code> CLI</td><td>Unreachable: the byte arguments require at least one value</td></tr>
+</tbody>
+</table>
+</div>
+<p>The local refusal returns the identical error the firmware would have
+returned, so callers need not distinguish the two.</p>
+<p>Note that <code>i2c/write-read</code> is <strong>not</strong> affected: an empty write phase
+there is legal, because that transfer does not terminate with a STOP.
+Probing with <code>i2c_write_read(addr, &amp;[], n)</code> works.</p>
 <p>The restriction is a hardware limitation, not a firmware policy choice.
 The RP2040/RP2350 <code>DW_apb_i2c</code> block drives the address phase only as a
 side effect of pushing data into <code>IC_DATA_CMD</code>, so there is no way to
@@ -4269,7 +4292,7 @@ name than a number — see <a href="#limits-and-configuration-enums">Limits and 
 <pre><code class="language-c">typedef struct GalloI2cBatchOp {
     uint8_t       tag;       // 0 = Read, 1 = Write
     uint16_t      read_len;  // Read variant
-    const uint8_t *data;     // Write variant (may be NULL when data_len == 0)
+    const uint8_t *data;     // Write variant (must be non-NULL; data_len &gt; 0)
     size_t        data_len;  // Write variant
 } GalloI2cBatchOp;
 
@@ -4285,6 +4308,12 @@ precede the first operation; adjacent operations of the same type are sent back
 to back with no STOP and no repeated START between them, so two adjacent Write
 ops form one gather write; a direction change emits a repeated START and
 re-addresses the target; and only the last operation is followed by a STOP.</p>
+<p>A <code>Write</code> op must carry at least one byte. <code>gallo_i2c_batch</code> rejects
+<code>data_len == 0</code> with <code>InvalidArgument</code> before contacting the device,
+writing the offending operation’s index to <code>*out_failed_op</code>. Likewise
+<code>gallo_i2c_write</code> rejects <code>len == 0</code>. This hardware cannot emit an
+address-only transaction — see
+<a href="#zero-length-writes-are-not-supported">Zero-length writes</a>.</p>
 <p>This requires firmware built from schema 0.7 or newer. Older firmware executes
 each operation as a separate transaction. Zero-length writes are rejected.</p>
 <p>Concatenated read data is written to <code>out_buf</code> and the total length to
