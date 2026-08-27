@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-1a42546b.js";
+            window.path_to_searchindex_js = "../searchindex-5b651d05.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -390,7 +390,9 @@ firmware with <code>ZeroLengthWrite</code>. This applies to <code>i2c/write</cod
 during validation, so no earlier operation in it reaches the bus.</p>
 <p>Every host surface also refuses it locally, before the request is
 transmitted, so the call fails immediately instead of spending a USB
-round-trip to be told no:</p>
+round-trip to be told no. The Zephyr module is not a host surface — it is
+an FFI consumer — but it refuses the same shape locally, and is listed
+here alongside them:</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -403,11 +405,13 @@ round-trip to be told no:</p>
 <tr><td><code>pyco-de-gallo</code></td><td><code>RuntimeError</code> carrying the same message</td></tr>
 <tr><td><code>gallo-mcp</code></td><td>An invalid-argument error naming the offending operation</td></tr>
 <tr><td><code>gallo</code> CLI</td><td>Unreachable: the byte arguments require at least one value</td></tr>
+<tr><td>Zephyr module</td><td><code>-ENOTSUP</code>; set <code>CONFIG_I2C_PICO_DE_GALLO_PROBE_WITH_READ</code> to substitute a 1-byte read instead. See <a href="https://github.com/OpenDevicePartnership/pico-de-gallo/blob/main/zephyr/README.md"><code>zephyr/README.md</code></a></td></tr>
 </tbody>
 </table>
 </div>
-<p>The local refusal returns the identical error the firmware would have
-returned, so callers need not distinguish the two.</p>
+<p>Except for the Zephyr opt-in, which substitutes a read rather than
+refusing, the local refusal returns the identical error the firmware
+would have returned, so callers need not distinguish the two.</p>
 <p>Note that <code>i2c/write-read</code> is <strong>not</strong> affected: an empty write phase
 there is legal, because that transfer does not terminate with a STOP.
 Probing with <code>i2c_write_read(addr, &amp;[], n)</code> works.</p>
