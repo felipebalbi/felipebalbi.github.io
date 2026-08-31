@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-5b651d05.js";
+            window.path_to_searchindex_js = "../searchindex-5114b3b9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -299,24 +299,32 @@ disambiguation.</p>
 <tr><th>Feature</th><th>Default</th><th>Board</th><th>Capabilities</th></tr>
 </thead>
 <tbody>
-<tr><td><code>hw-rev1</code></td><td>yes</td><td>v1.0</td><td>I<sup>2</sup>C, SPI, GPIO, PWM</td></tr>
-<tr><td><code>hw-rev2</code></td><td>no</td><td>v1.1+</td><td>I<sup>2</sup>C, SPI, UART, GPIO, PWM, ADC, 1-Wire</td></tr>
+<tr><td><code>hw-rev1</code></td><td>no — <strong>deprecated</strong></td><td>v1.0</td><td>I<sup>2</sup>C, SPI, GPIO, PWM</td></tr>
+<tr><td><code>hw-rev2</code></td><td>yes</td><td>v1.1+</td><td>I<sup>2</sup>C, SPI, UART, GPIO, PWM, ADC, 1-Wire</td></tr>
 </tbody>
 </table>
 </div>
 <p>On <code>hw-rev1</code>, unsupported peripherals return <code>Unsupported</code> instead of touching
 unrouted hardware.</p>
-<p>Build the two variants exactly as CI does:</p>
+<p><code>hw-rev1</code> is deprecated: it is no longer the default, <code>build.rs</code> emits a
+<code>cargo:warning</code> and <code>main()</code> logs a <code>defmt::warn!</code> at boot when it is enabled,
+and it <strong>will not be removed before 2031-09-01</strong>. It stays fully supported and
+built in CI until then. See
+<a href="../hardware/revisions.html">Revisions: v1.0 vs v1.1</a> for the user-facing policy.</p>
+<p>Build the two variants exactly as CI does — note that the <em>default</em>
+(no-flags) build is now <code>hw-rev2</code>:</p>
 <pre><code class="language-bash">cd crates/pico-de-gallo-firmware
 
+# hw-rev2 (default)
 cargo fmt --check
 cargo clippy --target thumbv8m.main-none-eabihf -- -D warnings
 cargo build --release --locked --target thumbv8m.main-none-eabihf
 
+# hw-rev1 (deprecated — must opt in explicitly)
 cargo clippy --target thumbv8m.main-none-eabihf \
-    --no-default-features --features hw-rev2 -- -D warnings
+    --no-default-features --features hw-rev1 -- -D warnings
 cargo build --release --locked --target thumbv8m.main-none-eabihf \
-    --no-default-features --features hw-rev2
+    --no-default-features --features hw-rev1
 </code></pre>
 <h2 id="peripheral-notes"><a class="header" href="#peripheral-notes">Peripheral notes</a></h2>
 <p>The RP2350 pin map matches the hardware docs in

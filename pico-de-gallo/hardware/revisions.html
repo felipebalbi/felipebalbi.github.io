@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-5b651d05.js";
+            window.path_to_searchindex_js = "../searchindex-5114b3b9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -190,9 +190,9 @@ planned. The revision determines two things:</p>
 <tr><th>Revision</th><th>Feature flag</th><th>Connector</th><th>Capabilities</th></tr>
 </thead>
 <tbody>
-<tr><td><strong>v1.0</strong></td><td><code>hw-rev1</code> (default)</td><td>7 separate pin headers</td><td>I²C, SPI, GPIO, PWM</td></tr>
-<tr><td><strong>v1.1</strong></td><td><code>hw-rev2</code></td><td>one keyed 2×12 shrouded header</td><td>I²C, SPI, UART, GPIO, PWM, ADC, 1-Wire</td></tr>
-<tr><td><strong>v2</strong> (future)</td><td><code>hw-rev2</code></td><td>2×12 shrouded header + level translators</td><td>same as v1.1, plus variable VREF rail</td></tr>
+<tr><td><strong>v1.0</strong></td><td><code>hw-rev1</code> (deprecated)</td><td>7 separate pin headers</td><td>I²C, SPI, GPIO, PWM</td></tr>
+<tr><td><strong>v1.1</strong></td><td><code>hw-rev2</code> (default)</td><td>one keyed 2×12 shrouded header</td><td>I²C, SPI, UART, GPIO, PWM, ADC, 1-Wire</td></tr>
+<tr><td><strong>v2</strong> (future)</td><td><code>hw-rev2</code> (default)</td><td>2×12 shrouded header + level translators</td><td>same as v1.1, plus variable VREF rail</td></tr>
 </tbody>
 </table>
 </div>
@@ -203,10 +203,34 @@ hardware. Flashing <code>hw-rev1</code> firmware onto a v1.1 board still
 gives you only the v1.0 capability set. Match the firmware to
 the board you actually have.</p>
 </blockquote>
+<h2 id="hw-rev1-is-deprecated"><a class="header" href="#hw-rev1-is-deprecated"><code>hw-rev1</code> Is Deprecated</a></h2>
+<p><code>hw-rev2</code> is the <strong>default</strong> firmware feature. Building the firmware
+with no feature flags produces a rev2 image:</p>
+<pre><code class="language-console">$ cargo build --release --target thumbv8m.main-none-eabihf
+</code></pre>
+<p><code>hw-rev1</code> is <strong>deprecated</strong> and must now be requested explicitly:</p>
+<pre><code class="language-console">$ cargo build --release --target thumbv8m.main-none-eabihf \
+    --no-default-features --features hw-rev1
+</code></pre>
+<p>Deprecated does not mean unsupported:</p>
+<ul>
+<li>rev1 boards keep working. <code>hw-rev1</code> is still built and linted in
+CI on every push, and <code>firmware-rev1.uf2</code> is still attached to
+every firmware release.</li>
+<li><strong>Removal will not happen before 2031-09-01.</strong> That is a floor —
+five years’ notice — not a commitment to remove on that date.</li>
+</ul>
+<p>Two signals fire when you enable it. The build script prints a
+<code>cargo:warning</code> naming the removal floor, and the firmware logs a
+<code>defmt::warn!</code> over RTT on every boot, so a rev1 image is
+identifiable from the device as well as from the build log.</p>
+<p>If you are fabricating a board today, fabricate v1.1 and use the
+default <code>hw-rev2</code> firmware.</p>
 <h2 id="which-one-should-i-pick"><a class="header" href="#which-one-should-i-pick">Which One Should I Pick?</a></h2>
 <ul>
-<li><strong>You only need I²C, SPI, GPIO, or PWM</strong> → v1.0 is fine and
-cheaper to fabricate.</li>
+<li><strong>You only need I²C, SPI, GPIO, or PWM</strong> → an existing v1.0 board
+is fine and keeps working, but <code>hw-rev1</code> is deprecated (see
+above); don’t fabricate a new one.</li>
 <li><strong>You need UART, ADC, or 1-Wire</strong> → you want v1.1 (or later).
 Calling an unsupported endpoint on v1.0 firmware returns
 <code>Unsupported</code>.</li>

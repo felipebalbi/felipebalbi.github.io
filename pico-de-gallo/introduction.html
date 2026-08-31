@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-5b651d05.js";
+            window.path_to_searchindex_js = "searchindex-5114b3b9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-2de855f1.js"></script>
@@ -226,13 +226,15 @@ opaque-pointer API.</li>
 <tr><th>Revision</th><th>Firmware feature</th><th>Connector</th><th>Capabilities</th></tr>
 </thead>
 <tbody>
-<tr><td><strong>v1.0</strong></td><td><code>hw-rev1</code></td><td>seven pin headers</td><td>I²C, SPI, GPIO, PWM</td></tr>
-<tr><td><strong>v1.1</strong></td><td><code>hw-rev2</code></td><td>one keyed 2×12 box</td><td>I²C, SPI, UART, GPIO, PWM, ADC, 1-Wire</td></tr>
-<tr><td>v2 (WIP)</td><td><code>hw-rev2</code></td><td>2×12 box + level Tx</td><td>same as v1.1, plus variable VREF</td></tr>
+<tr><td><strong>v1.0</strong></td><td><code>hw-rev1</code> (deprecated)</td><td>seven pin headers</td><td>I²C, SPI, GPIO, PWM</td></tr>
+<tr><td><strong>v1.1</strong></td><td><code>hw-rev2</code> (default)</td><td>one keyed 2×12 box</td><td>I²C, SPI, UART, GPIO, PWM, ADC, 1-Wire</td></tr>
+<tr><td>v2 (WIP)</td><td><code>hw-rev2</code> (default)</td><td>2×12 box + level Tx</td><td>same as v1.1, plus variable VREF</td></tr>
 </tbody>
 </table>
 </div>
-<p>You’ll want <strong>v1.1 or later</strong> if you need UART, ADC, or 1-Wire. See
+<p>You’ll want <strong>v1.1 or later</strong> if you need UART, ADC, or 1-Wire.
+<code>hw-rev2</code> is the default firmware feature; <code>hw-rev1</code> is deprecated
+but still supported, with removal no earlier than 2031-09-01. See
 <a href="./hardware/revisions.html">Revisions: v1.0 vs v1.1</a>.</p>
 <h2 id="how-to-read-this-book"><a class="header" href="#how-to-read-this-book">How to Read This Book</a></h2>
 <p>The book is laid out as six parts plus appendices:</p>

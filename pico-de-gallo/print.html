@@ -38,7 +38,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-5b651d05.js";
+            window.path_to_searchindex_js = "searchindex-5114b3b9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-2de855f1.js"></script>
@@ -227,13 +227,15 @@ opaque-pointer API.</li>
 <tr><th>Revision</th><th>Firmware feature</th><th>Connector</th><th>Capabilities</th></tr>
 </thead>
 <tbody>
-<tr><td><strong>v1.0</strong></td><td><code>hw-rev1</code></td><td>seven pin headers</td><td>I²C, SPI, GPIO, PWM</td></tr>
-<tr><td><strong>v1.1</strong></td><td><code>hw-rev2</code></td><td>one keyed 2×12 box</td><td>I²C, SPI, UART, GPIO, PWM, ADC, 1-Wire</td></tr>
-<tr><td>v2 (WIP)</td><td><code>hw-rev2</code></td><td>2×12 box + level Tx</td><td>same as v1.1, plus variable VREF</td></tr>
+<tr><td><strong>v1.0</strong></td><td><code>hw-rev1</code> (deprecated)</td><td>seven pin headers</td><td>I²C, SPI, GPIO, PWM</td></tr>
+<tr><td><strong>v1.1</strong></td><td><code>hw-rev2</code> (default)</td><td>one keyed 2×12 box</td><td>I²C, SPI, UART, GPIO, PWM, ADC, 1-Wire</td></tr>
+<tr><td>v2 (WIP)</td><td><code>hw-rev2</code> (default)</td><td>2×12 box + level Tx</td><td>same as v1.1, plus variable VREF</td></tr>
 </tbody>
 </table>
 </div>
-<p>You’ll want <strong>v1.1 or later</strong> if you need UART, ADC, or 1-Wire. See
+<p>You’ll want <strong>v1.1 or later</strong> if you need UART, ADC, or 1-Wire.
+<code>hw-rev2</code> is the default firmware feature; <code>hw-rev1</code> is deprecated
+but still supported, with removal no earlier than 2031-09-01. See
 <a href="#revisions-v10-vs-v11">Revisions: v1.0 vs v1.1</a>.</p>
 <h2 id="how-to-read-this-book"><a class="header" href="#how-to-read-this-book">How to Read This Book</a></h2>
 <p>The book is laid out as six parts plus appendices:</p>
@@ -360,9 +362,9 @@ planned. The revision determines two things:</p>
 <tr><th>Revision</th><th>Feature flag</th><th>Connector</th><th>Capabilities</th></tr>
 </thead>
 <tbody>
-<tr><td><strong>v1.0</strong></td><td><code>hw-rev1</code> (default)</td><td>7 separate pin headers</td><td>I²C, SPI, GPIO, PWM</td></tr>
-<tr><td><strong>v1.1</strong></td><td><code>hw-rev2</code></td><td>one keyed 2×12 shrouded header</td><td>I²C, SPI, UART, GPIO, PWM, ADC, 1-Wire</td></tr>
-<tr><td><strong>v2</strong> (future)</td><td><code>hw-rev2</code></td><td>2×12 shrouded header + level translators</td><td>same as v1.1, plus variable VREF rail</td></tr>
+<tr><td><strong>v1.0</strong></td><td><code>hw-rev1</code> (deprecated)</td><td>7 separate pin headers</td><td>I²C, SPI, GPIO, PWM</td></tr>
+<tr><td><strong>v1.1</strong></td><td><code>hw-rev2</code> (default)</td><td>one keyed 2×12 shrouded header</td><td>I²C, SPI, UART, GPIO, PWM, ADC, 1-Wire</td></tr>
+<tr><td><strong>v2</strong> (future)</td><td><code>hw-rev2</code> (default)</td><td>2×12 shrouded header + level translators</td><td>same as v1.1, plus variable VREF rail</td></tr>
 </tbody>
 </table>
 </div>
@@ -373,10 +375,34 @@ hardware. Flashing <code>hw-rev1</code> firmware onto a v1.1 board still
 gives you only the v1.0 capability set. Match the firmware to
 the board you actually have.</p>
 </blockquote>
+<h2 id="hw-rev1-is-deprecated"><a class="header" href="#hw-rev1-is-deprecated"><code>hw-rev1</code> Is Deprecated</a></h2>
+<p><code>hw-rev2</code> is the <strong>default</strong> firmware feature. Building the firmware
+with no feature flags produces a rev2 image:</p>
+<pre><code class="language-console">$ cargo build --release --target thumbv8m.main-none-eabihf
+</code></pre>
+<p><code>hw-rev1</code> is <strong>deprecated</strong> and must now be requested explicitly:</p>
+<pre><code class="language-console">$ cargo build --release --target thumbv8m.main-none-eabihf \
+    --no-default-features --features hw-rev1
+</code></pre>
+<p>Deprecated does not mean unsupported:</p>
+<ul>
+<li>rev1 boards keep working. <code>hw-rev1</code> is still built and linted in
+CI on every push, and <code>firmware-rev1.uf2</code> is still attached to
+every firmware release.</li>
+<li><strong>Removal will not happen before 2031-09-01.</strong> That is a floor —
+five years’ notice — not a commitment to remove on that date.</li>
+</ul>
+<p>Two signals fire when you enable it. The build script prints a
+<code>cargo:warning</code> naming the removal floor, and the firmware logs a
+<code>defmt::warn!</code> over RTT on every boot, so a rev1 image is
+identifiable from the device as well as from the build log.</p>
+<p>If you are fabricating a board today, fabricate v1.1 and use the
+default <code>hw-rev2</code> firmware.</p>
 <h2 id="which-one-should-i-pick"><a class="header" href="#which-one-should-i-pick">Which One Should I Pick?</a></h2>
 <ul>
-<li><strong>You only need I²C, SPI, GPIO, or PWM</strong> → v1.0 is fine and
-cheaper to fabricate.</li>
+<li><strong>You only need I²C, SPI, GPIO, or PWM</strong> → an existing v1.0 board
+is fine and keeps working, but <code>hw-rev1</code> is deprecated (see
+above); don’t fabricate a new one.</li>
 <li><strong>You need UART, ADC, or 1-Wire</strong> → you want v1.1 (or later).
 Calling an unsupported endpoint on v1.0 firmware returns
 <code>Unsupported</code>.</li>
@@ -654,8 +680,10 @@ cable.</p>
 page (look for a tag like <code>firmware-v0.8.0</code>). Pick the build
 that matches your board revision:
 <ul>
-<li><code>hw-rev1</code> for the v1.0 board</li>
-<li><code>hw-rev2</code> for the v1.1 board</li>
+<li><code>firmware-rev2.uf2</code> for the v1.1 board — this is the default</li>
+<li><code>firmware-rev1.uf2</code> for the v1.0 board — <code>hw-rev1</code> is
+<a href="#hw-rev1-is-deprecated">deprecated</a> but still
+built and published; removal not before 2031-09-01</li>
 </ul>
 </li>
 <li>With the Pico 2 <strong>unplugged</strong>, press and <strong>hold</strong> the <code>BOOTSEL</code>
@@ -6749,24 +6777,32 @@ disambiguation.</p>
 <tr><th>Feature</th><th>Default</th><th>Board</th><th>Capabilities</th></tr>
 </thead>
 <tbody>
-<tr><td><code>hw-rev1</code></td><td>yes</td><td>v1.0</td><td>I<sup>2</sup>C, SPI, GPIO, PWM</td></tr>
-<tr><td><code>hw-rev2</code></td><td>no</td><td>v1.1+</td><td>I<sup>2</sup>C, SPI, UART, GPIO, PWM, ADC, 1-Wire</td></tr>
+<tr><td><code>hw-rev1</code></td><td>no — <strong>deprecated</strong></td><td>v1.0</td><td>I<sup>2</sup>C, SPI, GPIO, PWM</td></tr>
+<tr><td><code>hw-rev2</code></td><td>yes</td><td>v1.1+</td><td>I<sup>2</sup>C, SPI, UART, GPIO, PWM, ADC, 1-Wire</td></tr>
 </tbody>
 </table>
 </div>
 <p>On <code>hw-rev1</code>, unsupported peripherals return <code>Unsupported</code> instead of touching
 unrouted hardware.</p>
-<p>Build the two variants exactly as CI does:</p>
+<p><code>hw-rev1</code> is deprecated: it is no longer the default, <code>build.rs</code> emits a
+<code>cargo:warning</code> and <code>main()</code> logs a <code>defmt::warn!</code> at boot when it is enabled,
+and it <strong>will not be removed before 2031-09-01</strong>. It stays fully supported and
+built in CI until then. See
+<a href="#revisions-v10-vs-v11">Revisions: v1.0 vs v1.1</a> for the user-facing policy.</p>
+<p>Build the two variants exactly as CI does — note that the <em>default</em>
+(no-flags) build is now <code>hw-rev2</code>:</p>
 <pre><code class="language-bash">cd crates/pico-de-gallo-firmware
 
+# hw-rev2 (default)
 cargo fmt --check
 cargo clippy --target thumbv8m.main-none-eabihf -- -D warnings
 cargo build --release --locked --target thumbv8m.main-none-eabihf
 
+# hw-rev1 (deprecated — must opt in explicitly)
 cargo clippy --target thumbv8m.main-none-eabihf \
-    --no-default-features --features hw-rev2 -- -D warnings
+    --no-default-features --features hw-rev1 -- -D warnings
 cargo build --release --locked --target thumbv8m.main-none-eabihf \
-    --no-default-features --features hw-rev2
+    --no-default-features --features hw-rev1
 </code></pre>
 <h2 id="peripheral-notes"><a class="header" href="#peripheral-notes">Peripheral notes</a></h2>
 <p>The RP2350 pin map matches the hardware docs in

@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-5b651d05.js";
+            window.path_to_searchindex_js = "../searchindex-5114b3b9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -241,8 +241,10 @@ cable.</p>
 page (look for a tag like <code>firmware-v0.8.0</code>). Pick the build
 that matches your board revision:
 <ul>
-<li><code>hw-rev1</code> for the v1.0 board</li>
-<li><code>hw-rev2</code> for the v1.1 board</li>
+<li><code>firmware-rev2.uf2</code> for the v1.1 board — this is the default</li>
+<li><code>firmware-rev1.uf2</code> for the v1.0 board — <code>hw-rev1</code> is
+<a href="./revisions.html#hw-rev1-is-deprecated">deprecated</a> but still
+built and published; removal not before 2031-09-01</li>
 </ul>
 </li>
 <li>With the Pico 2 <strong>unplugged</strong>, press and <strong>hold</strong> the <code>BOOTSEL</code>
