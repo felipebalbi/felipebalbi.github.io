@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-2691648d.js";
+            window.path_to_searchindex_js = "../searchindex-855faf92.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -297,13 +297,21 @@ reported by <code>device/info</code> instead.</p>
 <h2 id="identifying-your-board"><a class="header" href="#identifying-your-board">Identifying Your Board</a></h2>
 <p>The fastest way to tell what revision firmware you’re running:</p>
 <pre><code class="language-console">$ gallo version
-Pico de Gallo FW v0.8.0
-Schema v0.4.0
-HW revision 2
-Capabilities: I2C ✓ | SPI ✓ | UART ✓ | GPIO ✓ | PWM ✓ | ADC ✓ | 1-Wire ✓
+╭─────────────┬──────────────────────────────╮
+│ Firmware    │ v0.12.0                      │
+│ Schema      │ v0.8.0                       │
+│ HW revision │ 2                            │
+│ GPIOs       │ 4                            │
+│ Build       │ firmware-v0.12.0-42-g1a2b3c4 │
+╰─────────────┴──────────────────────────────╯
+╭─────┬─────┬──────┬──────┬─────┬─────┬────────╮
+│ I2C │ SPI │ UART │ GPIO │ PWM │ ADC │ 1-Wire │
+├─────┼─────┼──────┼──────┼─────┼─────┼────────┤
+│ ✓   │ ✓   │ ✓    │ ✓    │ ✓   │ ✓   │ ✓      │
+╰─────┴─────┴──────┴──────┴─────┴─────┴────────╯
 </code></pre>
-<p><code>HW revision 1</code> corresponds to <code>hw-rev1</code>; <code>HW revision 2</code> to
-<code>hw-rev2</code>. The capability line tells you exactly which peripherals
+<p><code>HW revision</code> 1 corresponds to <code>hw-rev1</code>; 2 corresponds to
+<code>hw-rev2</code>. The capability table tells you exactly which peripherals
 this firmware will serve.</p>
 <h2 id="migrating-from-v10-to-v11"><a class="header" href="#migrating-from-v10-to-v11">Migrating from v1.0 to v1.1</a></h2>
 <p>Code-wise, <strong>nothing changes</strong>. The wire protocol is the same; the

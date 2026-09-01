@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-2691648d.js";
+            window.path_to_searchindex_js = "../searchindex-855faf92.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -321,7 +321,12 @@ Status gallo_system_reset_subscriptions(const PicoDeGallo *gallo,
                                         uint8_t *out_reset);
 </code></pre>
 <p><code>gallo_get_device_info</code> returns firmware version, schema version, hardware
-revision, and a capability bitfield.</p>
+revision, a capability bitfield, and <code>build_id</code>, a NUL-terminated firmware
+identity in the final member of <code>GalloDeviceInfo</code>. The buffer size is
+<code>GALLO_BUILD_ID_LEN</code> (65 bytes: up to 64 bytes plus the terminator). The
+identity is informational and never affects the return status. Inspect <code>*info</code>,
+including its terminator, only after the function returns <code>Ok</code>; the output is
+not written on any error path.</p>
 <p><code>gallo_num_gpios</code> returns the GPIO count the connected device reports —
 the runtime-authoritative bound for a pin index and for the SPI chip
 select. It performs one <code>device/info</code> round-trip on first use, bounded at

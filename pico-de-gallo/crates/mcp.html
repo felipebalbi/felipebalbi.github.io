@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-2691648d.js";
+            window.path_to_searchindex_js = "../searchindex-855faf92.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -349,7 +349,8 @@ ambiguous:</p>
   "reason": "Multiple Pico de Gallo devices attached; `serial_number` is required.\nAvailable: 5256657D8A5D7F03, 568E9AAEC72B0D49",
   "firmware_version": null,
   "schema_major": null,
-  "schema_minor": null
+  "schema_minor": null,
+  "build_id": null
 }
 </code></pre>
 <p><code>ambiguous</code> answers “would a call that omits <code>serial_number</code> be
@@ -358,6 +359,12 @@ board attached, and when the server is pinned to a board that is not
 attached; <code>ambiguous</code> is <code>false</code> in both. It stays true even when this
 particular <code>status</code> call named a board. <code>reason</code> is present only when
 no board was reached.</p>
+<p>When <code>status</code> reaches a board, <code>build_id</code> contains that firmware image’s
+<code>git describe</code> identity; the key is always present and remains <code>null</code> before a
+connection succeeds. <code>device_info</code> returns the same identity. Each successful
+connection also logs the serial number, firmware version, and build identity at
+<code>info</code> level on stderr. The default filter enables that event; set <code>RUST_LOG</code>
+to override it.</p>
 <h2 id="concurrency"><a class="header" href="#concurrency">Concurrency</a></h2>
 <p>The connection lock is keyed on the <strong>board</strong>, not on the server. Calls
 to different boards run concurrently; calls to the same board queue. A
@@ -408,8 +415,8 @@ Every tool except <code>list_devices</code> accepts an optional <code>serial_num
 </thead>
 <tbody>
 <tr><td><code>list_devices</code></td><td>List connected Pico de Gallo boards</td></tr>
-<tr><td><code>status</code></td><td>Which board is reachable, why not when none is, plus firmware/schema version</td></tr>
-<tr><td><code>device_info</code></td><td>Firmware version, schema version, capabilities, runtime GPIO count</td></tr>
+<tr><td><code>status</code></td><td>Which board is reachable, why not when none is, plus firmware/schema/build identity</td></tr>
+<tr><td><code>device_info</code></td><td>Firmware version, schema version, capabilities, runtime GPIO count, build identity</td></tr>
 <tr><td><code>version</code></td><td>Firmware version</td></tr>
 <tr><td><code>ping</code></td><td>Echo a value (liveness check)</td></tr>
 </tbody>
@@ -613,9 +620,10 @@ TMP108 temperature sensor on I<sup>2</sup>C.</p>
   "ambiguous": false,
   "available": ["5256657D8A5D7F03"],
   "pinned": null,
-  "firmware_version": "0.10.1",
+  "firmware_version": "0.12.0",
   "schema_major": 0,
-  "schema_minor": 6
+  "schema_minor": 8,
+  "build_id": "firmware-v0.12.0"
 }
 </code></pre>
 <p><code>i2c_scan</code> finds the sensor at address <code>0x48</code>:</p>

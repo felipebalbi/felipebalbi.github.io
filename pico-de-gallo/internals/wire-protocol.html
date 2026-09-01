@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-2691648d.js";
+            window.path_to_searchindex_js = "../searchindex-855faf92.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -248,7 +248,7 @@ are push-style messages declared with <code>topics!</code>.</p>
 <tbody>
 <tr><td><code>ping</code></td><td>Echo test payload</td></tr>
 <tr><td><code>version</code></td><td>Report firmware version</td></tr>
-<tr><td><code>device/info</code></td><td>Report firmware/schema versions, hardware revision, capabilities, and the runtime GPIO count</td></tr>
+<tr><td><code>device/info</code></td><td>Report firmware/schema versions, hardware revision, capabilities, runtime GPIO count, and build identity</td></tr>
 <tr><td><code>i2c/read</code></td><td>Read from an I<sup>2</sup>C target</td></tr>
 <tr><td><code>spi/transfer</code></td><td>Full-duplex SPI transfer</td></tr>
 <tr><td><code>gpio/subscribe</code></td><td>Start GPIO event monitoring</td></tr>
@@ -304,6 +304,36 @@ this contract may instead reconfigure them.</li>
 SPI chip-select indices are <code>0..num_gpios</code>; when it is zero, no index is
 valid. It supersedes the compile-time <code>NUM_GPIOS</code> default and must never be
 synthesized or defaulted when <code>device/info</code> decoding fails.</p>
+<h3 id="build-identity"><a class="header" href="#build-identity">Build identity</a></h3>
+<p><code>DeviceInfo::build_id</code> carries the firmware’s
+<code>git describe --always --dirty --tags --match firmware-v*</code> output, captured
+when the firmware was built, or <code>"unknown"</code> when git was unavailable. A
+trailing <code>-dirty</code> means the image was built from a modified working tree.</p>
+<p>It is <strong>informational only and never a compatibility gate.</strong> <code>validate()</code>
+deliberately ignores it.</p>
+<p>The two fields answer different questions, and conflating them would be a
+mistake in both directions:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Question</th><th>Field</th></tr>
+</thead>
+<tbody>
+<tr><td><em>Can we talk?</em></td><td><code>schema_major</code> / <code>schema_minor</code></td></tr>
+<tr><td><em>Are you the build I think you are?</em></td><td><code>build_id</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>The schema version is derived from <code>pico-de-gallo-internal</code>’s package version,
+so it moves when the wire <strong>types</strong> change. Firmware behaviour can change while
+the types do not — <code>i2c/batch</code> moved from per-operation START/STOP to a single
+transaction inside an unchanged schema 0.7 — and bumping the schema version for
+such a change would falsely signal a wire-format break. <code>build_id</code> covers that
+gap without disturbing the compatibility axis.</p>
+<p>The field is a <code>heapless::String&lt;BUILD_ID_CAPACITY&gt;</code> (64 bytes), encoded by
+postcard as a plain varint-length string, so an empty value costs one byte.
+Decoding an over-long string fails rather than truncating; the firmware build
+script truncates.</p>
 <h2 id="schema-versioning"><a class="header" href="#schema-versioning">Schema versioning</a></h2>
 <p>The schema version constants are not handwritten. <code>pico-de-gallo-internal</code>
 generates <code>SCHEMA_VERSION_MAJOR</code>, <code>SCHEMA_VERSION_MINOR</code>, and

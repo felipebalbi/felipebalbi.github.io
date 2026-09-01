@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-2691648d.js";
+            window.path_to_searchindex_js = "../searchindex-855faf92.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -236,17 +236,26 @@ release cycle.</p>
 <p>Nothing enforces wire coupling for you. If a protocol change lands without its
 matching host and firmware version bumps, users will feel it.</p>
 </blockquote>
-<h3 id="schema-07-is-on-main-but-not-yet-published"><a class="header" href="#schema-07-is-on-main-but-not-yet-published">Schema 0.7 is on <code>main</code> but not yet published</a></h3>
-<p><code>main</code> carries schema <strong>0.7</strong>: <code>SpiError</code> gained <code>InvalidCsPin</code>,
-<code>CsPinUnavailable</code>, and <code>CsPinMonitored</code>, <code>DeviceInfo</code> gained a final
-<code>num_gpios</code> field, and <code>I2cError</code> gained <code>ZeroLengthWrite</code>. The lockstep
-version bump for those changes has landed, so <code>pico-de-gallo-internal</code> reports
-0.7 honestly.</p>
-<p>The newest <em>published</em> release is still schema 0.6. That is a normal,
-detectable mismatch rather than a hazard: a host built from <code>main</code> and a
-released firmware disagree on the reported schema, so <code>validate()</code> returns
-<code>SchemaMismatch</code> and the two refuse to talk. Build both sides from the same
-commit, or keep both on a published release.</p>
+<h3 id="schema-08-changed-deviceinfo-so-07-pairs-fail-opaquely"><a class="header" href="#schema-08-changed-deviceinfo-so-07-pairs-fail-opaquely">Schema 0.8 changed <code>DeviceInfo</code>, so 0.7 pairs fail opaquely</a></h3>
+<p>Schema <strong>0.8</strong> appended <code>build_id</code> to <code>DeviceInfo</code>. That is an append in the
+encoding, but <code>DeviceInfo</code> is not an ordinary wire type: postcard-rpc derives
+each endpoint’s key from its response type’s schema, so changing it re-keyed
+<code>device/info</code> itself.</p>
+<p>The consequence is that a schema 0.8 host and schema 0.7 firmware — or the
+reverse — cannot diagnose each other. The peer replies under the other key,
+the dispatcher drops the unmatched frame, and <code>validate()</code> returns <code>Timeout</code>
+rather than <code>SchemaMismatch</code>. The schema numbers that would have named the
+problem are inside the message that was dropped, and no version bump can
+surface them, because the version is payload rather than key.</p>
+<p>So this particular boundary does <strong>not</strong> produce the normal, self-describing
+failure documented below. It looks exactly like an unresponsive board. If
+<code>gallo</code> hangs or times out against a board you believe is healthy, suspect a
+0.7/0.8 skew before you suspect the hardware.</p>
+<p><code>gallo version</code> still works across the pair and is the tool to reach for: it
+reads the <code>version</code> endpoint, whose <code>VersionInfo</code> schema is deliberately held
+stable precisely so one diagnostic survives a <code>device/info</code> re-key.</p>
+<p>The fix is the usual one — build both sides from the same release. Schema 0.7
+and 0.8 firmware and host components must not be mixed.</p>
 <h2 id="how-users-check-compatibility"><a class="header" href="#how-users-check-compatibility">How users check compatibility</a></h2>
 <p>There are two main compatibility checks:</p>
 <ul>

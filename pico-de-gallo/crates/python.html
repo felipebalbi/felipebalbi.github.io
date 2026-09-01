@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-2691648d.js";
+            window.path_to_searchindex_js = "../searchindex-855faf92.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -237,7 +237,13 @@ print(pg.ping(123))
 print(pg.version().major, pg.version().minor, pg.version().patch)
 print(pg.device_info().hw_version)
 print(pg.device_info().num_gpios)
+print(pg.device_info().build_id)
 </code></pre>
+<p><code>DeviceInfo.build_id</code> is the firmware’s build-time <code>git describe</code> identity, or
+<code>"unknown"</code> when git was unavailable. A trailing <code>-dirty</code> identifies a build
+from a modified working tree. It is informational only and never controls
+whether validation or another call succeeds; record it when reproducing a
+result from a particular firmware image.</p>
 <h2 id="gpio-count-and-the-spi-chip-select"><a class="header" href="#gpio-count-and-the-spi-chip-select">GPIO count and the SPI chip select</a></h2>
 <p><code>DeviceInfo.num_gpios</code> and <code>PycoDeGallo.num_gpios()</code> both report the GPIO
 count the connected board advertises. That is the runtime-authoritative

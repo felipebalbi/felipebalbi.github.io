@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-2691648d.js";
+            window.path_to_searchindex_js = "../searchindex-855faf92.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -212,6 +212,38 @@ handler deadlock.</p>
 <p><code>pause_on_debug(true)</code> is set so an attached debugger session does not
 reset the chip while you single-step. The watchdog is the same on both
 <code>hw-rev1</code> and <code>hw-rev2</code> (no rev-specific code).</p>
+<h3 id="build-identity"><a class="header" href="#build-identity">Build identity</a></h3>
+<p><code>crates/pico-de-gallo-firmware/build.rs</code> runs</p>
+<pre><code class="language-text">git describe --always --dirty --tags --match firmware-v*
+</code></pre>
+<p>and emits the result as a <code>BUILD_ID</code> constant, which <code>main()</code> logs at boot over
+<code>defmt</code> and the <code>device/info</code> handler returns.</p>
+<p>Every flag matters, and each has a <em>silent</em> failure mode:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Flag</th><th>Removing it causes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>--tags</code></td><td>The <code>firmware-v*</code> tags are a mix of annotated and lightweight. Without this, <code>git describe</code> sees only annotated tags and resolves hundreds of commits too far back.</td></tr>
+<tr><td><code>--match firmware-v*</code></td><td>Describe picks the nearest tag in any namespace, returning an <code>application-v*</code> description.</td></tr>
+<tr><td><code>--always</code></td><td>Describe fails outright when no matching tag is reachable, e.g. in a shallow CI clone.</td></tr>
+<tr><td><code>--dirty</code></td><td>The locally-modified marker is lost — the single most useful part for a developer mid-bisect.</td></tr>
+</tbody>
+</table>
+</div>
+<p>When git is unavailable, exits non-zero, or there is no repository, the script
+emits <code>"unknown"</code> and a <code>cargo:warning</code>. The build still succeeds, so a source
+tarball remains buildable. Values longer than 64 bytes are truncated on a
+UTF-8 character boundary.</p>
+<p>The script re-runs on <strong>every</strong> build, by design. The pre-existing
+<code>rerun-if-changed=memory.x</code> narrows re-runs to a single file, so without an
+unconditional trigger the embedded identity would go stale across incremental
+builds and keep reporting a clean tree for a dirty one. A stale identity is
+worse than none, because it confirms a wrong conclusion rather than merely
+failing to prevent one.</p>
+<p>Release workflows must fetch tags (<code>fetch-depth: 0</code>), or <code>git describe</code>
+degrades to a bare commit hash.</p>
 <h2 id="usb-descriptors"><a class="header" href="#usb-descriptors">USB descriptors</a></h2>
 <p>The device enumerates as VID <code>045e</code> / PID <code>067d</code> with
 <code>bDeviceClass = 0xFF</code> (vendor-specific), so no OS class driver claims

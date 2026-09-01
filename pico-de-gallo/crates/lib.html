@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-2691648d.js";
+            window.path_to_searchindex_js = "../searchindex-855faf92.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -301,7 +301,10 @@ against the host library’s compiled-in schema version from
 against different wire schemas, <code>validate()</code> fails instead of letting you debug
 mysterious decoding problems later.</p>
 <p><code>validate()</code> returns the <code>DeviceInfo</code> on success, so you can immediately inspect
-firmware version, hardware revision, and capability bits.</p>
+firmware version, hardware revision, capability bits, and the informational
+firmware identity through <code>DeviceInfo::build_id()</code>. The build identity answers
+which image is running, but <code>validate()</code> deliberately ignores it: only schema
+major/minor compatibility determines whether validation succeeds.</p>
 <p>The <code>device/info</code> round-trip is bounded at <strong>300 seconds</strong>. On expiry
 <code>validate()</code> returns <code>ValidateError::Timeout</code>, which is deliberately
 distinct from <code>ValidateError::Comms</code>: nothing failed at the transport
@@ -439,7 +442,7 @@ host already has a buffer waiting when the first edge arrives.</p>
 <tr><td><code>gpio_subscribe</code></td><td><code>pin</code>, <code>edge</code></td><td>Ask firmware to monitor a pin for edge events</td></tr>
 <tr><td><code>gpio_unsubscribe</code></td><td><code>pin</code></td><td>Stop firmware-side monitoring</td></tr>
 <tr><td><code>version</code></td><td>—</td><td>Read the firmware version</td></tr>
-<tr><td><code>device_info</code></td><td>—</td><td>Read firmware version, schema version, HW revision, capabilities, and runtime GPIO count</td></tr>
+<tr><td><code>device_info</code></td><td>—</td><td>Read firmware version, schema version, HW revision, capabilities, runtime GPIO count, and build identity</td></tr>
 <tr><td><code>validate</code></td><td>—</td><td>Perform a strict schema compatibility check and return <code>DeviceInfo</code></td></tr>
 <tr><td><code>num_gpios</code></td><td>—</td><td>Read the device-reported GPIO count; validates lazily on the first call, then caches</td></tr>
 <tr><td><code>pwm_set_duty_cycle</code></td><td><code>channel</code>, <code>duty</code></td><td>Set a raw PWM duty-cycle value</td></tr>

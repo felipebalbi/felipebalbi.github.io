@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-2691648d.js";
+            window.path_to_searchindex_js = "../searchindex-855faf92.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -210,6 +210,24 @@ to match. See <a href="../internals/releases.html">Releases &amp; Compatibility<
 <h3 id="legacyfirmware-status-code-64"><a class="header" href="#legacyfirmware-status-code-64"><code>LegacyFirmware</code> (status code −64)</a></h3>
 <p>The firmware is too old to answer <code>device/info</code>. Re-flash a
 recent firmware build.</p>
+<h3 id="deviceinfotimeout-status-code-75"><a class="header" href="#deviceinfotimeout-status-code-75"><code>DeviceInfoTimeout</code> (status code −75)</a></h3>
+<p><code>device/info</code> produced no answer within the 300-second bound. The
+obvious cause is a board that stopped responding, but it is not the
+only one, and the host cannot tell them apart.</p>
+<p>postcard-rpc derives every endpoint’s key from the <em>schema of its
+response type</em>. Changing the shape of <code>DeviceInfo</code> — adding, removing,
+renaming, or retyping a field — therefore changes the <code>device/info</code>
+key. If the host and the firmware were built from different trees, the
+firmware answers under the other side’s key, the receiving dispatcher
+finds no match, and the frame is dropped without ever being decoded.
+No error is raised, because nothing failed; the call simply never
+completes. Retrying or replugging cannot help, since the mismatch is
+fixed at compile time.</p>
+<p>If you are running a development build of either side, rebuild both
+from the same tree. <code>gallo version</code> still works in this situation: it
+bounds <code>device/info</code> at five seconds and then falls back to the legacy
+<code>version</code> endpoint, whose response type is unchanged and therefore
+still matches.</p>
 <h2 id="peripheral-errors"><a class="header" href="#peripheral-errors">Peripheral Errors</a></h2>
 <h3 id="unsupported-status-code-65"><a class="header" href="#unsupported-status-code-65"><code>Unsupported</code> (status code −65)</a></h3>
 <p>The peripheral exists in the protocol but isn’’t wired on this
@@ -231,7 +249,7 @@ it before using the pin as chip-select.</p>
 <h3 id="spinogpios-status-code-74"><a class="header" href="#spinogpios-status-code-74"><code>SpiNoGpios</code> (status code −74)</a></h3>
 <p>The device reports zero user GPIOs, so no firmware-managed SPI chip-select is
 available. Use a device or firmware build that exposes user GPIOs.</p>
-<h3 id="deviceinfotimeout-status-code-75"><a class="header" href="#deviceinfotimeout-status-code-75"><code>DeviceInfoTimeout</code> (status code −75)</a></h3>
+<h3 id="deviceinfotimeout-status-code-75-1"><a class="header" href="#deviceinfotimeout-status-code-75-1"><code>DeviceInfoTimeout</code> (status code −75)</a></h3>
 <p>The <code>device/info</code> query did not complete within 300 seconds. Check the USB
 connection and peer compatibility before retrying.</p>
 <h3 id="i²c-nack-18"><a class="header" href="#i²c-nack-18">I²C <code>Nack</code> (−18)</a></h3>
