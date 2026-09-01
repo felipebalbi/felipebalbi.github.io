@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-5114b3b9.js";
+            window.path_to_searchindex_js = "../searchindex-2691648d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -433,7 +433,8 @@ from the request, so no framing is needed in the response.</p>
 <tbody>
 <tr><td>Maximum operations per batch</td><td>64 (<code>MAX_BATCH_OPS</code>)</td></tr>
 <tr><td>Protocol packet-buffer/argument bound</td><td>4096 bytes (<code>MAX_TRANSFER_SIZE</code>)</td></tr>
-<tr><td>Demonstrated end-to-end payload</td><td>Shape-dependent and below 4096; no general ceiling is published</td></tr>
+<tr><td>Direct I²C RPC measurements</td><td>Read: 1014 bytes after a 1-byte write; write: no failure through 4096 bytes</td></tr>
+<tr><td>Demonstrated SPI payload</td><td>Shape-dependent and below 4096; no general ceiling is published</td></tr>
 <tr><td>Zero-length I²C writes</td><td>Rejected with <code>ZeroLengthWrite</code> before bus access</td></tr>
 </tbody>
 </table>
@@ -444,7 +445,9 @@ exact zero-indexed operation; an I<sup>2</sup>C bus failure applies to the
 atomic transaction as a whole and reports operation index 0.</p>
 <p><code>MAX_TRANSFER_SIZE</code> is a buffer and argument bound, not a guarantee that 4096
 bytes of application data fit through postcard-rpc and COBS framing. Request
-shape and response size both matter. See the measured SPI evidence in
+shape and response size both matter. The I²C measurements used the direct
+<code>i2c/write</code> and <code>i2c/write-read</code> RPCs; <code>i2c/batch</code> was not measured. See the
+measured I²C and SPI evidence in
 <a href="../appendix/troubleshooting.html#buffertoolong-22">Troubleshooting</a>.</p>
 
                     </main>

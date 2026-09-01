@@ -38,7 +38,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-5114b3b9.js";
+            window.path_to_searchindex_js = "searchindex-2691648d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-2de855f1.js"></script>
@@ -1087,6 +1087,32 @@ Read data (2 bytes):
   0000: 19 80                                              ..
 </code></pre>
 <p>See <a href="#transaction-batching">Transaction Batching</a> for the full mechanism.</p>
+<h2 id="measured-transfer-limits"><a class="header" href="#measured-transfer-limits">Measured Transfer Limits</a></h2>
+<p>On the measured schema-0.7 setup, an I²C read of <strong>1014 bytes</strong> after a
+one-byte write returned exactly the requested length. The 1015-byte probe
+failed in about 99 ms; larger tested lengths returned the same host-side
+response decode error, <code>Postcard(DeserializeUnexpectedEnd)</code>, with increasing
+latency, reaching 391 ms at 4096. No truncation was found at the checked lengths
+of 1, 64, 256, 512, 1000, 1013 and 1014 bytes.</p>
+<p>No failing write request length was observed through <strong>4096 bytes</strong>. Every probe
+crossed USB intact, was decoded, initiated a bus transaction and returned the
+expected address NACK. The target address was unpopulated, so no payload byte
+was clocked: this verifies request framing at 4096, not successful bus-level
+clocking of a 4096-byte payload. The probe could go no higher because 4096 is
+the wire-representable <code>MAX_TRANSFER_SIZE</code>.</p>
+<p>No hang was found at any tested I²C length, but that does not prove that no I²C
+hang window exists. The combined write/read frontier also remains unmeasured
+beyond a one-byte write, because the available TMP102 rejects longer writes.
+Treating the read and write bounds as independent is an <strong>inference from
+mechanism, not measurement</strong>: a shared roughly 1015-byte framing budget is hard
+to reconcile with a 4096-byte write request being delivered, decoded and
+initiating a bus transaction, while the observed failure occurs during response
+decoding and write data travels in the request.</p>
+<p>The Zephyr driver contains these observations locally by rejecting reads above
+1014 bytes and writes above 4096 bytes with <code>-EMSGSIZE</code>. This containment does
+not protect the <code>gallo</code> CLI, Rust library, C FFI, Python bindings, or MCP tools;
+those callers can still request larger reads and encounter the response decode
+error. See <a href="#buffertoolong-22">troubleshooting</a>.</p>
 <h2 id="rust-library"><a class="header" href="#rust-library">Rust Library</a></h2>
 <p>All <code>PicoDeGallo</code> methods are <code>async</code>. <code>PicoDeGallo::new()</code> is
 <strong>not</strong> async.</p>
@@ -3264,7 +3290,8 @@ from the request, so no framing is needed in the response.</p>
 <tbody>
 <tr><td>Maximum operations per batch</td><td>64 (<code>MAX_BATCH_OPS</code>)</td></tr>
 <tr><td>Protocol packet-buffer/argument bound</td><td>4096 bytes (<code>MAX_TRANSFER_SIZE</code>)</td></tr>
-<tr><td>Demonstrated end-to-end payload</td><td>Shape-dependent and below 4096; no general ceiling is published</td></tr>
+<tr><td>Direct I²C RPC measurements</td><td>Read: 1014 bytes after a 1-byte write; write: no failure through 4096 bytes</td></tr>
+<tr><td>Demonstrated SPI payload</td><td>Shape-dependent and below 4096; no general ceiling is published</td></tr>
 <tr><td>Zero-length I²C writes</td><td>Rejected with <code>ZeroLengthWrite</code> before bus access</td></tr>
 </tbody>
 </table>
@@ -3275,7 +3302,9 @@ exact zero-indexed operation; an I<sup>2</sup>C bus failure applies to the
 atomic transaction as a whole and reports operation index 0.</p>
 <p><code>MAX_TRANSFER_SIZE</code> is a buffer and argument bound, not a guarantee that 4096
 bytes of application data fit through postcard-rpc and COBS framing. Request
-shape and response size both matter. See the measured SPI evidence in
+shape and response size both matter. The I²C measurements used the direct
+<code>i2c/write</code> and <code>i2c/write-read</code> RPCs; <code>i2c/batch</code> was not measured. See the
+measured I²C and SPI evidence in
 <a href="#buffertoolong-22">Troubleshooting</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="crate-map"><a class="header" href="#crate-map">Crate Map</a></h1>
@@ -7312,6 +7341,22 @@ frame.</li>
 tests, 4096-byte TX-only and 3072-byte full-duplex requests passed their local
 checks, reached the transport, and failed <code>-ECOMM</code>.</li>
 </ul>
+<p>I²C has separate measured results. A read of 1014 bytes after a one-byte write
+returned exactly 1014 bytes; the tested lengths at and above 1015 returned the
+host-side response decode error <code>Postcard(DeserializeUnexpectedEnd)</code> rather
+than wedging the dispatcher. No failing write request length was observed
+through 4096 bytes: each request crossed USB intact, was decoded, initiated a
+bus transaction and returned the expected address NACK. Because the address was
+unpopulated, no payload byte was clocked. This verifies request framing at 4096,
+not successful bus-level clocking of a 4096-byte payload. No I²C hang was found
+in the tested range, but that does not prove none exists.</p>
+<p>Only the one-byte-write row of the I²C write/read frontier was measured. The
+available target rejected longer writes. Reading the 1014-byte read edge and
+the 4096-byte request-framing result as independent per-direction limits is an
+<strong>inference from mechanism, not measurement</strong>: a shared roughly 1015-byte
+framing budget is hard to reconcile with a 4096-byte write request being
+delivered, decoded and initiating a bus transaction, while the read failure is
+in response decoding and write data travels in the request.</p>
 <p>Split larger transfers. Batch operations still occupy one framed request and
 response; batching does not make an otherwise undeliverable aggregate fit.</p>
 <p>The Zephyr SPI driver rejects clocked lengths above 1013 bytes. That is
@@ -7320,7 +7365,12 @@ containment, not a duplex-capacity guarantee: TX-only 1013 succeeded, TX-only
 512, failed at 3072, and was not tested from 513 through 1013. Applications
 needing a documented-safe duplex size must use 512 bytes or less. Do not infer
 1013-byte duplex support from <code>PDG_SPI_MAX_BUFFER</code>.</p>
-<p>The Zephyr limit does not protect CLI, Rust, C, Python, or MCP callers. In the
+<p>The Zephyr I²C driver similarly rejects reads above 1014 bytes and writes above
+4096 bytes. Unlike SPI’s 1015-byte dispatcher wedge, exceeding the measured I²C
+read edge produced a clean error. The 4096-byte write limit is still only the
+largest representable request-framing value tested, not a demonstrated
+bus-payload length or a measured ceiling.</p>
+<p>These Zephyr limits do not protect CLI, Rust, C, Python, or MCP callers. In the
 reproduced SPI tests the device resumed after USB re-enumeration (<code>usbipd detach</code>/attach on Windows/WSL). This is an observation, not proof that detach
 cancels the handler. On Linux/macOS reconnect the cable or use USB
 unbind/rebind; power-cycle if unavailable or ineffective.
