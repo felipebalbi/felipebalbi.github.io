@@ -131,9 +131,8 @@ That is the whole post. The rest is one driver.
 
 ## The other half: where to put the small things
 
-[Gary Bernhardt's "Functional Core, Imperative Shell"][gary] answers
-the question Sandi's talk leaves open, which is *where the small
-things go*.
+Gary Bernhardt's [Boundaries][gary] answers the question Sandi's
+talk leaves open, which is *where the small things go*.
 
 His split: a **functional core** of pure functions --- values in,
 values out, no I/O, many code paths, no dependencies --- wrapped in a
