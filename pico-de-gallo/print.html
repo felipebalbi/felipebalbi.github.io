@@ -38,10 +38,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-391f3414.js";
+            window.path_to_searchindex_js = "searchindex-5c94e1f4.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-2de855f1.js"></script>
+        <script src="toc-3e975730.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -5413,7 +5413,7 @@ where a real driver gets its shape.</p>
 practice:</p>
 <ol>
 <li><a href="#exploring-with-gallo">Explore the device with <code>gallo</code></a></li>
-<li><a href="#scaffolding-the-crate">Scaffold a normal Rust crate</a></li>
+<li><a href="#scaffolding-the-crate">Scaffold the crate with the drive-rs template</a></li>
 <li><a href="#describe-the-device-for-code-generation">Describe the register map for code generation</a></li>
 <li><a href="#implementing-registerinterface-and-asyncregisterinterface">Bridge the generated code to <code>embedded-hal</code></a></li>
 <li><a href="#make-invalid-states-unrepresentable">Build an ergonomic public API</a></li>
@@ -5577,246 +5577,320 @@ register selection, and conversion math all line up with the datasheet.</p>
 register map into code.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="scaffolding-the-crate"><a class="header" href="#scaffolding-the-crate">Scaffolding the crate</a></h1>
-<p>We are going to build an ordinary Rust library crate. No board support
-package, no cross toolchain, no custom linker setup.</p>
-<p>Start with a fresh library:</p>
-<pre><code class="language-console">$ cargo new --lib tmp102
-    Creating library `tmp102` package
-$ cd tmp102
+<p>This driver is an ordinary Rust library crate. It needs no board support
+package, cross toolchain, or custom linker setup.</p>
+<p>The recommended starting point is
+<a href="https://github.com/OpenDevicePartnership/drive-rs">drive-rs</a>, a
+<a href="https://cargo-generate.github.io/cargo-generate/"><code>cargo-generate</code></a>
+template that scaffolds a <code>no_std</code>, <code>embedded-hal</code> driver crate on top
+of the <a href="https://docs.rs/device-driver"><code>device-driver</code></a> toolkit.
+After three prompts, it generates a compiling crate with a register map,
+a transport layer, a high-level API, hardware-free mock tests, and a
+Pico de Gallo example. No TMP102-specific code is required yet.</p>
+<p>To assemble the crate by hand, skip to
+<a href="#optional-starting-from-an-empty-crate">starting from an empty crate</a>
+at the end of this chapter.</p>
+<h2 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h2>
+<p>Install <code>cargo-generate</code> to run the template. The template’s
+post-generation hook also uses the <code>ddc</code> compiler from
+<code>device-driver-cli</code> to turn the register manifest into Rust:</p>
+<pre><code class="language-console">$ cargo install cargo-generate
+$ cargo install device-driver-cli
 </code></pre>
-<p>Now add the dependencies we know we will need:</p>
-<pre><code class="language-console">$ cargo add embedded-hal
-$ cargo add embedded-hal-async
-$ cargo add device-driver --no-default-features -F toml
-$ cargo add --dev pico-de-gallo-hal --git https://github.com/OpenDevicePartnership/pico-de-gallo
-$ cargo add --dev tokio -F rt-multi-thread,time,macros
+<h2 id="running-the-template"><a class="header" href="#running-the-template">Running the template</a></h2>
+<pre><code class="language-console">$ cargo generate --git https://github.com/OpenDevicePartnership/drive-rs template --allow-commands
 </code></pre>
-<p>That gives us three layers:</p>
-<ul>
-<li><code>embedded-hal</code> for the blocking driver surface</li>
-<li><code>embedded-hal-async</code> for the async sibling</li>
-<li><code>device-driver</code> for generated register accessors</li>
-</ul>
-<p>And in <code>dev-dependencies</code>:</p>
-<ul>
-<li><code>pico-de-gallo-hal</code> so tests and examples can talk to real hardware</li>
-<li><code>tokio</code> for async examples and hardware-in-the-loop tests</li>
-</ul>
+<p>The template asks three questions:</p>
+<ol>
+<li>Enter the project name in kebab-case. It becomes the crate name, and
+its PascalCase form becomes the driver struct name.</li>
+<li>Select one or more interfaces from <code>gpio</code>, <code>i2c</code>, <code>spi</code>, and <code>uart</code>.</li>
+<li>Choose <code>sync</code>, <code>async</code>, or <code>both</code>. The answer is resolved at
+generation time, not behind a Cargo feature: <code>sync</code> emits only the
+blocking surface, <code>async</code> only the async one, and <code>both</code> emits the
+two side by side.</li>
+</ol>
+<p>TMP102 is a plain I<sup>2</sup>C part with no discrete control lines, so
+select <code>i2c</code> as the only interface. Select <code>both</code> to support blocking and
+async users:</p>
+<pre><code class="language-text">🤷   Project Name: tmp102
+🤷   Which bus/interface(s) does the device use? [i2c]
+🤷   Generate blocking, async, or both APIs? both
+</code></pre>
+<h2 id="generated-files"><a class="header" href="#generated-files">Generated files</a></h2>
+<pre><code class="language-text">tmp102/
+├── Cargo.toml            # embedded-hal + embedded-hal-async + device-driver runtime
+├── README.md
+├── device.ddsl           # device-driver manifest, the source of truth
+├── src/
+│   ├── lib.rs            # #![no_std] crate root
+│   ├── error.rs          # generic Error&lt;E&gt; that preserves the underlying bus error
+│   ├── registers.rs      # generated from device.ddsl by ddc (don't edit by hand)
+│   ├── interface.rs      # I2cInterface: bridges embedded-hal to device-driver
+│   └── driver.rs         # the high-level Tmp102 type and its constructors
+├── tests/
+│   └── integration.rs    # mock-based tests, no hardware required
+└── examples/
+    └── pico.rs           # runs against real hardware over a Pico de Gallo bridge
+</code></pre>
+<p>Because this configuration selects only <code>i2c</code>, the template does not
+emit code for <code>gpio</code>, <code>spi</code>, or <code>uart</code>. It omits unused interfaces
+instead of placing them behind feature flags.</p>
+<p>The generated <code>Cargo.toml</code> contains the driver dependencies and the
+host-side test harness:</p>
+<pre><code class="language-toml">[package]
+name = "tmp102"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+embedded-hal = "1.0"
+embedded-hal-async = "1.0"
+device-driver = { version = "2.1.0", default-features = false }
+defmt = { version = "1", optional = true }
+
+[dev-dependencies]
+pico-de-gallo-hal = { version = "0.7", default-features = false }
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
+
+[features]
+default = []
+defmt = ["dep:defmt", "device-driver/defmt"]
+</code></pre>
+<p><code>embedded-hal</code> provides the blocking driver surface, while
+<code>embedded-hal-async</code> provides the async API. Both are ordinary,
+non-optional dependencies: the <code>both</code> answer was already resolved when
+the crate was generated, so there is no <code>async</code> feature to turn on or
+off. Answering <code>sync</code> would have emitted neither <code>embedded-hal-async</code>
+nor any async code at all. <code>device-driver</code> supplies the generated
+register accessors. The optional <code>defmt</code> dependency supports logging on
+the target.</p>
+<p>The development dependencies serve the host-side code:
+<code>pico-de-gallo-hal</code> lets tests and examples communicate with real
+hardware, and <code>tokio</code> runs async examples and hardware-in-the-loop
+tests.</p>
+<p><code>device-driver</code> uses <code>default-features = false</code>.
+The register map is compiled ahead of time by <code>ddc</code>, so the crate only
+needs the runtime. Users do not compile its procedural macro or manifest
+parser.</p>
 <blockquote class="blockquote-tag blockquote-tag-tip">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>Tip</p>
 <p>Keep <code>pico-de-gallo-hal</code> in <code>[dev-dependencies]</code>, not in normal
 <code>[dependencies]</code>. Your end users should depend on your driver crate,
 not on the host-side test harness you used while writing it.</p>
 </blockquote>
-<p>Your <code>Cargo.toml</code> should look roughly like this:</p>
-<pre><code class="language-toml">[package]
-name = "tmp102"
-version = "0.1.0"
-edition = "2024"
-
-[dependencies]
-device-driver = { version = "1.0.7", default-features = false, features = ["toml"] }
-embedded-hal = "1.0.0"
-embedded-hal-async = "1.0.0"
-
-[dev-dependencies]
-pico-de-gallo-hal = { git = "https://github.com/OpenDevicePartnership/pico-de-gallo" }
-tokio = { version = "1.47.1", features = ["rt-multi-thread", "time", "macros"] }
+<h2 id="build-checks"><a class="header" href="#build-checks">Build checks</a></h2>
+<p>The generated crate compiles and passes its tests before it contains any
+TMP102-specific code:</p>
+<pre><code class="language-console">$ cd tmp102
+$ cargo test
+$ cargo clippy -- -D warnings
 </code></pre>
-<p>We also want the code generator that turns a register description into a
-Rust interface:</p>
-<pre><code class="language-console">$ cargo install device-driver-cli
+<p>It’s <code>no_std</code>, so it builds for a bare-metal target too:</p>
+<pre><code class="language-console">$ rustup target add thumbv7em-none-eabihf
+$ cargo build --target thumbv7em-none-eabihf
 </code></pre>
-<p>That binary reads a TOML description of the device and emits the boring
-part of the driver for us: register wrappers, field accessors, and the
-plumbing around them.</p>
-<p>At this point the crate is still empty, but we have already set the
-shape of the project:</p>
-<ul>
-<li>library-first</li>
-<li><code>embedded-hal</code>-based</li>
-<li>async-friendly</li>
-<li>hardware-testable on the host</li>
-</ul>
-<p>Next we describe TMP102’s registers in a form the generator can digest.</p>
+<p>Next, replace the template’s placeholder register map with the one from
+the TMP102 datasheet, then build the driver API on top of it.</p>
+<p><code>device.ddsl</code> is the single source of truth for that map. It is written
+in DDSL, device-driver’s own specification language, and it names the
+generated device itself. There is no separate device-name flag:</p>
+<pre><code class="language-text">device Tmp102Registers {
+    default-byte-order: LE,
+    register-address-type: u8,
+    ...
+}
+</code></pre>
+<p>After editing it to match the datasheet, regenerate <code>src/registers.rs</code>,
+which is committed to the crate:</p>
+<pre><code class="language-console">$ ddc build rust -s device.ddsl -o src/registers.rs --rust-defmt-feature=defmt
+</code></pre>
+<h2 id="optional-starting-from-an-empty-crate"><a class="header" href="#optional-starting-from-an-empty-crate">Optional: starting from an empty crate</a></h2>
+<p>The template is optional. To add each piece by hand, start with a fresh
+library:</p>
+<pre><code class="language-console">$ cargo new --lib tmp102
+    Creating library `tmp102` package
+$ cd tmp102
+</code></pre>
+<p>Then add the dependencies we know we will need:</p>
+<pre><code class="language-console">$ cargo add embedded-hal
+$ cargo add embedded-hal-async
+$ cargo add device-driver --no-default-features
+$ cargo add --dev pico-de-gallo-hal
+$ cargo add --dev tokio -F rt-multi-thread,time,macros
+$ cargo install device-driver-cli
+</code></pre>
+<p>This produces the same dependency set as the generated crate, but leaves
+<code>src/lib.rs</code> empty. It does not create <code>error.rs</code>, <code>interface.rs</code>,
+<code>driver.rs</code>, mock tests, or <code>examples/pico.rs</code>. The following chapters
+write those files from scratch, so this route involves more typing and
+teaches more of the process.</p>
+<p>Both routes produce a library-first, <code>embedded-hal</code>-based driver with an
+async API and host-side hardware testing. The next chapter describes the
+TMP102 registers in the format the generator accepts.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="describe-the-device-for-code-generation"><a class="header" href="#describe-the-device-for-code-generation">Describe the device for code generation</a></h1>
-<p>The fastest way to lose momentum in driver work is to hand-write the
-same register boilerplate for the hundredth time. TMP102 is small, but
-it still benefits from code generation.</p>
-<p>Create <code>tmp102.toml</code> in the crate root.</p>
-<h2 id="1-global-configuration"><a class="header" href="#1-global-configuration">1. Global configuration</a></h2>
-<p>The <code>config</code> block tells <code>device-driver-cli</code> what an address looks like,
-how to split names into Rust identifiers, and how to interpret the
-register layout that follows.</p>
-<pre><code class="language-toml">[config]
-register_address_type = "u8"
-default_byte_order = "LE"
-name_word_boundaries = ["Hyphen"]
+<p>Hand-writing register boilerplate is dull, repetitive work. TMP102 is
+small, but it still benefits from code generation.</p>
+<p>Open <code>device.ddsl</code> in the crate root and replace the template’s
+placeholder device with the real TMP102 map. If you started from an
+empty crate, create the file now.</p>
+<p>DDSL is device-driver’s own specification language. One file describes
+the whole map, including the name of the device itself.</p>
+<h2 id="1-the-device-block"><a class="header" href="#1-the-device-block">1. The device block</a></h2>
+<p>The <code>device</code> node names the generated low-level type and sets the
+defaults that every object below it inherits.</p>
+<pre><code class="language-text">device Tmp102Registers {
+    register-address-type: u8,
+    default-byte-order: LE,
+    default-access: RW,
+
+    // registers and fieldsets go here
+}
 </code></pre>
+<ul>
+<li><code>register-address-type</code> is the type of a register address. TMP102’s
+pointer register is 8 bits, so <code>u8</code>.</li>
+<li><code>default-byte-order</code> sets the byte order for fieldsets that do not
+declare one.</li>
+<li><code>default-access</code> sets the access for objects that do not declare one.</li>
+</ul>
+<p>The compiler works out word boundaries on its own, so <code>Tlow</code> becomes
+<code>tlow()</code> and <code>SD</code> becomes <code>sd()</code>.</p>
 <h2 id="2-register-declarations"><a class="header" href="#2-register-declarations">2. Register declarations</a></h2>
-<p>Now declare the four registers from the datasheet.</p>
-<pre><code class="language-toml">[Temperature]
-type = "register"
-address = 0
-size_bits = 16
-access = "RO"
-description = "Temperature register"
+<p>TMP102 has four registers. Three of them, the reading and the two alert
+limits, share a single layout, so declare that layout once as a named
+fieldset and point all three registers at it.</p>
+<pre><code class="language-text">    /// Left-justified temperature code, transmitted MSB first.
+    ///
+    /// 12 significant bits in normal mode, 13 in extended mode.
+    fieldset TemperatureCode {
+        size-bytes: 2,
+        byte-order: BE,
 
-[Configuration]
-type = "register"
-address = 1
-size_bits = 16
-access = "RW"
-description = "Configuration register"
+        /// The raw 16-bit register value.
+        field value 15:0 -&gt; uint,
+    },
 
-[Tlow]
-type = "register"
-address = 2
-size_bits = 16
-access = "RW"
-description = "T-low register"
+    /// Temperature register.
+    register Temperature {
+        address: 0,
+        access: RO,
+        fields: TemperatureCode,
+    },
 
-[Thigh]
-type = "register"
-address = 3
-size_bits = 16
-access = "RW"
-description = "T-high register"
+    /// T-low register.
+    register Tlow {
+        address: 2,
+        fields: TemperatureCode,
+    },
+
+    /// T-high register.
+    register Thigh {
+        address: 3,
+        fields: TemperatureCode,
+    },
 </code></pre>
-<p>That alone is enough to generate raw register accessors. The real value
-comes from teaching the generator about individual fields.</p>
+<p><code>byte-order: BE</code> overrides the device default for these three registers
+only, because TMP102 sends the temperature high byte first. <code>access: RO</code>
+on <code>Temperature</code> leaves the generated operation without a <code>write</code>
+method, so the datasheet’s read-only rule shows up as a compile error.</p>
 <h2 id="3-configuration-bitfields"><a class="header" href="#3-configuration-bitfields">3. Configuration bitfields</a></h2>
-<p>TMP102’s configuration register contains exactly the kind of structure
-we want to avoid encoding by hand: enums hidden inside bit ranges.</p>
-<pre><code class="language-toml">[Configuration.fields.SD]
-description = "Shutdown mode"
-base = "uint"
-start = 0
-end = 1
+<p>The configuration register is a pile of enums packed into bit ranges.
+Its layout is used once, so define the fieldset inline; <code>fieldset _</code>
+gives the generated type the name of the register it sits in.</p>
+<pre><code class="language-text">    /// Configuration register.
+    register Configuration {
+        address: 1,
+        fields: fieldset _ {
+            size-bytes: 2,
 
-[Configuration.fields.SD.conversion]
-name = "shutdown-mode"
-description = "Shutdown mode"
-running = 0
-power-off = 1
-
-[Configuration.fields.TM]
-description = "Thermostat mode"
-base = "uint"
-start = 1
-end = 2
-
-[Configuration.fields.TM.conversion]
-name = "thermostat-mode"
-description = "Thermostat mode of operation"
-comparator = 0
-interrupt = 1
-
-[Configuration.fields.POL]
-description = "Alert pin polarity"
-base = "uint"
-start = 2
-end = 3
-
-[Configuration.fields.POL.conversion]
-name = "Polarity"
-description = "Alert pin polarity"
-active-low = 0
-active-high = 1
-
-[Configuration.fields.F]
-description = "Fault queue"
-base = "uint"
-start = 3
-end = 5
-
-[Configuration.fields.F.conversion]
-name = "fault-queue"
-description = "Fault queue depth"
-_1 = 0
-_2 = 1
-_4 = 2
-_6 = 3
-
-[Configuration.fields.R]
-description = "Resolution"
-access = "RO"
-base = "uint"
-start = 5
-end = 7
-
-[Configuration.fields.OS]
-description = "One-shot"
-base = "bool"
-start = 7
-end = 8
-
-[Configuration.fields.EM]
-description = "extended-mode"
-base = "uint"
-start = 12
-end = 13
-
-[Configuration.fields.EM.conversion]
-name = "extended-mode"
-description = "Extended mode"
-disable = 0
-enable = 1
-
-[Configuration.fields.AL]
-description = "Alert"
-base = "bool"
-start = 13
-end = 14
-
-[Configuration.fields.CR]
-description = "Conversion rate"
-base = "uint"
-start = 14
-end = 16
-
-[Configuration.fields.CR.conversion]
-name = "conversion-rate"
-description = "Conversion rate"
-_0_25Hz = 0
-_1Hz = 1
-_4Hz = 2
-_8Hz = 3
+            /// Shutdown mode.
+            field SD 0 -&gt; _ as enum ShutdownMode {
+                Running: 0,
+                PowerOff: 1,
+            },
+            /// Thermostat mode of operation.
+            field TM 1 -&gt; _ as enum ThermostatMode {
+                Comparator: 0,
+                Interrupt: 1,
+            },
+            /// Alert pin polarity.
+            field POL 2 -&gt; _ as enum Polarity {
+                ActiveLow: 0,
+                ActiveHigh: 1,
+            },
+            /// Fault queue depth.
+            field F 4:3 -&gt; _ as enum FaultQueue {
+                One: 0,
+                Two: 1,
+                Four: 2,
+                Six: 3,
+            },
+            /// Converter resolution.
+            field R 6:5 RO -&gt; uint,
+            /// One-shot conversion.
+            field OS 7 -&gt; bool,
+            /// Extended mode.
+            field EM 12 -&gt; _ as enum ExtendedMode {
+                Disable: 0,
+                Enable: 1,
+            },
+            /// Alert.
+            field AL 13 -&gt; bool,
+            /// Conversion rate.
+            field CR 15:14 -&gt; _ as enum ConversionRate {
+                QuarterHz: 0,
+                OneHz: 1,
+                FourHz: 2,
+                EightHz: 3,
+            },
+        },
+    },
 </code></pre>
-<p>A few nice things fall out of this immediately:</p>
+<p>Bit ranges are written high-to-low and are inclusive, so <code>15:14</code> is the
+two-bit conversion rate and a bare <code>0</code> is the single shutdown bit. The
+<code>_</code> before <code>as</code> lets each field take its base type from the enum it
+converts to.</p>
+<p>That means:</p>
 <ul>
 <li><code>SD</code> stops being a magic bit and becomes a <code>ShutdownMode</code></li>
-<li><code>CR</code> stops being <code>0b10</code> and becomes <code>ConversionRate::_4Hz</code></li>
-<li>read-only fields like <code>R</code> are encoded as such in the generated API</li>
+<li><code>CR</code> stops being <code>0b10</code> and becomes <code>ConversionRate::FourHz</code></li>
+<li><code>R</code> carries <code>RO</code>, so the fieldset gets <code>r()</code> but no <code>set_r()</code></li>
+<li>every enum covers all bit patterns of its field, so <code>sd()</code> and <code>cr()</code>
+return the enum itself rather than a <code>Result</code></li>
 </ul>
 <blockquote class="blockquote-tag blockquote-tag-tip">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>Tip</p>
-<p>Keep the TOML file focused on <em>register truth</em>, not ergonomic policy.
-The manifest should describe what the hardware is. The public driver
-API can then decide what feels pleasant and safe for humans.</p>
+<p>Keep the manifest focused on <em>register truth</em>, not ergonomic policy.
+It describes what the hardware is; the public driver API decides what
+is pleasant and safe to call.</p>
 </blockquote>
-<h2 id="4-generate-srcinnerrs"><a class="header" href="#4-generate-srcinnerrs">4. Generate <code>src/inner.rs</code></a></h2>
+<h2 id="4-generate-srcregistersrs"><a class="header" href="#4-generate-srcregistersrs">4. Generate <code>src/registers.rs</code></a></h2>
 <p>With the manifest in place, generate the low-level register interface:</p>
-<pre><code class="language-console">$ device-driver-cli -m tmp102.toml -d Inner -o src\inner.rs
+<pre><code class="language-console">$ ddc build rust -s device.ddsl -o src/registers.rs --rust-defmt-feature=defmt
 </code></pre>
+<p>The <code>device</code> node supplies the name, so the generated low-level type is
+<code>Tmp102Registers</code>.</p>
 <p>The generated file is intentionally not the public API. We will treat it
 as an implementation detail:</p>
 <ul>
-<li><code>inner.rs</code> knows registers, fields, and access widths</li>
+<li><code>registers.rs</code> knows registers, fields, and access widths</li>
 <li>our hand-written wrapper will know addresses, conversions, and
 human-facing methods</li>
 </ul>
-<p>That split is the sweet spot. Let the machine write the repetitive code;
-keep the policy decisions for the part humans maintain.</p>
+<p>Let the generator write the repetitive code and keep the policy
+decisions in the part you maintain.</p>
 <p>Next we connect that generated layer to a real I<sup>2</sup>C bus.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="implementing-registerinterface-and-asyncregisterinterface"><a class="header" href="#implementing-registerinterface-and-asyncregisterinterface">Implementing <code>RegisterInterface</code> and <code>AsyncRegisterInterface</code></a></h1>
 <p>At this point we have generated code, but it still has no idea how to
 reach real hardware. That is our job.</p>
-<p>The generated <code>Inner</code> type wants a tiny transport object that knows how
-to read and write a register by address. For TMP102 that transport is
-just I<sup>2</sup>C plus the selected device address.</p>
+<p><code>Tmp102Registers</code> wants a tiny transport object that knows how to read
+and write a register by address. For TMP102 that transport is just
+I<sup>2</sup>C plus the selected device address.</p>
 <h2 id="encode-the-legal-addresses"><a class="header" href="#encode-the-legal-addresses">Encode the legal addresses</a></h2>
 <p>TMP102 does not live at an arbitrary address. Datasheet table 6-4 gives
 us four legal values, so we should model exactly those four values.</p>
@@ -5866,23 +5940,33 @@ impl&lt;I2C&gt; Interface&lt;I2C&gt; {
         }
     }
 }</code></pre>
+<p><code>RegisterInterfaceBase</code> declares the two associated types that the
+blocking and async traits are both built on:</p>
+<pre><code class="language-rust noplayground">use device_driver::RegisterInterfaceBase;
+use embedded_hal::i2c::ErrorKind;
+
+impl&lt;I2C&gt; RegisterInterfaceBase for Interface&lt;I2C&gt; {
+    type Error = ErrorKind;
+    type AddressType = u8;
+}</code></pre>
+<p><code>AddressType</code> has to match the <code>register-address-type</code> we set in the
+manifest. <code>ErrorKind</code> comes from <code>embedded-hal</code>, and
+<code>embedded-hal-async</code> re-exports that same type, so one impl covers both
+sides and needs no bound on <code>I2C</code>.</p>
 <p>The job of <code>Interface</code> is deliberately boring: take register operations
 from generated code and translate them into real I<sup>2</sup>C
 transactions.</p>
 <h2 id="blocking-register-access"><a class="header" href="#blocking-register-access">Blocking register access</a></h2>
 <p>For blocking <code>embedded-hal</code>, that translation looks like this:</p>
-<pre><code class="language-rust noplayground">use device_driver::RegisterInterface;
-use embedded_hal::i2c::{Error, ErrorKind, I2c};
+<pre><code class="language-rust noplayground">use device_driver::{FieldsetMetadata, RegisterInterface};
+use embedded_hal::i2c::{Error, I2c};
 
 impl&lt;I2C: I2c&gt; RegisterInterface for Interface&lt;I2C&gt; {
-    type Error = ErrorKind;
-    type AddressType = u8;
-
     fn write_register(
         &amp;mut self,
         address: Self::AddressType,
-        _size_bits: u32,
-        data: &amp;[u8],
+        data: &amp;mut [u8],
+        _metadata: &amp;FieldsetMetadata,
     ) -&gt; Result&lt;(), Self::Error&gt; {
         let mut buf = [0u8; 3];
         buf[0] = address;
@@ -5894,8 +5978,8 @@ impl&lt;I2C: I2c&gt; RegisterInterface for Interface&lt;I2C&gt; {
     fn read_register(
         &amp;mut self,
         address: Self::AddressType,
-        _size_bits: u32,
         data: &amp;mut [u8],
+        _metadata: &amp;FieldsetMetadata,
     ) -&gt; Result&lt;(), Self::Error&gt; {
         self.i2c
             .write_read(self.addr, &amp;[address], data)
@@ -5904,6 +5988,11 @@ impl&lt;I2C: I2c&gt; RegisterInterface for Interface&lt;I2C&gt; {
 }</code></pre>
 <p>TMP102 keeps this pleasantly simple: one pointer byte, then two bytes of
 payload.</p>
+<p>Both methods take <code>data</code> as <code>&amp;mut [u8]</code>. The write side gets a mutable
+buffer so that an interface can rearrange bytes in place before sending,
+which we do not need here. <code>_metadata</code> carries the fieldset’s byte
+order, which we can also ignore because the framing is the same for
+every TMP102 register.</p>
 <blockquote class="blockquote-tag blockquote-tag-note">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
 <p>The fixed <code>[u8; 3]</code> buffer is TMP102-specific. For a bigger device with
@@ -5911,19 +6000,17 @@ wider registers, size the stack buffer to your largest write or switch
 to a small growable buffer type.</p>
 </blockquote>
 <h2 id="async-register-access"><a class="header" href="#async-register-access">Async register access</a></h2>
-<p>The async version is the same idea with <code>.await</code> in the obvious places:</p>
+<p>The async version is the same idea with <code>.await</code> in the obvious places.
+Because the template resolved <code>both</code> at generation time, this impl sits
+next to the blocking one with no <code>cfg</code> between them:</p>
 <pre><code class="language-rust noplayground">use device_driver::AsyncRegisterInterface;
-use embedded_hal_async::i2c::{Error, ErrorKind, I2c as AsyncI2c};
 
 impl&lt;I2C: AsyncI2c&gt; AsyncRegisterInterface for Interface&lt;I2C&gt; {
-    type Error = ErrorKind;
-    type AddressType = u8;
-
     async fn write_register(
         &amp;mut self,
         address: Self::AddressType,
-        _size_bits: u32,
-        data: &amp;[u8],
+        data: &amp;mut [u8],
+        _metadata: &amp;FieldsetMetadata,
     ) -&gt; Result&lt;(), Self::Error&gt; {
         let mut buf = [0u8; 3];
         buf[0] = address;
@@ -5935,8 +6022,8 @@ impl&lt;I2C: AsyncI2c&gt; AsyncRegisterInterface for Interface&lt;I2C&gt; {
     async fn read_register(
         &amp;mut self,
         address: Self::AddressType,
-        _size_bits: u32,
         data: &amp;mut [u8],
+        _metadata: &amp;FieldsetMetadata,
     ) -&gt; Result&lt;(), Self::Error&gt; {
         self.i2c
             .write_read(self.addr, &amp;[address], data)
@@ -5946,26 +6033,24 @@ impl&lt;I2C: AsyncI2c&gt; AsyncRegisterInterface for Interface&lt;I2C&gt; {
 }</code></pre>
 <p>So far, so good. The generated code can finally talk to the sensor.</p>
 <h2 id="put-the-generated-layer-behind-a-real-driver-type"><a class="header" href="#put-the-generated-layer-behind-a-real-driver-type">Put the generated layer behind a real driver type</a></h2>
-<p>If you stop here and run <code>cargo build</code>, you will see the same warnings as
-in the original draft: fields and methods in <code>Inner</code> are “never used”.
-That is the compiler telling us something true: we generated a low-level
-API, but we still have not wrapped it in a driver humans will actually
-call.</p>
-<p>A minimal wrapper is enough to make those warnings go away and give the
-chapter a clean place to keep growing:</p>
-<pre><code class="language-rust noplayground">mod inner;
+<p>Build this as it stands and the compiler will report that fields and
+methods on <code>Tmp102Registers</code> are never used. It is right: we generated a
+low-level API and nothing calls it yet.</p>
+<p>A minimal wrapper clears those warnings and gives the chapter a place to
+keep growing:</p>
+<pre><code class="language-rust noplayground">mod registers;
 
-use inner::Inner;
+use registers::{ShutdownMode, Tmp102Registers};
 
 pub struct Tmp102&lt;I2C&gt; {
-    inner: Inner&lt;Interface&lt;I2C&gt;&gt;,
+    inner: Tmp102Registers&lt;Interface&lt;I2C&gt;&gt;,
     extended_mode: bool,
 }
 
 impl&lt;I2C&gt; Tmp102&lt;I2C&gt; {
     pub fn new(i2c: I2C, a0: A0) -&gt; Self {
         Self {
-            inner: Inner::new(Interface::new(i2c, a0)),
+            inner: Tmp102Registers::new(Interface::new(i2c, a0)),
             extended_mode: false,
         }
     }
@@ -6023,8 +6108,11 @@ pub struct Celsius(pub f32);</code></pre>
 an arbitrary calibration constant.</p>
 <h2 id="collect-configuration-into-a-builder"><a class="header" href="#collect-configuration-into-a-builder">Collect configuration into a builder</a></h2>
 <p>Instead of making users pass four unrelated arguments into
-<code>configure(...)</code>, give them a small builder with good defaults.</p>
-<pre><code class="language-rust noplayground">#[derive(Clone, Copy, Debug)]
+<code>configure(...)</code>, give them a small builder with good defaults. The four
+fields are enums <code>ddc</code> generated from the manifest.</p>
+<pre><code class="language-rust noplayground">use registers::{ConversionRate, ExtendedMode, Polarity, ThermostatMode};
+
+#[derive(Clone, Copy, Debug)]
 pub struct Config {
     thermostat_mode: ThermostatMode,
     polarity: Polarity,
@@ -6038,7 +6126,7 @@ impl Default for Config {
             thermostat_mode: ThermostatMode::Comparator,
             polarity: Polarity::ActiveLow,
             extended_mode: ExtendedMode::Disable,
-            conversion_rate: ConversionRate::_4Hz,
+            conversion_rate: ConversionRate::FourHz,
         }
     }
 }
@@ -6071,7 +6159,7 @@ impl Config {
 <p>That lets the call site read cleanly:</p>
 <pre><code class="language-rust noplayground">let config = Config::new()
     .extended_mode(ExtendedMode::Enable)
-    .conversion_rate(ConversionRate::_8Hz);</code></pre>
+    .conversion_rate(ConversionRate::EightHz);</code></pre>
 <h2 id="use-typestate-for-run-vs-shutdown"><a class="header" href="#use-typestate-for-run-vs-shutdown">Use typestate for run vs shutdown</a></h2>
 <p>TMP102 has two materially different operating states:</p>
 <ul>
@@ -6082,11 +6170,13 @@ impl Config {
 lets us express the distinction in the type system.</p>
 <pre><code class="language-rust noplayground">use core::marker::PhantomData;
 
+use registers::Tmp102Registers;
+
 pub struct Running;
 pub struct Shutdown;
 
 pub struct Tmp102&lt;I2C, State = Running&gt; {
-    inner: Inner&lt;Interface&lt;I2C&gt;&gt;,
+    inner: Tmp102Registers&lt;Interface&lt;I2C&gt;&gt;,
     extended_mode: bool,
     _state: PhantomData&lt;State&gt;,
 }</code></pre>
@@ -6111,7 +6201,7 @@ the sensor is running” and let the compiler enforce it.</p>
 
     pub fn continuous(i2c: I2C, a0: A0) -&gt; Self {
         Self {
-            inner: Inner::new(Interface::new(i2c, a0)),
+            inner: Tmp102Registers::new(Interface::new(i2c, a0)),
             extended_mode: false,
             _state: PhantomData,
         }
@@ -6132,7 +6222,9 @@ the sensor is running” and let the compiler enforce it.</p>
 smearing it across every high-level method.</p>
 <h2 id="the-high-level-async-api"><a class="header" href="#the-high-level-async-api">The high-level async API</a></h2>
 <p>Here is the shape we are after for the async path:</p>
-<pre><code class="language-rust noplayground">impl&lt;I2C: AsyncI2c&gt; Tmp102&lt;I2C, Running&gt; {
+<pre><code class="language-rust noplayground">use registers::ShutdownMode;
+
+impl&lt;I2C: AsyncI2c&gt; Tmp102&lt;I2C, Running&gt; {
     pub async fn configure(&amp;mut self, config: Config) -&gt; Result&lt;(), ErrorKind&gt; {
         self.extended_mode = config.extended_mode == ExtendedMode::Enable;
 
@@ -6250,27 +6342,28 @@ Pico de Gallo board, we can run the driver on a host machine against a
 <p>No mocks. No firmware flashing loop. No sacrificial example binary that
 only exists so you can manually test one register read.</p>
 <h2 id="a-hardware-in-the-loop-test"><a class="header" href="#a-hardware-in-the-loop-test">A hardware-in-the-loop test</a></h2>
-<p>A minimal blocking test looks like this:</p>
+<p>Our public API is async, so the test is too:</p>
 <pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>#[cfg(feature = "hil")]
-#[test]
-fn tmp102_reports_a_plausible_temperature() {
+#[tokio::test]
+async fn tmp102_reports_a_plausible_temperature() {
     use pico_de_gallo_hal::Hal;
+    use tmp102::{Celsius, Tmp102, A0};
 
     let hal = Hal::new();
     let i2c = hal.i2c();
     let mut sensor = Tmp102::new(i2c, A0::Gnd);
 
-    let Celsius(temp) = sensor.temperature_blocking().unwrap();
+    let Celsius(temp) = sensor.temperature().await.unwrap();
 
     assert!((-40.0..=125.0).contains(&amp;temp));
 }
 <span class="boring">}</span></code></pre>
 <p>That range is intentionally broad: it matches the device’s operating
 range and keeps the test robust across different lab environments.</p>
-<p>If your driver’s primary API is async, the same idea works with
-<code>#[tokio::test]</code> and <code>.await</code>.</p>
+<p>The blocking siblings we add in the next chapter work the same way with
+a plain <code>#[test]</code> and no <code>.await</code>.</p>
 <h2 id="why-this-is-special"><a class="header" href="#why-this-is-special">Why this is special</a></h2>
 <p>Most embedded-driver test setups force you into one of two extremes:</p>
 <ul>
@@ -6292,13 +6385,14 @@ real hardware-in-the-loop tests with <code>cargo test</code>.</p>
 <p>Not every CI environment has hardware attached, so gate the test behind
 an opt-in feature:</p>
 <pre><code class="language-rust noplayground">#[cfg(feature = "hil")]
-#[test]
-fn tmp102_reports_a_plausible_temperature() {
+#[tokio::test]
+async fn tmp102_reports_a_plausible_temperature() {
     // ...
 }</code></pre>
 <p>And in <code>Cargo.toml</code>:</p>
 <pre><code class="language-toml">[features]
 default = []
+defmt = ["dep:defmt", "device-driver/defmt"]
 hil = []
 </code></pre>
 <p>Now normal CI can run <code>cargo test</code>, while the hardware-backed runner can
@@ -6337,14 +6431,16 @@ can be used from synchronous code and from async code.</p>
 <p>The register definitions, address handling, temperature conversions, and
 configuration builder do not care whether the bus is blocking or async.
 Keep those pieces shared:</p>
-<pre><code class="language-rust noplayground">fn decode_temperature(raw: [u8; 2], extended_mode: bool) -&gt; Celsius {
-    let mut value = i16::from_be_bytes(raw);
-    value /= if extended_mode { 8 } else { 16 };
-    Celsius(value as f32 * 0.0625)
-}
+<pre><code class="language-rust noplayground">impl&lt;I2C&gt; Tmp102&lt;I2C, Running&gt; {
+    fn decode_temperature(raw: [u8; 2], extended_mode: bool) -&gt; Celsius {
+        let mut value = i16::from_be_bytes(raw);
+        value /= if extended_mode { 8 } else { 16 };
+        Celsius(value as f32 * 0.0625)
+    }
 
-fn encode_limit(limit: Celsius) -&gt; [u8; 2] {
-    ((limit.0 / 0.0625) as i16 * 16).to_be_bytes()
+    fn encode_limit(limit: Celsius) -&gt; [u8; 2] {
+        ((limit.0 / 0.0625) as i16 * 16).to_be_bytes()
+    }
 }</code></pre>
 <p>Then make the blocking and async fronts as thin as possible.</p>
 <h2 id="a-simple-parity-pattern"><a class="header" href="#a-simple-parity-pattern">A simple parity pattern</a></h2>
@@ -6359,7 +6455,7 @@ for a small driver is:</p>
 <pre><code class="language-rust noplayground">impl&lt;I2C: embedded_hal::i2c::I2c&gt; Tmp102&lt;I2C, Running&gt; {
     pub fn temperature_blocking(&amp;mut self) -&gt; Result&lt;Celsius, ErrorKind&gt; {
         let raw: [u8; 2] = self.inner.temperature().read()?.into();
-        Ok(decode_temperature(raw, self.extended_mode))
+        Ok(Self::decode_temperature(raw, self.extended_mode))
     }
 
     pub fn configure_blocking(&amp;mut self, config: Config) -&gt; Result&lt;(), ErrorKind&gt; {
@@ -6377,7 +6473,7 @@ for a small driver is:</p>
 impl&lt;I2C: embedded_hal_async::i2c::I2c&gt; Tmp102&lt;I2C, Running&gt; {
     pub async fn temperature(&amp;mut self) -&gt; Result&lt;Celsius, ErrorKind&gt; {
         let raw: [u8; 2] = self.inner.temperature().read_async().await?.into();
-        Ok(decode_temperature(raw, self.extended_mode))
+        Ok(Self::decode_temperature(raw, self.extended_mode))
     }
 
     pub async fn configure(&amp;mut self, config: Config) -&gt; Result&lt;(), ErrorKind&gt; {
@@ -6398,20 +6494,22 @@ impl&lt;I2C: embedded_hal_async::i2c::I2c&gt; Tmp102&lt;I2C, Running&gt; {
 such as <code>maybe-async-cfg</code> is a good next step. For a first driver,
 though, the explicit version is easier to read and maintain.</p>
 <h2 id="same-driver-blocking-usage"><a class="header" href="#same-driver-blocking-usage">Same driver, blocking usage</a></h2>
-<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use pico_de_gallo_hal::Hal;
-
-let hal = Hal::new();
-let i2c = hal.i2c();
-let mut sensor = Tmp102::continuous(i2c, A0::Gnd);
-
-let Celsius(temp) = sensor.temperature_blocking()?;
-println!("{temp:.2} °C");
-<span class="boring">Ok::&lt;(), embedded_hal::i2c::ErrorKind&gt;(())
-</span><span class="boring">}</span></code></pre>
-<h2 id="same-driver-async-usage"><a class="header" href="#same-driver-async-usage">Same driver, async usage</a></h2>
 <pre class="playground"><code class="language-rust no_run">use pico_de_gallo_hal::Hal;
+use tmp102::{Celsius, Tmp102, A0};
+
+fn main() -&gt; Result&lt;(), embedded_hal::i2c::ErrorKind&gt; {
+    let hal = Hal::new();
+    let i2c = hal.i2c();
+    let mut sensor = Tmp102::continuous(i2c, A0::Gnd);
+
+    let Celsius(temp) = sensor.temperature_blocking()?;
+    println!("{temp:.2} °C");
+    Ok(())
+}</code></pre>
+<h2 id="same-driver-async-usage"><a class="header" href="#same-driver-async-usage">Same driver, async usage</a></h2>
+<p>Same crate, same build, no extra feature flag — just an executor:</p>
+<pre class="playground"><code class="language-rust no_run">use pico_de_gallo_hal::Hal;
+use tmp102::{Celsius, Tmp102, A0};
 
 #[tokio::main]
 async fn main() -&gt; Result&lt;(), embedded_hal::i2c::ErrorKind&gt; {
@@ -6455,13 +6553,15 @@ categories = ["embedded", "hardware-support", "no-std"]
 keywords = ["tmp102", "temperature", "sensor", "i2c", "embedded-hal"]
 </code></pre>
 <p>If the crate is <code>no_std</code>, say so clearly in the README and crate docs.
-If async support is optional, document the feature flag right next to the
-first example.</p>
+The generated crate resolves blocking versus async when it is scaffolded
+rather than behind a Cargo feature, so state which of the two surfaces it
+exposes right next to the first example.</p>
 <h2 id="docsrs"><a class="header" href="#docsrs">docs.rs</a></h2>
-<p>If your docs need specific features enabled, tell docs.rs explicitly:</p>
+<p>If your docs need specific features enabled, tell docs.rs explicitly.
+Here the only optional features are <code>defmt</code> and <code>hil</code>, so turning
+everything on is the simplest correct answer:</p>
 <pre><code class="language-toml">[package.metadata.docs.rs]
-all-features = false
-features = ["async"]
+all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 </code></pre>
 <p>That avoids the common “works locally, missing items on docs.rs” trap.</p>
@@ -6472,25 +6572,33 @@ rustdoc-args = ["--cfg", "docsrs"]
 <li>which traits the crate implements or expects</li>
 <li>a blocking example</li>
 <li>an async example if you support one</li>
-<li>feature flags</li>
+<li>feature flags (<code>defmt</code>, and the <code>hil</code> gate from the previous chapter)</li>
 <li>wiring or address-selection notes for <code>A0</code></li>
 </ul>
 <p>For this driver, also mention that <code>pico-de-gallo-hal</code> is only used for
 examples and tests; it should stay in <code>[dev-dependencies]</code> so downstream
 users do not pay for it.</p>
-<h2 id="optional-defmt-support"><a class="header" href="#optional-defmt-support">Optional <code>defmt</code> support</a></h2>
-<p>If you want the crate to fit nicely into embedded firmware projects,
-optional <code>defmt</code> support is a nice touch:</p>
-<ul>
-<li>gate it behind a feature</li>
-<li>make the dependency optional</li>
-<li>keep the default feature set small</li>
-</ul>
+<h2 id="defmt-support"><a class="header" href="#defmt-support"><code>defmt</code> support</a></h2>
+<p>The template already wired this up, and it spans two places that have to
+agree. <code>Cargo.toml</code> keeps the dependency optional and forwards the
+feature to the runtime:</p>
+<pre><code class="language-toml">[dependencies]
+defmt = { version = "1", optional = true }
+
+[features]
+defmt = ["dep:defmt", "device-driver/defmt"]
+</code></pre>
+<p>The other half is the <code>--rust-defmt-feature=defmt</code> we passed to <code>ddc</code>.
+That is what puts <code>#[cfg(feature = "defmt")]</code> and
+<code>#[cfg_attr(feature = "defmt", derive(defmt::Format))]</code> in
+<code>registers.rs</code>. Rename the Cargo feature without regenerating and the
+generated code silently stops matching it.</p>
 <h2 id="release-hygiene"><a class="header" href="#release-hygiene">Release hygiene</a></h2>
-<p>Two last bits of boring professionalism matter a lot:</p>
+<p>Three last bits of boring professionalism matter a lot:</p>
 <ul>
 <li>keep a <code>CHANGELOG.md</code></li>
 <li>follow semver when you change the public API</li>
+<li>commit <code>src/registers.rs</code> and let it into the package</li>
 </ul>
 <p>Small drivers live a long time. A clean README, useful crate metadata,
 and predictable releases do more for adoption than one more clever type.</p>

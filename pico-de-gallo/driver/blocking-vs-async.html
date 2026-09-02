@@ -37,10 +37,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-391f3414.js";
+            window.path_to_searchindex_js = "../searchindex-5c94e1f4.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-2de855f1.js"></script>
+        <script src="../toc-3e975730.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -187,14 +187,16 @@ can be used from synchronous code and from async code.</p>
 <p>The register definitions, address handling, temperature conversions, and
 configuration builder do not care whether the bus is blocking or async.
 Keep those pieces shared:</p>
-<pre><code class="language-rust noplayground">fn decode_temperature(raw: [u8; 2], extended_mode: bool) -&gt; Celsius {
-    let mut value = i16::from_be_bytes(raw);
-    value /= if extended_mode { 8 } else { 16 };
-    Celsius(value as f32 * 0.0625)
-}
+<pre><code class="language-rust noplayground">impl&lt;I2C&gt; Tmp102&lt;I2C, Running&gt; {
+    fn decode_temperature(raw: [u8; 2], extended_mode: bool) -&gt; Celsius {
+        let mut value = i16::from_be_bytes(raw);
+        value /= if extended_mode { 8 } else { 16 };
+        Celsius(value as f32 * 0.0625)
+    }
 
-fn encode_limit(limit: Celsius) -&gt; [u8; 2] {
-    ((limit.0 / 0.0625) as i16 * 16).to_be_bytes()
+    fn encode_limit(limit: Celsius) -&gt; [u8; 2] {
+        ((limit.0 / 0.0625) as i16 * 16).to_be_bytes()
+    }
 }</code></pre>
 <p>Then make the blocking and async fronts as thin as possible.</p>
 <h2 id="a-simple-parity-pattern"><a class="header" href="#a-simple-parity-pattern">A simple parity pattern</a></h2>
@@ -209,7 +211,7 @@ for a small driver is:</p>
 <pre><code class="language-rust noplayground">impl&lt;I2C: embedded_hal::i2c::I2c&gt; Tmp102&lt;I2C, Running&gt; {
     pub fn temperature_blocking(&amp;mut self) -&gt; Result&lt;Celsius, ErrorKind&gt; {
         let raw: [u8; 2] = self.inner.temperature().read()?.into();
-        Ok(decode_temperature(raw, self.extended_mode))
+        Ok(Self::decode_temperature(raw, self.extended_mode))
     }
 
     pub fn configure_blocking(&amp;mut self, config: Config) -&gt; Result&lt;(), ErrorKind&gt; {
@@ -227,7 +229,7 @@ for a small driver is:</p>
 impl&lt;I2C: embedded_hal_async::i2c::I2c&gt; Tmp102&lt;I2C, Running&gt; {
     pub async fn temperature(&amp;mut self) -&gt; Result&lt;Celsius, ErrorKind&gt; {
         let raw: [u8; 2] = self.inner.temperature().read_async().await?.into();
-        Ok(decode_temperature(raw, self.extended_mode))
+        Ok(Self::decode_temperature(raw, self.extended_mode))
     }
 
     pub async fn configure(&amp;mut self, config: Config) -&gt; Result&lt;(), ErrorKind&gt; {
@@ -248,20 +250,22 @@ impl&lt;I2C: embedded_hal_async::i2c::I2c&gt; Tmp102&lt;I2C, Running&gt; {
 such as <code>maybe-async-cfg</code> is a good next step. For a first driver,
 though, the explicit version is easier to read and maintain.</p>
 <h2 id="same-driver-blocking-usage"><a class="header" href="#same-driver-blocking-usage">Same driver, blocking usage</a></h2>
-<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use pico_de_gallo_hal::Hal;
-
-let hal = Hal::new();
-let i2c = hal.i2c();
-let mut sensor = Tmp102::continuous(i2c, A0::Gnd);
-
-let Celsius(temp) = sensor.temperature_blocking()?;
-println!("{temp:.2} °C");
-<span class="boring">Ok::&lt;(), embedded_hal::i2c::ErrorKind&gt;(())
-</span><span class="boring">}</span></code></pre>
-<h2 id="same-driver-async-usage"><a class="header" href="#same-driver-async-usage">Same driver, async usage</a></h2>
 <pre class="playground"><code class="language-rust no_run">use pico_de_gallo_hal::Hal;
+use tmp102::{Celsius, Tmp102, A0};
+
+fn main() -&gt; Result&lt;(), embedded_hal::i2c::ErrorKind&gt; {
+    let hal = Hal::new();
+    let i2c = hal.i2c();
+    let mut sensor = Tmp102::continuous(i2c, A0::Gnd);
+
+    let Celsius(temp) = sensor.temperature_blocking()?;
+    println!("{temp:.2} °C");
+    Ok(())
+}</code></pre>
+<h2 id="same-driver-async-usage"><a class="header" href="#same-driver-async-usage">Same driver, async usage</a></h2>
+<p>Same crate, same build, no extra feature flag — just an executor:</p>
+<pre class="playground"><code class="language-rust no_run">use pico_de_gallo_hal::Hal;
+use tmp102::{Celsius, Tmp102, A0};
 
 #[tokio::main]
 async fn main() -&gt; Result&lt;(), embedded_hal::i2c::ErrorKind&gt; {

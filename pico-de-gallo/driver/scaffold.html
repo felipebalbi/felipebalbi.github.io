@@ -37,10 +37,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-391f3414.js";
+            window.path_to_searchindex_js = "../searchindex-5c94e1f4.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-2de855f1.js"></script>
+        <script src="../toc-3e975730.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -177,68 +177,159 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="scaffolding-the-crate"><a class="header" href="#scaffolding-the-crate">Scaffolding the crate</a></h1>
-<p>We are going to build an ordinary Rust library crate. No board support
-package, no cross toolchain, no custom linker setup.</p>
-<p>Start with a fresh library:</p>
-<pre><code class="language-console">$ cargo new --lib tmp102
-    Creating library `tmp102` package
-$ cd tmp102
+<p>This driver is an ordinary Rust library crate. It needs no board support
+package, cross toolchain, or custom linker setup.</p>
+<p>The recommended starting point is
+<a href="https://github.com/OpenDevicePartnership/drive-rs">drive-rs</a>, a
+<a href="https://cargo-generate.github.io/cargo-generate/"><code>cargo-generate</code></a>
+template that scaffolds a <code>no_std</code>, <code>embedded-hal</code> driver crate on top
+of the <a href="https://docs.rs/device-driver"><code>device-driver</code></a> toolkit.
+After three prompts, it generates a compiling crate with a register map,
+a transport layer, a high-level API, hardware-free mock tests, and a
+Pico de Gallo example. No TMP102-specific code is required yet.</p>
+<p>To assemble the crate by hand, skip to
+<a href="#optional-starting-from-an-empty-crate">starting from an empty crate</a>
+at the end of this chapter.</p>
+<h2 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h2>
+<p>Install <code>cargo-generate</code> to run the template. The template’s
+post-generation hook also uses the <code>ddc</code> compiler from
+<code>device-driver-cli</code> to turn the register manifest into Rust:</p>
+<pre><code class="language-console">$ cargo install cargo-generate
+$ cargo install device-driver-cli
 </code></pre>
-<p>Now add the dependencies we know we will need:</p>
-<pre><code class="language-console">$ cargo add embedded-hal
-$ cargo add embedded-hal-async
-$ cargo add device-driver --no-default-features -F toml
-$ cargo add --dev pico-de-gallo-hal --git https://github.com/OpenDevicePartnership/pico-de-gallo
-$ cargo add --dev tokio -F rt-multi-thread,time,macros
+<h2 id="running-the-template"><a class="header" href="#running-the-template">Running the template</a></h2>
+<pre><code class="language-console">$ cargo generate --git https://github.com/OpenDevicePartnership/drive-rs template --allow-commands
 </code></pre>
-<p>That gives us three layers:</p>
-<ul>
-<li><code>embedded-hal</code> for the blocking driver surface</li>
-<li><code>embedded-hal-async</code> for the async sibling</li>
-<li><code>device-driver</code> for generated register accessors</li>
-</ul>
-<p>And in <code>dev-dependencies</code>:</p>
-<ul>
-<li><code>pico-de-gallo-hal</code> so tests and examples can talk to real hardware</li>
-<li><code>tokio</code> for async examples and hardware-in-the-loop tests</li>
-</ul>
+<p>The template asks three questions:</p>
+<ol>
+<li>Enter the project name in kebab-case. It becomes the crate name, and
+its PascalCase form becomes the driver struct name.</li>
+<li>Select one or more interfaces from <code>gpio</code>, <code>i2c</code>, <code>spi</code>, and <code>uart</code>.</li>
+<li>Choose <code>sync</code>, <code>async</code>, or <code>both</code>. The answer is resolved at
+generation time, not behind a Cargo feature: <code>sync</code> emits only the
+blocking surface, <code>async</code> only the async one, and <code>both</code> emits the
+two side by side.</li>
+</ol>
+<p>TMP102 is a plain I<sup>2</sup>C part with no discrete control lines, so
+select <code>i2c</code> as the only interface. Select <code>both</code> to support blocking and
+async users:</p>
+<pre><code class="language-text">🤷   Project Name: tmp102
+🤷   Which bus/interface(s) does the device use? [i2c]
+🤷   Generate blocking, async, or both APIs? both
+</code></pre>
+<h2 id="generated-files"><a class="header" href="#generated-files">Generated files</a></h2>
+<pre><code class="language-text">tmp102/
+├── Cargo.toml            # embedded-hal + embedded-hal-async + device-driver runtime
+├── README.md
+├── device.ddsl           # device-driver manifest, the source of truth
+├── src/
+│   ├── lib.rs            # #![no_std] crate root
+│   ├── error.rs          # generic Error&lt;E&gt; that preserves the underlying bus error
+│   ├── registers.rs      # generated from device.ddsl by ddc (don't edit by hand)
+│   ├── interface.rs      # I2cInterface: bridges embedded-hal to device-driver
+│   └── driver.rs         # the high-level Tmp102 type and its constructors
+├── tests/
+│   └── integration.rs    # mock-based tests, no hardware required
+└── examples/
+    └── pico.rs           # runs against real hardware over a Pico de Gallo bridge
+</code></pre>
+<p>Because this configuration selects only <code>i2c</code>, the template does not
+emit code for <code>gpio</code>, <code>spi</code>, or <code>uart</code>. It omits unused interfaces
+instead of placing them behind feature flags.</p>
+<p>The generated <code>Cargo.toml</code> contains the driver dependencies and the
+host-side test harness:</p>
+<pre><code class="language-toml">[package]
+name = "tmp102"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+embedded-hal = "1.0"
+embedded-hal-async = "1.0"
+device-driver = { version = "2.1.0", default-features = false }
+defmt = { version = "1", optional = true }
+
+[dev-dependencies]
+pico-de-gallo-hal = { version = "0.7", default-features = false }
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
+
+[features]
+default = []
+defmt = ["dep:defmt", "device-driver/defmt"]
+</code></pre>
+<p><code>embedded-hal</code> provides the blocking driver surface, while
+<code>embedded-hal-async</code> provides the async API. Both are ordinary,
+non-optional dependencies: the <code>both</code> answer was already resolved when
+the crate was generated, so there is no <code>async</code> feature to turn on or
+off. Answering <code>sync</code> would have emitted neither <code>embedded-hal-async</code>
+nor any async code at all. <code>device-driver</code> supplies the generated
+register accessors. The optional <code>defmt</code> dependency supports logging on
+the target.</p>
+<p>The development dependencies serve the host-side code:
+<code>pico-de-gallo-hal</code> lets tests and examples communicate with real
+hardware, and <code>tokio</code> runs async examples and hardware-in-the-loop
+tests.</p>
+<p><code>device-driver</code> uses <code>default-features = false</code>.
+The register map is compiled ahead of time by <code>ddc</code>, so the crate only
+needs the runtime. Users do not compile its procedural macro or manifest
+parser.</p>
 <blockquote class="blockquote-tag blockquote-tag-tip">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>Tip</p>
 <p>Keep <code>pico-de-gallo-hal</code> in <code>[dev-dependencies]</code>, not in normal
 <code>[dependencies]</code>. Your end users should depend on your driver crate,
 not on the host-side test harness you used while writing it.</p>
 </blockquote>
-<p>Your <code>Cargo.toml</code> should look roughly like this:</p>
-<pre><code class="language-toml">[package]
-name = "tmp102"
-version = "0.1.0"
-edition = "2024"
-
-[dependencies]
-device-driver = { version = "1.0.7", default-features = false, features = ["toml"] }
-embedded-hal = "1.0.0"
-embedded-hal-async = "1.0.0"
-
-[dev-dependencies]
-pico-de-gallo-hal = { git = "https://github.com/OpenDevicePartnership/pico-de-gallo" }
-tokio = { version = "1.47.1", features = ["rt-multi-thread", "time", "macros"] }
+<h2 id="build-checks"><a class="header" href="#build-checks">Build checks</a></h2>
+<p>The generated crate compiles and passes its tests before it contains any
+TMP102-specific code:</p>
+<pre><code class="language-console">$ cd tmp102
+$ cargo test
+$ cargo clippy -- -D warnings
 </code></pre>
-<p>We also want the code generator that turns a register description into a
-Rust interface:</p>
-<pre><code class="language-console">$ cargo install device-driver-cli
+<p>It’s <code>no_std</code>, so it builds for a bare-metal target too:</p>
+<pre><code class="language-console">$ rustup target add thumbv7em-none-eabihf
+$ cargo build --target thumbv7em-none-eabihf
 </code></pre>
-<p>That binary reads a TOML description of the device and emits the boring
-part of the driver for us: register wrappers, field accessors, and the
-plumbing around them.</p>
-<p>At this point the crate is still empty, but we have already set the
-shape of the project:</p>
-<ul>
-<li>library-first</li>
-<li><code>embedded-hal</code>-based</li>
-<li>async-friendly</li>
-<li>hardware-testable on the host</li>
-</ul>
-<p>Next we describe TMP102’s registers in a form the generator can digest.</p>
+<p>Next, replace the template’s placeholder register map with the one from
+the TMP102 datasheet, then build the driver API on top of it.</p>
+<p><code>device.ddsl</code> is the single source of truth for that map. It is written
+in DDSL, device-driver’s own specification language, and it names the
+generated device itself. There is no separate device-name flag:</p>
+<pre><code class="language-text">device Tmp102Registers {
+    default-byte-order: LE,
+    register-address-type: u8,
+    ...
+}
+</code></pre>
+<p>After editing it to match the datasheet, regenerate <code>src/registers.rs</code>,
+which is committed to the crate:</p>
+<pre><code class="language-console">$ ddc build rust -s device.ddsl -o src/registers.rs --rust-defmt-feature=defmt
+</code></pre>
+<h2 id="optional-starting-from-an-empty-crate"><a class="header" href="#optional-starting-from-an-empty-crate">Optional: starting from an empty crate</a></h2>
+<p>The template is optional. To add each piece by hand, start with a fresh
+library:</p>
+<pre><code class="language-console">$ cargo new --lib tmp102
+    Creating library `tmp102` package
+$ cd tmp102
+</code></pre>
+<p>Then add the dependencies we know we will need:</p>
+<pre><code class="language-console">$ cargo add embedded-hal
+$ cargo add embedded-hal-async
+$ cargo add device-driver --no-default-features
+$ cargo add --dev pico-de-gallo-hal
+$ cargo add --dev tokio -F rt-multi-thread,time,macros
+$ cargo install device-driver-cli
+</code></pre>
+<p>This produces the same dependency set as the generated crate, but leaves
+<code>src/lib.rs</code> empty. It does not create <code>error.rs</code>, <code>interface.rs</code>,
+<code>driver.rs</code>, mock tests, or <code>examples/pico.rs</code>. The following chapters
+write those files from scratch, so this route involves more typing and
+teaches more of the process.</p>
+<p>Both routes produce a library-first, <code>embedded-hal</code>-based driver with an
+async API and host-side hardware testing. The next chapter describes the
+TMP102 registers in the format the generator accepts.</p>
 
                     </main>
 

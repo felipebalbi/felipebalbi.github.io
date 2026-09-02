@@ -37,10 +37,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-391f3414.js";
+            window.path_to_searchindex_js = "../searchindex-5c94e1f4.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-2de855f1.js"></script>
+        <script src="../toc-3e975730.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -192,13 +192,15 @@ categories = ["embedded", "hardware-support", "no-std"]
 keywords = ["tmp102", "temperature", "sensor", "i2c", "embedded-hal"]
 </code></pre>
 <p>If the crate is <code>no_std</code>, say so clearly in the README and crate docs.
-If async support is optional, document the feature flag right next to the
-first example.</p>
+The generated crate resolves blocking versus async when it is scaffolded
+rather than behind a Cargo feature, so state which of the two surfaces it
+exposes right next to the first example.</p>
 <h2 id="docsrs"><a class="header" href="#docsrs">docs.rs</a></h2>
-<p>If your docs need specific features enabled, tell docs.rs explicitly:</p>
+<p>If your docs need specific features enabled, tell docs.rs explicitly.
+Here the only optional features are <code>defmt</code> and <code>hil</code>, so turning
+everything on is the simplest correct answer:</p>
 <pre><code class="language-toml">[package.metadata.docs.rs]
-all-features = false
-features = ["async"]
+all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 </code></pre>
 <p>That avoids the common “works locally, missing items on docs.rs” trap.</p>
@@ -209,25 +211,33 @@ rustdoc-args = ["--cfg", "docsrs"]
 <li>which traits the crate implements or expects</li>
 <li>a blocking example</li>
 <li>an async example if you support one</li>
-<li>feature flags</li>
+<li>feature flags (<code>defmt</code>, and the <code>hil</code> gate from the previous chapter)</li>
 <li>wiring or address-selection notes for <code>A0</code></li>
 </ul>
 <p>For this driver, also mention that <code>pico-de-gallo-hal</code> is only used for
 examples and tests; it should stay in <code>[dev-dependencies]</code> so downstream
 users do not pay for it.</p>
-<h2 id="optional-defmt-support"><a class="header" href="#optional-defmt-support">Optional <code>defmt</code> support</a></h2>
-<p>If you want the crate to fit nicely into embedded firmware projects,
-optional <code>defmt</code> support is a nice touch:</p>
-<ul>
-<li>gate it behind a feature</li>
-<li>make the dependency optional</li>
-<li>keep the default feature set small</li>
-</ul>
+<h2 id="defmt-support"><a class="header" href="#defmt-support"><code>defmt</code> support</a></h2>
+<p>The template already wired this up, and it spans two places that have to
+agree. <code>Cargo.toml</code> keeps the dependency optional and forwards the
+feature to the runtime:</p>
+<pre><code class="language-toml">[dependencies]
+defmt = { version = "1", optional = true }
+
+[features]
+defmt = ["dep:defmt", "device-driver/defmt"]
+</code></pre>
+<p>The other half is the <code>--rust-defmt-feature=defmt</code> we passed to <code>ddc</code>.
+That is what puts <code>#[cfg(feature = "defmt")]</code> and
+<code>#[cfg_attr(feature = "defmt", derive(defmt::Format))]</code> in
+<code>registers.rs</code>. Rename the Cargo feature without regenerating and the
+generated code silently stops matching it.</p>
 <h2 id="release-hygiene"><a class="header" href="#release-hygiene">Release hygiene</a></h2>
-<p>Two last bits of boring professionalism matter a lot:</p>
+<p>Three last bits of boring professionalism matter a lot:</p>
 <ul>
 <li>keep a <code>CHANGELOG.md</code></li>
 <li>follow semver when you change the public API</li>
+<li>commit <code>src/registers.rs</code> and let it into the package</li>
 </ul>
 <p>Small drivers live a long time. A clean README, useful crate metadata,
 and predictable releases do more for adoption than one more clever type.</p>

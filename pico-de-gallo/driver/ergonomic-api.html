@@ -37,10 +37,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-391f3414.js";
+            window.path_to_searchindex_js = "../searchindex-5c94e1f4.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-2de855f1.js"></script>
+        <script src="../toc-3e975730.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -191,8 +191,11 @@ pub struct Celsius(pub f32);</code></pre>
 an arbitrary calibration constant.</p>
 <h2 id="collect-configuration-into-a-builder"><a class="header" href="#collect-configuration-into-a-builder">Collect configuration into a builder</a></h2>
 <p>Instead of making users pass four unrelated arguments into
-<code>configure(...)</code>, give them a small builder with good defaults.</p>
-<pre><code class="language-rust noplayground">#[derive(Clone, Copy, Debug)]
+<code>configure(...)</code>, give them a small builder with good defaults. The four
+fields are enums <code>ddc</code> generated from the manifest.</p>
+<pre><code class="language-rust noplayground">use registers::{ConversionRate, ExtendedMode, Polarity, ThermostatMode};
+
+#[derive(Clone, Copy, Debug)]
 pub struct Config {
     thermostat_mode: ThermostatMode,
     polarity: Polarity,
@@ -206,7 +209,7 @@ impl Default for Config {
             thermostat_mode: ThermostatMode::Comparator,
             polarity: Polarity::ActiveLow,
             extended_mode: ExtendedMode::Disable,
-            conversion_rate: ConversionRate::_4Hz,
+            conversion_rate: ConversionRate::FourHz,
         }
     }
 }
@@ -239,7 +242,7 @@ impl Config {
 <p>That lets the call site read cleanly:</p>
 <pre><code class="language-rust noplayground">let config = Config::new()
     .extended_mode(ExtendedMode::Enable)
-    .conversion_rate(ConversionRate::_8Hz);</code></pre>
+    .conversion_rate(ConversionRate::EightHz);</code></pre>
 <h2 id="use-typestate-for-run-vs-shutdown"><a class="header" href="#use-typestate-for-run-vs-shutdown">Use typestate for run vs shutdown</a></h2>
 <p>TMP102 has two materially different operating states:</p>
 <ul>
@@ -250,11 +253,13 @@ impl Config {
 lets us express the distinction in the type system.</p>
 <pre><code class="language-rust noplayground">use core::marker::PhantomData;
 
+use registers::Tmp102Registers;
+
 pub struct Running;
 pub struct Shutdown;
 
 pub struct Tmp102&lt;I2C, State = Running&gt; {
-    inner: Inner&lt;Interface&lt;I2C&gt;&gt;,
+    inner: Tmp102Registers&lt;Interface&lt;I2C&gt;&gt;,
     extended_mode: bool,
     _state: PhantomData&lt;State&gt;,
 }</code></pre>
@@ -279,7 +284,7 @@ the sensor is running” and let the compiler enforce it.</p>
 
     pub fn continuous(i2c: I2C, a0: A0) -&gt; Self {
         Self {
-            inner: Inner::new(Interface::new(i2c, a0)),
+            inner: Tmp102Registers::new(Interface::new(i2c, a0)),
             extended_mode: false,
             _state: PhantomData,
         }
@@ -300,7 +305,9 @@ the sensor is running” and let the compiler enforce it.</p>
 smearing it across every high-level method.</p>
 <h2 id="the-high-level-async-api"><a class="header" href="#the-high-level-async-api">The high-level async API</a></h2>
 <p>Here is the shape we are after for the async path:</p>
-<pre><code class="language-rust noplayground">impl&lt;I2C: AsyncI2c&gt; Tmp102&lt;I2C, Running&gt; {
+<pre><code class="language-rust noplayground">use registers::ShutdownMode;
+
+impl&lt;I2C: AsyncI2c&gt; Tmp102&lt;I2C, Running&gt; {
     pub async fn configure(&amp;mut self, config: Config) -&gt; Result&lt;(), ErrorKind&gt; {
         self.extended_mode = config.extended_mode == ExtendedMode::Enable;
 

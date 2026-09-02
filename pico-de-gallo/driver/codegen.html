@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Generating Code from TOML - Pico de Gallo</title>
+        <title>Describing the Device in DDSL - Pico de Gallo</title>
 
 
         <!-- Custom HTML head -->
@@ -37,10 +37,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-391f3414.js";
+            window.path_to_searchindex_js = "../searchindex-5c94e1f4.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-2de855f1.js"></script>
+        <script src="../toc-3e975730.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -177,174 +177,157 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="describe-the-device-for-code-generation"><a class="header" href="#describe-the-device-for-code-generation">Describe the device for code generation</a></h1>
-<p>The fastest way to lose momentum in driver work is to hand-write the
-same register boilerplate for the hundredth time. TMP102 is small, but
-it still benefits from code generation.</p>
-<p>Create <code>tmp102.toml</code> in the crate root.</p>
-<h2 id="1-global-configuration"><a class="header" href="#1-global-configuration">1. Global configuration</a></h2>
-<p>The <code>config</code> block tells <code>device-driver-cli</code> what an address looks like,
-how to split names into Rust identifiers, and how to interpret the
-register layout that follows.</p>
-<pre><code class="language-toml">[config]
-register_address_type = "u8"
-default_byte_order = "LE"
-name_word_boundaries = ["Hyphen"]
+<p>Hand-writing register boilerplate is dull, repetitive work. TMP102 is
+small, but it still benefits from code generation.</p>
+<p>Open <code>device.ddsl</code> in the crate root and replace the template’s
+placeholder device with the real TMP102 map. If you started from an
+empty crate, create the file now.</p>
+<p>DDSL is device-driver’s own specification language. One file describes
+the whole map, including the name of the device itself.</p>
+<h2 id="1-the-device-block"><a class="header" href="#1-the-device-block">1. The device block</a></h2>
+<p>The <code>device</code> node names the generated low-level type and sets the
+defaults that every object below it inherits.</p>
+<pre><code class="language-text">device Tmp102Registers {
+    register-address-type: u8,
+    default-byte-order: LE,
+    default-access: RW,
+
+    // registers and fieldsets go here
+}
 </code></pre>
+<ul>
+<li><code>register-address-type</code> is the type of a register address. TMP102’s
+pointer register is 8 bits, so <code>u8</code>.</li>
+<li><code>default-byte-order</code> sets the byte order for fieldsets that do not
+declare one.</li>
+<li><code>default-access</code> sets the access for objects that do not declare one.</li>
+</ul>
+<p>The compiler works out word boundaries on its own, so <code>Tlow</code> becomes
+<code>tlow()</code> and <code>SD</code> becomes <code>sd()</code>.</p>
 <h2 id="2-register-declarations"><a class="header" href="#2-register-declarations">2. Register declarations</a></h2>
-<p>Now declare the four registers from the datasheet.</p>
-<pre><code class="language-toml">[Temperature]
-type = "register"
-address = 0
-size_bits = 16
-access = "RO"
-description = "Temperature register"
+<p>TMP102 has four registers. Three of them, the reading and the two alert
+limits, share a single layout, so declare that layout once as a named
+fieldset and point all three registers at it.</p>
+<pre><code class="language-text">    /// Left-justified temperature code, transmitted MSB first.
+    ///
+    /// 12 significant bits in normal mode, 13 in extended mode.
+    fieldset TemperatureCode {
+        size-bytes: 2,
+        byte-order: BE,
 
-[Configuration]
-type = "register"
-address = 1
-size_bits = 16
-access = "RW"
-description = "Configuration register"
+        /// The raw 16-bit register value.
+        field value 15:0 -&gt; uint,
+    },
 
-[Tlow]
-type = "register"
-address = 2
-size_bits = 16
-access = "RW"
-description = "T-low register"
+    /// Temperature register.
+    register Temperature {
+        address: 0,
+        access: RO,
+        fields: TemperatureCode,
+    },
 
-[Thigh]
-type = "register"
-address = 3
-size_bits = 16
-access = "RW"
-description = "T-high register"
+    /// T-low register.
+    register Tlow {
+        address: 2,
+        fields: TemperatureCode,
+    },
+
+    /// T-high register.
+    register Thigh {
+        address: 3,
+        fields: TemperatureCode,
+    },
 </code></pre>
-<p>That alone is enough to generate raw register accessors. The real value
-comes from teaching the generator about individual fields.</p>
+<p><code>byte-order: BE</code> overrides the device default for these three registers
+only, because TMP102 sends the temperature high byte first. <code>access: RO</code>
+on <code>Temperature</code> leaves the generated operation without a <code>write</code>
+method, so the datasheet’s read-only rule shows up as a compile error.</p>
 <h2 id="3-configuration-bitfields"><a class="header" href="#3-configuration-bitfields">3. Configuration bitfields</a></h2>
-<p>TMP102’s configuration register contains exactly the kind of structure
-we want to avoid encoding by hand: enums hidden inside bit ranges.</p>
-<pre><code class="language-toml">[Configuration.fields.SD]
-description = "Shutdown mode"
-base = "uint"
-start = 0
-end = 1
+<p>The configuration register is a pile of enums packed into bit ranges.
+Its layout is used once, so define the fieldset inline; <code>fieldset _</code>
+gives the generated type the name of the register it sits in.</p>
+<pre><code class="language-text">    /// Configuration register.
+    register Configuration {
+        address: 1,
+        fields: fieldset _ {
+            size-bytes: 2,
 
-[Configuration.fields.SD.conversion]
-name = "shutdown-mode"
-description = "Shutdown mode"
-running = 0
-power-off = 1
-
-[Configuration.fields.TM]
-description = "Thermostat mode"
-base = "uint"
-start = 1
-end = 2
-
-[Configuration.fields.TM.conversion]
-name = "thermostat-mode"
-description = "Thermostat mode of operation"
-comparator = 0
-interrupt = 1
-
-[Configuration.fields.POL]
-description = "Alert pin polarity"
-base = "uint"
-start = 2
-end = 3
-
-[Configuration.fields.POL.conversion]
-name = "Polarity"
-description = "Alert pin polarity"
-active-low = 0
-active-high = 1
-
-[Configuration.fields.F]
-description = "Fault queue"
-base = "uint"
-start = 3
-end = 5
-
-[Configuration.fields.F.conversion]
-name = "fault-queue"
-description = "Fault queue depth"
-_1 = 0
-_2 = 1
-_4 = 2
-_6 = 3
-
-[Configuration.fields.R]
-description = "Resolution"
-access = "RO"
-base = "uint"
-start = 5
-end = 7
-
-[Configuration.fields.OS]
-description = "One-shot"
-base = "bool"
-start = 7
-end = 8
-
-[Configuration.fields.EM]
-description = "extended-mode"
-base = "uint"
-start = 12
-end = 13
-
-[Configuration.fields.EM.conversion]
-name = "extended-mode"
-description = "Extended mode"
-disable = 0
-enable = 1
-
-[Configuration.fields.AL]
-description = "Alert"
-base = "bool"
-start = 13
-end = 14
-
-[Configuration.fields.CR]
-description = "Conversion rate"
-base = "uint"
-start = 14
-end = 16
-
-[Configuration.fields.CR.conversion]
-name = "conversion-rate"
-description = "Conversion rate"
-_0_25Hz = 0
-_1Hz = 1
-_4Hz = 2
-_8Hz = 3
+            /// Shutdown mode.
+            field SD 0 -&gt; _ as enum ShutdownMode {
+                Running: 0,
+                PowerOff: 1,
+            },
+            /// Thermostat mode of operation.
+            field TM 1 -&gt; _ as enum ThermostatMode {
+                Comparator: 0,
+                Interrupt: 1,
+            },
+            /// Alert pin polarity.
+            field POL 2 -&gt; _ as enum Polarity {
+                ActiveLow: 0,
+                ActiveHigh: 1,
+            },
+            /// Fault queue depth.
+            field F 4:3 -&gt; _ as enum FaultQueue {
+                One: 0,
+                Two: 1,
+                Four: 2,
+                Six: 3,
+            },
+            /// Converter resolution.
+            field R 6:5 RO -&gt; uint,
+            /// One-shot conversion.
+            field OS 7 -&gt; bool,
+            /// Extended mode.
+            field EM 12 -&gt; _ as enum ExtendedMode {
+                Disable: 0,
+                Enable: 1,
+            },
+            /// Alert.
+            field AL 13 -&gt; bool,
+            /// Conversion rate.
+            field CR 15:14 -&gt; _ as enum ConversionRate {
+                QuarterHz: 0,
+                OneHz: 1,
+                FourHz: 2,
+                EightHz: 3,
+            },
+        },
+    },
 </code></pre>
-<p>A few nice things fall out of this immediately:</p>
+<p>Bit ranges are written high-to-low and are inclusive, so <code>15:14</code> is the
+two-bit conversion rate and a bare <code>0</code> is the single shutdown bit. The
+<code>_</code> before <code>as</code> lets each field take its base type from the enum it
+converts to.</p>
+<p>That means:</p>
 <ul>
 <li><code>SD</code> stops being a magic bit and becomes a <code>ShutdownMode</code></li>
-<li><code>CR</code> stops being <code>0b10</code> and becomes <code>ConversionRate::_4Hz</code></li>
-<li>read-only fields like <code>R</code> are encoded as such in the generated API</li>
+<li><code>CR</code> stops being <code>0b10</code> and becomes <code>ConversionRate::FourHz</code></li>
+<li><code>R</code> carries <code>RO</code>, so the fieldset gets <code>r()</code> but no <code>set_r()</code></li>
+<li>every enum covers all bit patterns of its field, so <code>sd()</code> and <code>cr()</code>
+return the enum itself rather than a <code>Result</code></li>
 </ul>
 <blockquote class="blockquote-tag blockquote-tag-tip">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>Tip</p>
-<p>Keep the TOML file focused on <em>register truth</em>, not ergonomic policy.
-The manifest should describe what the hardware is. The public driver
-API can then decide what feels pleasant and safe for humans.</p>
+<p>Keep the manifest focused on <em>register truth</em>, not ergonomic policy.
+It describes what the hardware is; the public driver API decides what
+is pleasant and safe to call.</p>
 </blockquote>
-<h2 id="4-generate-srcinnerrs"><a class="header" href="#4-generate-srcinnerrs">4. Generate <code>src/inner.rs</code></a></h2>
+<h2 id="4-generate-srcregistersrs"><a class="header" href="#4-generate-srcregistersrs">4. Generate <code>src/registers.rs</code></a></h2>
 <p>With the manifest in place, generate the low-level register interface:</p>
-<pre><code class="language-console">$ device-driver-cli -m tmp102.toml -d Inner -o src\inner.rs
+<pre><code class="language-console">$ ddc build rust -s device.ddsl -o src/registers.rs --rust-defmt-feature=defmt
 </code></pre>
+<p>The <code>device</code> node supplies the name, so the generated low-level type is
+<code>Tmp102Registers</code>.</p>
 <p>The generated file is intentionally not the public API. We will treat it
 as an implementation detail:</p>
 <ul>
-<li><code>inner.rs</code> knows registers, fields, and access widths</li>
+<li><code>registers.rs</code> knows registers, fields, and access widths</li>
 <li>our hand-written wrapper will know addresses, conversions, and
 human-facing methods</li>
 </ul>
-<p>That split is the sweet spot. Let the machine write the repetitive code;
-keep the policy decisions for the part humans maintain.</p>
+<p>Let the generator write the repetitive code and keep the policy
+decisions in the part you maintain.</p>
 <p>Next we connect that generated layer to a real I<sup>2</sup>C bus.</p>
 
                     </main>

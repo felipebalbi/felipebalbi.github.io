@@ -37,10 +37,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-391f3414.js";
+            window.path_to_searchindex_js = "../searchindex-5c94e1f4.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-2de855f1.js"></script>
+        <script src="../toc-3e975730.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -179,9 +179,9 @@
                         <h1 id="implementing-registerinterface-and-asyncregisterinterface"><a class="header" href="#implementing-registerinterface-and-asyncregisterinterface">Implementing <code>RegisterInterface</code> and <code>AsyncRegisterInterface</code></a></h1>
 <p>At this point we have generated code, but it still has no idea how to
 reach real hardware. That is our job.</p>
-<p>The generated <code>Inner</code> type wants a tiny transport object that knows how
-to read and write a register by address. For TMP102 that transport is
-just I<sup>2</sup>C plus the selected device address.</p>
+<p><code>Tmp102Registers</code> wants a tiny transport object that knows how to read
+and write a register by address. For TMP102 that transport is just
+I<sup>2</sup>C plus the selected device address.</p>
 <h2 id="encode-the-legal-addresses"><a class="header" href="#encode-the-legal-addresses">Encode the legal addresses</a></h2>
 <p>TMP102 does not live at an arbitrary address. Datasheet table 6-4 gives
 us four legal values, so we should model exactly those four values.</p>
@@ -231,23 +231,33 @@ impl&lt;I2C&gt; Interface&lt;I2C&gt; {
         }
     }
 }</code></pre>
+<p><code>RegisterInterfaceBase</code> declares the two associated types that the
+blocking and async traits are both built on:</p>
+<pre><code class="language-rust noplayground">use device_driver::RegisterInterfaceBase;
+use embedded_hal::i2c::ErrorKind;
+
+impl&lt;I2C&gt; RegisterInterfaceBase for Interface&lt;I2C&gt; {
+    type Error = ErrorKind;
+    type AddressType = u8;
+}</code></pre>
+<p><code>AddressType</code> has to match the <code>register-address-type</code> we set in the
+manifest. <code>ErrorKind</code> comes from <code>embedded-hal</code>, and
+<code>embedded-hal-async</code> re-exports that same type, so one impl covers both
+sides and needs no bound on <code>I2C</code>.</p>
 <p>The job of <code>Interface</code> is deliberately boring: take register operations
 from generated code and translate them into real I<sup>2</sup>C
 transactions.</p>
 <h2 id="blocking-register-access"><a class="header" href="#blocking-register-access">Blocking register access</a></h2>
 <p>For blocking <code>embedded-hal</code>, that translation looks like this:</p>
-<pre><code class="language-rust noplayground">use device_driver::RegisterInterface;
-use embedded_hal::i2c::{Error, ErrorKind, I2c};
+<pre><code class="language-rust noplayground">use device_driver::{FieldsetMetadata, RegisterInterface};
+use embedded_hal::i2c::{Error, I2c};
 
 impl&lt;I2C: I2c&gt; RegisterInterface for Interface&lt;I2C&gt; {
-    type Error = ErrorKind;
-    type AddressType = u8;
-
     fn write_register(
         &amp;mut self,
         address: Self::AddressType,
-        _size_bits: u32,
-        data: &amp;[u8],
+        data: &amp;mut [u8],
+        _metadata: &amp;FieldsetMetadata,
     ) -&gt; Result&lt;(), Self::Error&gt; {
         let mut buf = [0u8; 3];
         buf[0] = address;
@@ -259,8 +269,8 @@ impl&lt;I2C: I2c&gt; RegisterInterface for Interface&lt;I2C&gt; {
     fn read_register(
         &amp;mut self,
         address: Self::AddressType,
-        _size_bits: u32,
         data: &amp;mut [u8],
+        _metadata: &amp;FieldsetMetadata,
     ) -&gt; Result&lt;(), Self::Error&gt; {
         self.i2c
             .write_read(self.addr, &amp;[address], data)
@@ -269,6 +279,11 @@ impl&lt;I2C: I2c&gt; RegisterInterface for Interface&lt;I2C&gt; {
 }</code></pre>
 <p>TMP102 keeps this pleasantly simple: one pointer byte, then two bytes of
 payload.</p>
+<p>Both methods take <code>data</code> as <code>&amp;mut [u8]</code>. The write side gets a mutable
+buffer so that an interface can rearrange bytes in place before sending,
+which we do not need here. <code>_metadata</code> carries the fieldset’s byte
+order, which we can also ignore because the framing is the same for
+every TMP102 register.</p>
 <blockquote class="blockquote-tag blockquote-tag-note">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
 <p>The fixed <code>[u8; 3]</code> buffer is TMP102-specific. For a bigger device with
@@ -276,19 +291,17 @@ wider registers, size the stack buffer to your largest write or switch
 to a small growable buffer type.</p>
 </blockquote>
 <h2 id="async-register-access"><a class="header" href="#async-register-access">Async register access</a></h2>
-<p>The async version is the same idea with <code>.await</code> in the obvious places:</p>
+<p>The async version is the same idea with <code>.await</code> in the obvious places.
+Because the template resolved <code>both</code> at generation time, this impl sits
+next to the blocking one with no <code>cfg</code> between them:</p>
 <pre><code class="language-rust noplayground">use device_driver::AsyncRegisterInterface;
-use embedded_hal_async::i2c::{Error, ErrorKind, I2c as AsyncI2c};
 
 impl&lt;I2C: AsyncI2c&gt; AsyncRegisterInterface for Interface&lt;I2C&gt; {
-    type Error = ErrorKind;
-    type AddressType = u8;
-
     async fn write_register(
         &amp;mut self,
         address: Self::AddressType,
-        _size_bits: u32,
-        data: &amp;[u8],
+        data: &amp;mut [u8],
+        _metadata: &amp;FieldsetMetadata,
     ) -&gt; Result&lt;(), Self::Error&gt; {
         let mut buf = [0u8; 3];
         buf[0] = address;
@@ -300,8 +313,8 @@ impl&lt;I2C: AsyncI2c&gt; AsyncRegisterInterface for Interface&lt;I2C&gt; {
     async fn read_register(
         &amp;mut self,
         address: Self::AddressType,
-        _size_bits: u32,
         data: &amp;mut [u8],
+        _metadata: &amp;FieldsetMetadata,
     ) -&gt; Result&lt;(), Self::Error&gt; {
         self.i2c
             .write_read(self.addr, &amp;[address], data)
@@ -311,26 +324,24 @@ impl&lt;I2C: AsyncI2c&gt; AsyncRegisterInterface for Interface&lt;I2C&gt; {
 }</code></pre>
 <p>So far, so good. The generated code can finally talk to the sensor.</p>
 <h2 id="put-the-generated-layer-behind-a-real-driver-type"><a class="header" href="#put-the-generated-layer-behind-a-real-driver-type">Put the generated layer behind a real driver type</a></h2>
-<p>If you stop here and run <code>cargo build</code>, you will see the same warnings as
-in the original draft: fields and methods in <code>Inner</code> are “never used”.
-That is the compiler telling us something true: we generated a low-level
-API, but we still have not wrapped it in a driver humans will actually
-call.</p>
-<p>A minimal wrapper is enough to make those warnings go away and give the
-chapter a clean place to keep growing:</p>
-<pre><code class="language-rust noplayground">mod inner;
+<p>Build this as it stands and the compiler will report that fields and
+methods on <code>Tmp102Registers</code> are never used. It is right: we generated a
+low-level API and nothing calls it yet.</p>
+<p>A minimal wrapper clears those warnings and gives the chapter a place to
+keep growing:</p>
+<pre><code class="language-rust noplayground">mod registers;
 
-use inner::Inner;
+use registers::{ShutdownMode, Tmp102Registers};
 
 pub struct Tmp102&lt;I2C&gt; {
-    inner: Inner&lt;Interface&lt;I2C&gt;&gt;,
+    inner: Tmp102Registers&lt;Interface&lt;I2C&gt;&gt;,
     extended_mode: bool,
 }
 
 impl&lt;I2C&gt; Tmp102&lt;I2C&gt; {
     pub fn new(i2c: I2C, a0: A0) -&gt; Self {
         Self {
-            inner: Inner::new(Interface::new(i2c, a0)),
+            inner: Tmp102Registers::new(Interface::new(i2c, a0)),
             extended_mode: false,
         }
     }

@@ -37,10 +37,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-391f3414.js";
+            window.path_to_searchindex_js = "../searchindex-5c94e1f4.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-2de855f1.js"></script>
+        <script src="../toc-3e975730.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -185,27 +185,28 @@ Pico de Gallo board, we can run the driver on a host machine against a
 <p>No mocks. No firmware flashing loop. No sacrificial example binary that
 only exists so you can manually test one register read.</p>
 <h2 id="a-hardware-in-the-loop-test"><a class="header" href="#a-hardware-in-the-loop-test">A hardware-in-the-loop test</a></h2>
-<p>A minimal blocking test looks like this:</p>
+<p>Our public API is async, so the test is too:</p>
 <pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>#[cfg(feature = "hil")]
-#[test]
-fn tmp102_reports_a_plausible_temperature() {
+#[tokio::test]
+async fn tmp102_reports_a_plausible_temperature() {
     use pico_de_gallo_hal::Hal;
+    use tmp102::{Celsius, Tmp102, A0};
 
     let hal = Hal::new();
     let i2c = hal.i2c();
     let mut sensor = Tmp102::new(i2c, A0::Gnd);
 
-    let Celsius(temp) = sensor.temperature_blocking().unwrap();
+    let Celsius(temp) = sensor.temperature().await.unwrap();
 
     assert!((-40.0..=125.0).contains(&amp;temp));
 }
 <span class="boring">}</span></code></pre>
 <p>That range is intentionally broad: it matches the device’s operating
 range and keeps the test robust across different lab environments.</p>
-<p>If your driver’s primary API is async, the same idea works with
-<code>#[tokio::test]</code> and <code>.await</code>.</p>
+<p>The blocking siblings we add in the next chapter work the same way with
+a plain <code>#[test]</code> and no <code>.await</code>.</p>
 <h2 id="why-this-is-special"><a class="header" href="#why-this-is-special">Why this is special</a></h2>
 <p>Most embedded-driver test setups force you into one of two extremes:</p>
 <ul>
@@ -227,13 +228,14 @@ real hardware-in-the-loop tests with <code>cargo test</code>.</p>
 <p>Not every CI environment has hardware attached, so gate the test behind
 an opt-in feature:</p>
 <pre><code class="language-rust noplayground">#[cfg(feature = "hil")]
-#[test]
-fn tmp102_reports_a_plausible_temperature() {
+#[tokio::test]
+async fn tmp102_reports_a_plausible_temperature() {
     // ...
 }</code></pre>
 <p>And in <code>Cargo.toml</code>:</p>
 <pre><code class="language-toml">[features]
 default = []
+defmt = ["dep:defmt", "device-driver/defmt"]
 hil = []
 </code></pre>
 <p>Now normal CI can run <code>cargo test</code>, while the hardware-backed runner can
