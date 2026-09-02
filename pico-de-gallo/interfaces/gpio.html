@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-855faf92.js";
+            window.path_to_searchindex_js = "../searchindex-391f3414.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -321,6 +321,15 @@ void read_write(PicoDeGallo *gallo) {
 <p>The library provides async methods that block until a pin reaches the
 requested state or edge transition. These are useful for waiting on
 external signals without polling.</p>
+<h3 id="timeout-semantics"><a class="header" href="#timeout-semantics">Timeout semantics</a></h3>
+<p>All five <code>gpio/wait-*</code> endpoints carry a firmware-side timeout. A
+<code>timeout_ms</code> value of <code>0</code> selects the firmware’s <strong>30-minute ceiling</strong>; it
+does not wait forever. Values above 30 minutes are clamped to that same
+ceiling. If the requested state or edge does not arrive before the effective
+timeout, the endpoint returns <code>GpioError::Timeout</code>.</p>
+<p>The Rust methods without a <code>_with_timeout</code> suffix and the C functions without
+a <code>_with_timeout_ms</code> suffix send <code>0</code>, so they also expire at the 30-minute
+ceiling. Use the explicit timeout variants when a shorter bound is appropriate.</p>
 <h3 id="rust-library-2"><a class="header" href="#rust-library-2">Rust Library</a></h3>
 <pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
@@ -353,7 +362,7 @@ async fn wait_for_button(gallo: &amp;PicoDeGallo) {
 #include &lt;stdio.h&gt;
 
 void wait_for_button(PicoDeGallo *gallo) {
-    /* These calls block until the requested edge/state occurs */
+    /* These calls wait up to the firmware's 30-minute ceiling. */
     gallo_gpio_wait_for_high(gallo, 1);
     printf("Pin 1 is now high\n");
 

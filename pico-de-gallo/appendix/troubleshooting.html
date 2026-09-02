@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-855faf92.js";
+            window.path_to_searchindex_js = "../searchindex-391f3414.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -228,6 +228,20 @@ from the same tree. <code>gallo version</code> still works in this situation: it
 bounds <code>device/info</code> at five seconds and then falls back to the legacy
 <code>version</code> endpoint, whose response type is unchanged and therefore
 still matches.</p>
+<h3 id="the-board-reset-itself"><a class="header" href="#the-board-reset-itself">The board reset itself</a></h3>
+<p>The firmware’s dispatch supervisor deliberately resets the board when an
+in-flight request or transmit path exceeds its budget. USB disconnects and
+re-enumerates, and active GPIO subscriptions are lost.</p>
+<p>Attach an RTT reader and look for these <code>defmt</code> messages:</p>
+<pre><code class="language-text">supervisor: &lt;slot&gt; slot expired (key=&lt;frame-key&gt;) — resetting
+previous boot ended in a supervisor-forced reset: slot=&lt;slot&gt; key=&lt;frame-key&gt;
+</code></pre>
+<p><code>dispatch</code> identifies a request handler that did not complete within its
+default or declared budget. <code>tx</code> identifies absence of aggregate transmit
+completion. The hexadecimal key is the first four frame-header bytes retained
+as a breadcrumb; include it with the preceding request when reporting a bug.</p>
+<p>If RTT instead reports <code>previous boot ended in a watchdog reset not raised by the supervisor</code>, the executor itself stopped making enough progress to feed the
+2-second hardware watchdog. A cold boot has neither message.</p>
 <h2 id="peripheral-errors"><a class="header" href="#peripheral-errors">Peripheral Errors</a></h2>
 <h3 id="unsupported-status-code-65"><a class="header" href="#unsupported-status-code-65"><code>Unsupported</code> (status code −65)</a></h3>
 <p>The peripheral exists in the protocol but isn’’t wired on this

@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-855faf92.js";
+            window.path_to_searchindex_js = "../searchindex-391f3414.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -426,18 +426,19 @@ host already has a buffer waiting when the first edge arrives.</p>
 <tr><td><code>spi_batch</code></td><td><code>cs_pin</code>, <code>ops</code></td><td>Execute atomic multi-step SPI traffic under chip-select (see below)</td></tr>
 <tr><td><code>spi_set_config</code></td><td><code>spi_frequency</code>, <code>spi_phase</code>, <code>spi_polarity</code></td><td>Set SPI timing and mode</td></tr>
 <tr><td><code>spi_get_config</code></td><td>—</td><td>Read back the active SPI configuration</td></tr>
-<tr><td><code>uart_read</code></td><td><code>count</code>, <code>timeout_ms</code></td><td>Read up to <code>count</code> bytes with timeout</td></tr>
+<tr><td><code>uart_read</code></td><td><code>count</code>, <code>timeout_ms</code></td><td>Read up to <code>count</code> bytes; <code>0</code> is a 1 ms poll, oversized non-zero timeouts clamp at 30 minutes</td></tr>
 <tr><td><code>uart_write</code></td><td><code>contents</code></td><td>Queue bytes for UART transmit</td></tr>
 <tr><td><code>uart_flush</code></td><td>—</td><td>Wait until UART TX has drained</td></tr>
 <tr><td><code>uart_set_config</code></td><td><code>baud_rate</code></td><td>Set UART baud rate</td></tr>
 <tr><td><code>uart_get_config</code></td><td>—</td><td>Read back the active UART configuration</td></tr>
 <tr><td><code>gpio_get</code></td><td><code>pin</code></td><td>Read a GPIO level</td></tr>
 <tr><td><code>gpio_put</code></td><td><code>pin</code>, <code>state</code></td><td>Drive a GPIO high or low</td></tr>
-<tr><td><code>gpio_wait_for_high</code></td><td><code>pin</code></td><td>Wait until a pin reads high</td></tr>
-<tr><td><code>gpio_wait_for_low</code></td><td><code>pin</code></td><td>Wait until a pin reads low</td></tr>
-<tr><td><code>gpio_wait_for_rising_edge</code></td><td><code>pin</code></td><td>Wait for a rising edge</td></tr>
-<tr><td><code>gpio_wait_for_falling_edge</code></td><td><code>pin</code></td><td>Wait for a falling edge</td></tr>
-<tr><td><code>gpio_wait_for_any_edge</code></td><td><code>pin</code></td><td>Wait for either edge</td></tr>
+<tr><td><code>gpio_wait_for_high</code></td><td><code>pin</code></td><td>Wait until a pin reads high, bounded by the 30-minute firmware ceiling</td></tr>
+<tr><td><code>gpio_wait_for_low</code></td><td><code>pin</code></td><td>Wait until a pin reads low, bounded by the 30-minute firmware ceiling</td></tr>
+<tr><td><code>gpio_wait_for_rising_edge</code></td><td><code>pin</code></td><td>Wait for a rising edge, bounded by the 30-minute firmware ceiling</td></tr>
+<tr><td><code>gpio_wait_for_falling_edge</code></td><td><code>pin</code></td><td>Wait for a falling edge, bounded by the 30-minute firmware ceiling</td></tr>
+<tr><td><code>gpio_wait_for_any_edge</code></td><td><code>pin</code></td><td>Wait for either edge, bounded by the 30-minute firmware ceiling</td></tr>
+<tr><td><code>gpio_wait_for_*_with_timeout</code></td><td><code>pin</code>, <code>timeout</code></td><td>Use a shorter GPIO wait; zero and oversized values select the 30-minute ceiling, and expiry returns <code>GpioError::Timeout</code></td></tr>
 <tr><td><code>gpio_set_config</code></td><td><code>pin</code>, <code>direction</code>, <code>pull</code></td><td>Set GPIO direction and pull resistor</td></tr>
 <tr><td><code>gpio_subscribe</code></td><td><code>pin</code>, <code>edge</code></td><td>Ask firmware to monitor a pin for edge events</td></tr>
 <tr><td><code>gpio_unsubscribe</code></td><td><code>pin</code></td><td>Stop firmware-side monitoring</td></tr>

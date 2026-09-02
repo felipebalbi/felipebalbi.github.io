@@ -38,7 +38,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-855faf92.js";
+            window.path_to_searchindex_js = "searchindex-391f3414.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-2de855f1.js"></script>
@@ -1822,8 +1822,10 @@ GND ────────────────── GND
 receive pin of the other.</p>
 </blockquote>
 <h2 id="non-blocking-read"><a class="header" href="#non-blocking-read">Non-blocking Read</a></h2>
-<p>A timeout of <strong>0</strong> performs a non-blocking read — it returns immediately
-with whatever bytes are already in the receive buffer (possibly none):</p>
+<p>A timeout of <strong>0</strong> performs a non-blocking read — it returns after a 1 ms poll
+with whatever bytes are already in the receive buffer (possibly none). This is
+a deliberate exception to GPIO wait semantics. Non-zero values above the
+firmware’s 30-minute ceiling are clamped to that ceiling:</p>
 <pre><code class="language-bash"># Non-blocking: return whatever is buffered right now
 gallo uart read --count 64 --timeout 0
 </code></pre>
@@ -1832,7 +1834,7 @@ gallo uart read --count 64 --timeout 0
 </span>use pico_de_gallo_lib::PicoDeGallo;
 
 async fn drain_buffer(gallo: &amp;PicoDeGallo) -&gt; Vec&lt;u8&gt; {
-    // timeout_ms = 0 → non-blocking
+    // timeout_ms = 0 → 1 ms non-blocking poll
     gallo.uart_read(64, 0).await.unwrap()
 }
 <span class="boring">}</span></code></pre>
@@ -2059,6 +2061,15 @@ void read_write(PicoDeGallo *gallo) {
 <p>The library provides async methods that block until a pin reaches the
 requested state or edge transition. These are useful for waiting on
 external signals without polling.</p>
+<h3 id="timeout-semantics"><a class="header" href="#timeout-semantics">Timeout semantics</a></h3>
+<p>All five <code>gpio/wait-*</code> endpoints carry a firmware-side timeout. A
+<code>timeout_ms</code> value of <code>0</code> selects the firmware’s <strong>30-minute ceiling</strong>; it
+does not wait forever. Values above 30 minutes are clamped to that same
+ceiling. If the requested state or edge does not arrive before the effective
+timeout, the endpoint returns <code>GpioError::Timeout</code>.</p>
+<p>The Rust methods without a <code>_with_timeout</code> suffix and the C functions without
+a <code>_with_timeout_ms</code> suffix send <code>0</code>, so they also expire at the 30-minute
+ceiling. Use the explicit timeout variants when a shorter bound is appropriate.</p>
 <h3 id="rust-library-2-1"><a class="header" href="#rust-library-2-1">Rust Library</a></h3>
 <pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
@@ -2091,7 +2102,7 @@ async fn wait_for_button(gallo: &amp;PicoDeGallo) {
 #include &lt;stdio.h&gt;
 
 void wait_for_button(PicoDeGallo *gallo) {
-    /* These calls block until the requested edge/state occurs */
+    /* These calls wait up to the firmware's 30-minute ceiling. */
     gallo_gpio_wait_for_high(gallo, 1);
     printf("Pin 1 is now high\n");
 
@@ -3940,18 +3951,19 @@ host already has a buffer waiting when the first edge arrives.</p>
 <tr><td><code>spi_batch</code></td><td><code>cs_pin</code>, <code>ops</code></td><td>Execute atomic multi-step SPI traffic under chip-select (see below)</td></tr>
 <tr><td><code>spi_set_config</code></td><td><code>spi_frequency</code>, <code>spi_phase</code>, <code>spi_polarity</code></td><td>Set SPI timing and mode</td></tr>
 <tr><td><code>spi_get_config</code></td><td>—</td><td>Read back the active SPI configuration</td></tr>
-<tr><td><code>uart_read</code></td><td><code>count</code>, <code>timeout_ms</code></td><td>Read up to <code>count</code> bytes with timeout</td></tr>
+<tr><td><code>uart_read</code></td><td><code>count</code>, <code>timeout_ms</code></td><td>Read up to <code>count</code> bytes; <code>0</code> is a 1 ms poll, oversized non-zero timeouts clamp at 30 minutes</td></tr>
 <tr><td><code>uart_write</code></td><td><code>contents</code></td><td>Queue bytes for UART transmit</td></tr>
 <tr><td><code>uart_flush</code></td><td>—</td><td>Wait until UART TX has drained</td></tr>
 <tr><td><code>uart_set_config</code></td><td><code>baud_rate</code></td><td>Set UART baud rate</td></tr>
 <tr><td><code>uart_get_config</code></td><td>—</td><td>Read back the active UART configuration</td></tr>
 <tr><td><code>gpio_get</code></td><td><code>pin</code></td><td>Read a GPIO level</td></tr>
 <tr><td><code>gpio_put</code></td><td><code>pin</code>, <code>state</code></td><td>Drive a GPIO high or low</td></tr>
-<tr><td><code>gpio_wait_for_high</code></td><td><code>pin</code></td><td>Wait until a pin reads high</td></tr>
-<tr><td><code>gpio_wait_for_low</code></td><td><code>pin</code></td><td>Wait until a pin reads low</td></tr>
-<tr><td><code>gpio_wait_for_rising_edge</code></td><td><code>pin</code></td><td>Wait for a rising edge</td></tr>
-<tr><td><code>gpio_wait_for_falling_edge</code></td><td><code>pin</code></td><td>Wait for a falling edge</td></tr>
-<tr><td><code>gpio_wait_for_any_edge</code></td><td><code>pin</code></td><td>Wait for either edge</td></tr>
+<tr><td><code>gpio_wait_for_high</code></td><td><code>pin</code></td><td>Wait until a pin reads high, bounded by the 30-minute firmware ceiling</td></tr>
+<tr><td><code>gpio_wait_for_low</code></td><td><code>pin</code></td><td>Wait until a pin reads low, bounded by the 30-minute firmware ceiling</td></tr>
+<tr><td><code>gpio_wait_for_rising_edge</code></td><td><code>pin</code></td><td>Wait for a rising edge, bounded by the 30-minute firmware ceiling</td></tr>
+<tr><td><code>gpio_wait_for_falling_edge</code></td><td><code>pin</code></td><td>Wait for a falling edge, bounded by the 30-minute firmware ceiling</td></tr>
+<tr><td><code>gpio_wait_for_any_edge</code></td><td><code>pin</code></td><td>Wait for either edge, bounded by the 30-minute firmware ceiling</td></tr>
+<tr><td><code>gpio_wait_for_*_with_timeout</code></td><td><code>pin</code>, <code>timeout</code></td><td>Use a shorter GPIO wait; zero and oversized values select the 30-minute ceiling, and expiry returns <code>GpioError::Timeout</code></td></tr>
 <tr><td><code>gpio_set_config</code></td><td><code>pin</code>, <code>direction</code>, <code>pull</code></td><td>Set GPIO direction and pull resistor</td></tr>
 <tr><td><code>gpio_subscribe</code></td><td><code>pin</code>, <code>edge</code></td><td>Ask firmware to monitor a pin for edge events</td></tr>
 <tr><td><code>gpio_unsubscribe</code></td><td><code>pin</code></td><td>Stop firmware-side monitoring</td></tr>
@@ -4514,6 +4526,11 @@ Status gallo_gpio_set_config(const PicoDeGallo *gallo,
 Status gallo_gpio_subscribe(const PicoDeGallo *gallo, uint8_t pin, uint8_t edge);
 Status gallo_gpio_unsubscribe(const PicoDeGallo *gallo, uint8_t pin);
 </code></pre>
+<p>The five wait functions above send <code>timeout_ms == 0</code>, which selects the
+firmware’s 30-minute ceiling rather than waiting forever. Their
+<code>_with_timeout_ms</code> variants accept an explicit timeout; <code>0</code> selects the same
+ceiling, oversized values are clamped to it, and expiry returns
+<code>GpioTimeout</code> (−70).</p>
 <h3 id="uart-2"><a class="header" href="#uart-2">UART</a></h3>
 <pre><code class="language-c">Status gallo_uart_read(const PicoDeGallo *gallo,
                        uint8_t *buf, uint16_t count,
@@ -4524,6 +4541,9 @@ Status gallo_uart_flush(const PicoDeGallo *gallo);
 Status gallo_uart_set_config(const PicoDeGallo *gallo, uint32_t baud_rate);
 Status gallo_uart_get_config(const PicoDeGallo *gallo, uint32_t *out_baud_rate);
 </code></pre>
+<p>For <code>gallo_uart_read</code>, <code>timeout_ms == 0</code> is a deliberate exception: it selects
+a 1 ms non-blocking poll. Non-zero values above the firmware’s 30-minute
+ceiling are clamped to it; expiry returns success with <code>*out_len == 0</code>.</p>
 <h3 id="pwm-2"><a class="header" href="#pwm-2">PWM</a></h3>
 <pre><code class="language-c">Status gallo_pwm_set_duty_cycle(const PicoDeGallo *gallo,
                                 uint8_t channel, uint16_t duty);
@@ -5080,7 +5100,7 @@ to override it.</p>
 to different boards run concurrently; calls to the same board queue. A
 long-running tool — a <code>gpio_wait_*</code> sitting on its full <code>timeout_ms</code> —
 holds only the board it addressed, so traffic to every other board keeps
-flowing.</p>
+flowing. Firmware clamps that timeout to a maximum of 30 minutes.</p>
 <p><code>list_devices</code> connects to nothing and always answers immediately.
 <code>status</code> does open the board it names, so it queues behind a call that is
 still holding that board.</p>
@@ -5264,13 +5284,15 @@ firmware, or schema mismatch — is <code>-32603</code> (internal error), never
 <h2 id="gpio-waits-and-v1-limits"><a class="header" href="#gpio-waits-and-v1-limits">GPIO waits and v1 limits</a></h2>
 <p>GPIO edge waits are <strong>timeout-bounded only</strong>: each of the three wait
 tools requires a non-zero <code>timeout_ms</code>. This release deliberately does
-<strong>not</strong> expose infinite/no-timeout waits or push-based edge
-subscriptions — a wait that never returns would stall the stdio session,
-and event streaming is out of scope for v1.</p>
+<strong>not</strong> expose <code>0</code>, which would select the firmware’s 30-minute ceiling,
+or push-based edge subscriptions — holding an MCP request for that full
+ceiling is undesirable, and event streaming is out of scope for v1.
+Oversized non-zero values are clamped to the same ceiling; expiry returns
+the GPIO endpoint’s <code>Timeout</code> error.</p>
 <p><code>uart_read</code>’s <code>timeout_ms</code> is <strong>not</strong> covered by that rule: there <code>0</code> is
 legal and means a non-blocking poll that returns whatever is already
-buffered. The asymmetry is deliberate — for an edge wait, <code>0</code> would mean
-an unbounded wait.</p>
+buffered after 1 ms. Its non-zero path is clamped to the 30-minute ceiling.
+The asymmetry is deliberate.</p>
 <p><code>uart_read</code> is also one of the twelve tools that hard-fail on a
 <code>hw-rev1</code> board: that revision supports only I<sup>2</sup>C, SPI, GPIO,
 and PWM, so every <code>uart_*</code>, <code>adc_*</code>, and <code>onewire_*</code> call returns
@@ -6786,21 +6808,48 @@ context, while background tasks handle work such as GPIO event publication.</p>
 without turning into a hand-written state machine maze.</p>
 </blockquote>
 <h3 id="watchdog"><a class="header" href="#watchdog">Watchdog</a></h3>
-<p>A dedicated <code>watchdog_feeder_task</code> arms the RP2350 hardware watchdog at
-<strong>2 seconds</strong> and feeds it every <strong>800 ms</strong>. The 800 ms cadence leaves
-margin for embassy scheduling jitter.</p>
-<p>The feeder is a <strong>separate embassy task</strong>, not part of any RPC handler. It proves
-executor liveness, not dispatcher progress. M5 demonstrated that a request
-handler can block the serial postcard-rpc dispatcher while the feeder continues
-to run, so the 2 s watchdog does not reset that failure mode. A 1015-byte
-TX-only <code>spi/transfer</code> reproduced this device-wide wedge. In those tests the
-device resumed after USB re-enumeration; that is an observed procedure, not
-proof that detach cancels the handler. Treat the watchdog as defense against
-executor-wide stalls, not bounded RPC cancellation or a guarantee against
-handler deadlock.</p>
-<p><code>pause_on_debug(true)</code> is set so an attached debugger session does not
-reset the chip while you single-step. The watchdog is the same on both
-<code>hw-rev1</code> and <code>hw-rev2</code> (no rev-specific code).</p>
+<p>The <code>watchdog_supervisor_task</code> arms the RP2350 hardware watchdog at 2 seconds,
+but feeds it only while dispatch and transmit progress remain plausible. Two
+independent slots track that progress:</p>
+<ul>
+<li>The <strong>dispatch slot</strong> arms after <code>receive()</code> returns a frame and disarms when
+postcard-rpc goes back to waiting. Most handlers receive the 10-second
+default budget. Slow handlers declare a longer bound; caller-supplied bounds
+are capped at 30 minutes and receive 30 seconds of reply-serialization slack.</li>
+<li>The <strong>TX slot</strong> arms while any <code>WireTx</code> sender is outstanding. Its 60-second
+budget covers TX-mutex starvation and GPIO event publishers that run outside
+the dispatcher.</li>
+</ul>
+<p>The supervisor polls every 250 ms. The designed reset-latency bound is the
+active slot’s budget plus one poll period; this is a design target, not a
+board-attached measurement. On expiry it logs the slot and frame breadcrumb,
+writes them to watchdog scratch registers, and triggers a forced reset. Reset
+drops USB and loses every GPIO subscription. On the next boot, RTT reports the
+breadcrumb and clears it.</p>
+<p><code>pause_on_debug(true)</code> stops the hardware watchdog while the core is halted,
+but Embassy time continues. A supervisor wake gap above 500 ms is therefore
+treated as a debugger or scheduling discontinuity: live deadlines are shifted
+by the gap instead of resetting immediately. This rule’s board-attached
+acceptance check is still pending.</p>
+<p>The supervisor is a backstop, not complete hang detection:</p>
+<ul>
+<li>A wedge inside <code>receive()</code> itself is indistinguishable from legitimate idle
+and is not covered.</li>
+<li>The TX slot has no hardware acceptance trigger; its correctness rests on
+inspection.</li>
+<li>The single TX slot measures aggregate TX progress, not per-sender progress.
+One permanently starved sender remains masked while another sender completes
+at least once per 60-second <code>TX_BUDGET</code>.</li>
+</ul>
+<p>The <code>wedge-test</code> feature provides a build-only acceptance hatch by disabling
+the firmware’s zero-length I<sup>2</sup>C write guard. It cannot be reached
+through the normal Rust-library or MCP <code>i2c_write</code> routes because both reject
+an empty payload host-side. Reproducing the wedge therefore also requires
+temporarily removing one of those host guards locally, as an uncommitted test
+mutation; the guards remain correct production behaviour.</p>
+<p>The watchdog is the same on both <code>hw-rev1</code> and <code>hw-rev2</code> (no rev-specific
+code). The firmware crate has no unit-test harness; none is implied by the pure
+supervision policy function.</p>
 <h3 id="build-identity-1"><a class="header" href="#build-identity-1">Build identity</a></h3>
 <p><code>crates/pico-de-gallo-firmware/build.rs</code> runs</p>
 <pre><code class="language-text">git describe --always --dirty --tags --match firmware-v*
@@ -7433,6 +7482,20 @@ from the same tree. <code>gallo version</code> still works in this situation: it
 bounds <code>device/info</code> at five seconds and then falls back to the legacy
 <code>version</code> endpoint, whose response type is unchanged and therefore
 still matches.</p>
+<h3 id="the-board-reset-itself"><a class="header" href="#the-board-reset-itself">The board reset itself</a></h3>
+<p>The firmware’s dispatch supervisor deliberately resets the board when an
+in-flight request or transmit path exceeds its budget. USB disconnects and
+re-enumerates, and active GPIO subscriptions are lost.</p>
+<p>Attach an RTT reader and look for these <code>defmt</code> messages:</p>
+<pre><code class="language-text">supervisor: &lt;slot&gt; slot expired (key=&lt;frame-key&gt;) — resetting
+previous boot ended in a supervisor-forced reset: slot=&lt;slot&gt; key=&lt;frame-key&gt;
+</code></pre>
+<p><code>dispatch</code> identifies a request handler that did not complete within its
+default or declared budget. <code>tx</code> identifies absence of aggregate transmit
+completion. The hexadecimal key is the first four frame-header bytes retained
+as a breadcrumb; include it with the preceding request when reporting a bug.</p>
+<p>If RTT instead reports <code>previous boot ended in a watchdog reset not raised by the supervisor</code>, the executor itself stopped making enough progress to feed the
+2-second hardware watchdog. A cold boot has neither message.</p>
 <h2 id="peripheral-errors"><a class="header" href="#peripheral-errors">Peripheral Errors</a></h2>
 <h3 id="unsupported-status-code-65"><a class="header" href="#unsupported-status-code-65"><code>Unsupported</code> (status code −65)</a></h3>
 <p>The peripheral exists in the protocol but isn’’t wired on this

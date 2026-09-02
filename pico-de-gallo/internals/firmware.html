@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-855faf92.js";
+            window.path_to_searchindex_js = "../searchindex-391f3414.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -197,21 +197,48 @@ context, while background tasks handle work such as GPIO event publication.</p>
 without turning into a hand-written state machine maze.</p>
 </blockquote>
 <h3 id="watchdog"><a class="header" href="#watchdog">Watchdog</a></h3>
-<p>A dedicated <code>watchdog_feeder_task</code> arms the RP2350 hardware watchdog at
-<strong>2 seconds</strong> and feeds it every <strong>800 ms</strong>. The 800 ms cadence leaves
-margin for embassy scheduling jitter.</p>
-<p>The feeder is a <strong>separate embassy task</strong>, not part of any RPC handler. It proves
-executor liveness, not dispatcher progress. M5 demonstrated that a request
-handler can block the serial postcard-rpc dispatcher while the feeder continues
-to run, so the 2 s watchdog does not reset that failure mode. A 1015-byte
-TX-only <code>spi/transfer</code> reproduced this device-wide wedge. In those tests the
-device resumed after USB re-enumeration; that is an observed procedure, not
-proof that detach cancels the handler. Treat the watchdog as defense against
-executor-wide stalls, not bounded RPC cancellation or a guarantee against
-handler deadlock.</p>
-<p><code>pause_on_debug(true)</code> is set so an attached debugger session does not
-reset the chip while you single-step. The watchdog is the same on both
-<code>hw-rev1</code> and <code>hw-rev2</code> (no rev-specific code).</p>
+<p>The <code>watchdog_supervisor_task</code> arms the RP2350 hardware watchdog at 2 seconds,
+but feeds it only while dispatch and transmit progress remain plausible. Two
+independent slots track that progress:</p>
+<ul>
+<li>The <strong>dispatch slot</strong> arms after <code>receive()</code> returns a frame and disarms when
+postcard-rpc goes back to waiting. Most handlers receive the 10-second
+default budget. Slow handlers declare a longer bound; caller-supplied bounds
+are capped at 30 minutes and receive 30 seconds of reply-serialization slack.</li>
+<li>The <strong>TX slot</strong> arms while any <code>WireTx</code> sender is outstanding. Its 60-second
+budget covers TX-mutex starvation and GPIO event publishers that run outside
+the dispatcher.</li>
+</ul>
+<p>The supervisor polls every 250 ms. The designed reset-latency bound is the
+active slot’s budget plus one poll period; this is a design target, not a
+board-attached measurement. On expiry it logs the slot and frame breadcrumb,
+writes them to watchdog scratch registers, and triggers a forced reset. Reset
+drops USB and loses every GPIO subscription. On the next boot, RTT reports the
+breadcrumb and clears it.</p>
+<p><code>pause_on_debug(true)</code> stops the hardware watchdog while the core is halted,
+but Embassy time continues. A supervisor wake gap above 500 ms is therefore
+treated as a debugger or scheduling discontinuity: live deadlines are shifted
+by the gap instead of resetting immediately. This rule’s board-attached
+acceptance check is still pending.</p>
+<p>The supervisor is a backstop, not complete hang detection:</p>
+<ul>
+<li>A wedge inside <code>receive()</code> itself is indistinguishable from legitimate idle
+and is not covered.</li>
+<li>The TX slot has no hardware acceptance trigger; its correctness rests on
+inspection.</li>
+<li>The single TX slot measures aggregate TX progress, not per-sender progress.
+One permanently starved sender remains masked while another sender completes
+at least once per 60-second <code>TX_BUDGET</code>.</li>
+</ul>
+<p>The <code>wedge-test</code> feature provides a build-only acceptance hatch by disabling
+the firmware’s zero-length I<sup>2</sup>C write guard. It cannot be reached
+through the normal Rust-library or MCP <code>i2c_write</code> routes because both reject
+an empty payload host-side. Reproducing the wedge therefore also requires
+temporarily removing one of those host guards locally, as an uncommitted test
+mutation; the guards remain correct production behaviour.</p>
+<p>The watchdog is the same on both <code>hw-rev1</code> and <code>hw-rev2</code> (no rev-specific
+code). The firmware crate has no unit-test harness; none is implied by the pure
+supervision policy function.</p>
 <h3 id="build-identity"><a class="header" href="#build-identity">Build identity</a></h3>
 <p><code>crates/pico-de-gallo-firmware/build.rs</code> runs</p>
 <pre><code class="language-text">git describe --always --dirty --tags --match firmware-v*

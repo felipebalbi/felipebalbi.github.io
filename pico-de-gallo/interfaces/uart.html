@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-855faf92.js";
+            window.path_to_searchindex_js = "../searchindex-391f3414.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2de855f1.js"></script>
@@ -349,8 +349,10 @@ GND ────────────────── GND
 receive pin of the other.</p>
 </blockquote>
 <h2 id="non-blocking-read"><a class="header" href="#non-blocking-read">Non-blocking Read</a></h2>
-<p>A timeout of <strong>0</strong> performs a non-blocking read — it returns immediately
-with whatever bytes are already in the receive buffer (possibly none):</p>
+<p>A timeout of <strong>0</strong> performs a non-blocking read — it returns after a 1 ms poll
+with whatever bytes are already in the receive buffer (possibly none). This is
+a deliberate exception to GPIO wait semantics. Non-zero values above the
+firmware’s 30-minute ceiling are clamped to that ceiling:</p>
 <pre><code class="language-bash"># Non-blocking: return whatever is buffered right now
 gallo uart read --count 64 --timeout 0
 </code></pre>
@@ -359,7 +361,7 @@ gallo uart read --count 64 --timeout 0
 </span>use pico_de_gallo_lib::PicoDeGallo;
 
 async fn drain_buffer(gallo: &amp;PicoDeGallo) -&gt; Vec&lt;u8&gt; {
-    // timeout_ms = 0 → non-blocking
+    // timeout_ms = 0 → 1 ms non-blocking poll
     gallo.uart_read(64, 0).await.unwrap()
 }
 <span class="boring">}</span></code></pre>
