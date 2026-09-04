@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-5c94e1f4.js";
+            window.path_to_searchindex_js = "../searchindex-62a29e80.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3e975730.js"></script>
@@ -432,6 +432,7 @@ from the request, so no framing is needed in the response.</p>
 </thead>
 <tbody>
 <tr><td>Maximum operations per batch</td><td>64 (<code>MAX_BATCH_OPS</code>)</td></tr>
+<tr><td>Maximum size of an individual operation</td><td>None — bounded only by the total request</td></tr>
 <tr><td>Protocol packet-buffer/argument bound</td><td>4096 bytes (<code>MAX_TRANSFER_SIZE</code>)</td></tr>
 <tr><td>Direct I²C RPC measurements</td><td>Read: 1014 bytes after a 1-byte write; write: no failure through 4096 bytes</td></tr>
 <tr><td>Demonstrated SPI payload</td><td>Shape-dependent and below 4096; no general ceiling is published</td></tr>

@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-5c94e1f4.js";
+            window.path_to_searchindex_js = "../searchindex-62a29e80.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3e975730.js"></script>
@@ -182,26 +182,29 @@ DMA-backed full-duplex mode.</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Signal</th><th>RP2350 GPIO</th><th>Available on</th></tr>
+<tr><th>Signal</th><th>RP2350 GPIO</th><th>Available on</th><th>Driven by firmware</th></tr>
 </thead>
 <tbody>
-<tr><td>SCK</td><td>GPIO 6</td><td>v1.0+</td></tr>
-<tr><td>MOSI (TX)</td><td>GPIO 7</td><td>v1.0+</td></tr>
-<tr><td>MISO (RX)</td><td>GPIO 4</td><td>v1.0+</td></tr>
-<tr><td>SPI_CS net</td><td>GPIO 5</td><td>v1.1+</td></tr>
+<tr><td>SCK</td><td>GPIO 6</td><td>v1.0+</td><td>Yes</td></tr>
+<tr><td>MOSI (TX)</td><td>GPIO 7</td><td>v1.0+</td><td>Yes</td></tr>
+<tr><td>MISO (RX)</td><td>GPIO 4</td><td>v1.0+</td><td>Yes</td></tr>
+<tr><td>SPI_CS net</td><td>GPIO 5</td><td>v1.1+</td><td><strong>No</strong> — net label only, not a chip select</td></tr>
 </tbody>
 </table>
 </div>
 <blockquote>
-<p><strong>Note for non-Zephyr host APIs.</strong> GPIO 5 is physically routed as SPI_CS on v1.1, but firmware
-never claims or drives it on either revision. The only firmware-managed
+<p><strong>There is no dedicated chip-select signal.</strong> Despite the <code>SPI_CS</code>
+silkscreen on header pin 8, GPIO 5 is physically routed on v1.1 but
+firmware never claims or drives it on either revision. The only
+firmware-managed
 chip-select mechanism uses user GPIO indices in <code>0..num_gpios</code>, where
 <code>num_gpios</code> is device-reported and currently 4. Those indices map to
 RP2350 GPIO 8–11 and work with <code>spi/batch</code>, the fallible
 <code>spi_device(cs_pin)</code> HAL accessor, and equivalent host surfaces. Manually
 toggling a GPIO around separate SPI operations is also possible, but it
 does not hold chip-select atomically across the sequence as <code>spi/batch</code>
-does.</p>
+does. See
+<a href="https://github.com/OpenDevicePartnership/pico-de-gallo/issues/99">issue #99</a>.</p>
 </blockquote>
 <h2 id="operations"><a class="header" href="#operations">Operations</a></h2>
 <div class="table-wrapper">

@@ -38,7 +38,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-5c94e1f4.js";
+            window.path_to_searchindex_js = "searchindex-62a29e80.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-3e975730.js"></script>
@@ -421,8 +421,8 @@ designed against a stable connector instead of wrangling seven
 separate jumper bundles.</li>
 <li><strong>All implemented peripheral signals routed.</strong> UART, 1-Wire, and
 the three ADC inputs are physically absent on v1.0. v1.1 also
-routes the PCB’s SPI_CS net from RP2350 GPIO 5, but current
-firmware never claims or drives that pad.</li>
+routes the PCB’s SPI_CS net from RP2350 GPIO 5, but that net is a
+label only — current firmware never claims or drives that pad.</li>
 <li><strong>On-board passives.</strong>
 <ul>
 <li>4.7 kΩ pull-ups on I²C (no more dangling resistors).</li>
@@ -466,6 +466,11 @@ header but absent on v1.0, and current firmware does not claim or
 drive GPIO 5 on either revision. Soldering to that pad does not make
 it usable as firmware-controlled chip-select; use a user GPIO index
 reported by <code>device/info</code> instead.</p>
+<p>Note that <code>SPI_CS</code> on the v1.1 silkscreen and in the KiCad schematic
+is a net label, not a feature. Neither revision provides a working
+dedicated chip-select signal, and the misleading label can only be
+retired by a future board revision. See
+<a href="https://github.com/OpenDevicePartnership/pico-de-gallo/issues/99">issue #99</a>.</p>
 <h2 id="identifying-your-board"><a class="header" href="#identifying-your-board">Identifying Your Board</a></h2>
 <p>The fastest way to tell what revision firmware you’re running:</p>
 <pre><code class="language-console">$ gallo version
@@ -512,7 +517,7 @@ which revision PCB they’re routed to.</p>
 <tr><td>I²C SDA</td><td>GPIO 2</td><td>v1.0+</td><td>I²C1, async DMA</td></tr>
 <tr><td>I²C SCL</td><td>GPIO 3</td><td>v1.0+</td><td></td></tr>
 <tr><td>SPI RX (MISO)</td><td>GPIO 4</td><td>v1.0+</td><td>SPI0, DMA full-duplex</td></tr>
-<tr><td>SPI_CS net</td><td>GPIO 5</td><td>v1.1+</td><td>Routed to pin 8; firmware never drives it</td></tr>
+<tr><td>SPI_CS net</td><td>GPIO 5</td><td>v1.1+</td><td>PCB net name only; firmware never claims or drives it</td></tr>
 <tr><td>SPI SCK</td><td>GPIO 6</td><td>v1.0+</td><td></td></tr>
 <tr><td>SPI TX (MOSI)</td><td>GPIO 7</td><td>v1.0+</td><td></td></tr>
 <tr><td>GPIO 0</td><td>GPIO 8</td><td>v1.0+</td><td>User pin, in/out/edge</td></tr>
@@ -549,7 +554,7 @@ left; odd-numbered pins (top row) are on the right.</p>
 <pre><code> Pin 2  GND          ┃ VREF (+3V3) Pin 1
  Pin 4  I2C_SCL      ┃ I2C_SDA     Pin 3
  Pin 6  SPI_MOSI     ┃ SPI_MISO    Pin 5
- Pin 8  SPI_CS       ┃ SPI_SCK     Pin 7
+ Pin 8  SPI_CS *      ┃ SPI_SCK     Pin 7
  Pin 10 UART_RX      ┃ UART_TX     Pin 9
  Pin 12 GPIO1        ┃ GPIO0       Pin 11
  Pin 14 GPIO3        ┃ GPIO2       Pin 13
@@ -559,6 +564,9 @@ left; odd-numbered pins (top row) are on the right.</p>
  Pin 22 ADC2         ┃ ADC1        Pin 21
  Pin 24 GND          ┃ +3V3        Pin 23
 </code></pre>
+<p><code>*</code> The silkscreen and schematic label pin 8 <code>SPI_CS</code>, but that name
+describes the PCB net only. No firmware claims GPIO 5, so the pin is
+<strong>not</strong> a working chip select — see below.</p>
 <h3 id="full-v11-pinout-table"><a class="header" href="#full-v11-pinout-table">Full v1.1 Pinout Table</a></h3>
 <div class="table-wrapper">
 <table>
@@ -573,7 +581,7 @@ left; odd-numbered pins (top row) are on the right.</p>
 <tr><td style="text-align: right">5</td><td>SPI_MISO</td><td>GPIO 4</td><td>Input</td><td>SPI0 RX</td></tr>
 <tr><td style="text-align: right">6</td><td>SPI_MOSI</td><td>GPIO 7</td><td>Output</td><td>SPI0 TX</td></tr>
 <tr><td style="text-align: right">7</td><td>SPI_SCK</td><td>GPIO 6</td><td>Output</td><td>SPI0 SCK</td></tr>
-<tr><td style="text-align: right">8</td><td>SPI_CS</td><td>GPIO 5</td><td>Not driven by firmware</td><td>PCB net; GPIO 5 remains in its reset state</td></tr>
+<tr><td style="text-align: right">8</td><td>SPI_CS (unused)</td><td>GPIO 5</td><td>Not driven by firmware</td><td>PCB net name only; GPIO 5 remains in its reset state</td></tr>
 <tr><td style="text-align: right">9</td><td>UART_TX</td><td>GPIO 0</td><td>Output</td><td>UART0 TX</td></tr>
 <tr><td style="text-align: right">10</td><td>UART_RX</td><td>GPIO 1</td><td>Input</td><td>UART0 RX</td></tr>
 <tr><td style="text-align: right">11</td><td>GPIO0</td><td>GPIO 8</td><td>Bidir</td><td>User GPIO 0</td></tr>
@@ -598,6 +606,12 @@ current firmware never claims or drives that pad. It is not a valid
 <code>spi/batch</code> chip-select index or user GPIO index. Use firmware GPIO
 indices 0–3, which map to RP2350 GPIO 8–11, for chip-select instead.
 No pull or stable inactive level is guaranteed on GPIO 5.</p>
+<p>The <code>SPI_CS</code> name is a <strong>silkscreen and schematic net label, not a
+capability</strong>. It records what the net was routed for, not what the
+firmware does with it, and the board offers no working dedicated
+chip-select signal. The label cannot be corrected without a new board
+revision, so treat this page — not the silkscreen — as authoritative.
+See <a href="https://github.com/OpenDevicePartnership/pico-de-gallo/issues/99">issue #99</a>.</p>
 <p>The device currently reports <code>num_gpios == 4</code>, so host validation
 refuses <code>--cs 5</code> before transmitting anything. If that validation is
 bypassed, firmware returns <code>SpiError::InvalidCsPin</code> without touching
@@ -1280,26 +1294,29 @@ DMA-backed full-duplex mode.</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Signal</th><th>RP2350 GPIO</th><th>Available on</th></tr>
+<tr><th>Signal</th><th>RP2350 GPIO</th><th>Available on</th><th>Driven by firmware</th></tr>
 </thead>
 <tbody>
-<tr><td>SCK</td><td>GPIO 6</td><td>v1.0+</td></tr>
-<tr><td>MOSI (TX)</td><td>GPIO 7</td><td>v1.0+</td></tr>
-<tr><td>MISO (RX)</td><td>GPIO 4</td><td>v1.0+</td></tr>
-<tr><td>SPI_CS net</td><td>GPIO 5</td><td>v1.1+</td></tr>
+<tr><td>SCK</td><td>GPIO 6</td><td>v1.0+</td><td>Yes</td></tr>
+<tr><td>MOSI (TX)</td><td>GPIO 7</td><td>v1.0+</td><td>Yes</td></tr>
+<tr><td>MISO (RX)</td><td>GPIO 4</td><td>v1.0+</td><td>Yes</td></tr>
+<tr><td>SPI_CS net</td><td>GPIO 5</td><td>v1.1+</td><td><strong>No</strong> — net label only, not a chip select</td></tr>
 </tbody>
 </table>
 </div>
 <blockquote>
-<p><strong>Note for non-Zephyr host APIs.</strong> GPIO 5 is physically routed as SPI_CS on v1.1, but firmware
-never claims or drives it on either revision. The only firmware-managed
+<p><strong>There is no dedicated chip-select signal.</strong> Despite the <code>SPI_CS</code>
+silkscreen on header pin 8, GPIO 5 is physically routed on v1.1 but
+firmware never claims or drives it on either revision. The only
+firmware-managed
 chip-select mechanism uses user GPIO indices in <code>0..num_gpios</code>, where
 <code>num_gpios</code> is device-reported and currently 4. Those indices map to
 RP2350 GPIO 8–11 and work with <code>spi/batch</code>, the fallible
 <code>spi_device(cs_pin)</code> HAL accessor, and equivalent host surfaces. Manually
 toggling a GPIO around separate SPI operations is also possible, but it
 does not hold chip-select atomically across the sequence as <code>spi/batch</code>
-does.</p>
+does. See
+<a href="https://github.com/OpenDevicePartnership/pico-de-gallo/issues/99">issue #99</a>.</p>
 </blockquote>
 <h2 id="operations-1"><a class="header" href="#operations-1">Operations</a></h2>
 <div class="table-wrapper">
@@ -3318,6 +3335,7 @@ from the request, so no framing is needed in the response.</p>
 </thead>
 <tbody>
 <tr><td>Maximum operations per batch</td><td>64 (<code>MAX_BATCH_OPS</code>)</td></tr>
+<tr><td>Maximum size of an individual operation</td><td>None — bounded only by the total request</td></tr>
 <tr><td>Protocol packet-buffer/argument bound</td><td>4096 bytes (<code>MAX_TRANSFER_SIZE</code>)</td></tr>
 <tr><td>Direct I²C RPC measurements</td><td>Read: 1014 bytes after a 1-byte write; write: no failure through 4096 bytes</td></tr>
 <tr><td>Demonstrated SPI payload</td><td>Shape-dependent and below 4096; no general ceiling is published</td></tr>
@@ -4302,8 +4320,10 @@ payloads at or below 512 bytes; see <a href="#buffertoolong-22">troubleshooting<
 </blockquote>
 <p><code>GALLO_NUM_GPIOS</code> bounds the valid pin indices, <code>0..GALLO_NUM_GPIOS</code>, which
 map to physical GPIO8-GPIO11 on the Pico 2 header. Anything at or above it
-yields <code>Status::GpioInvalidPin</code>. Note the dedicated <code>SPI_CS</code> header pin
-(GPIO5) is not one of these and is not currently claimed by the firmware.</p>
+yields <code>Status::GpioInvalidPin</code>. The header pin silkscreened <code>SPI_CS</code>
+(GPIO5) is a PCB net label, not a usable chip select: it is not one of
+these indices and no firmware claims or drives it. See
+<a href="https://github.com/OpenDevicePartnership/pico-de-gallo/issues/99">issue #99</a>.</p>
 <p>For the SPI chip select in <code>gallo_spi_batch</code>, prefer the <em>runtime</em> count
 from <code>gallo_num_gpios</code> over this compile-time constant — see below.
 <code>GALLO_NUM_GPIOS</code> is only this build’s default, and the library checks

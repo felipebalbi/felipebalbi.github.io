@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-5c94e1f4.js";
+            window.path_to_searchindex_js = "../searchindex-62a29e80.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3e975730.js"></script>
@@ -264,8 +264,10 @@ payloads at or below 512 bytes; see <a href="../appendix/troubleshooting.html#bu
 </blockquote>
 <p><code>GALLO_NUM_GPIOS</code> bounds the valid pin indices, <code>0..GALLO_NUM_GPIOS</code>, which
 map to physical GPIO8-GPIO11 on the Pico 2 header. Anything at or above it
-yields <code>Status::GpioInvalidPin</code>. Note the dedicated <code>SPI_CS</code> header pin
-(GPIO5) is not one of these and is not currently claimed by the firmware.</p>
+yields <code>Status::GpioInvalidPin</code>. The header pin silkscreened <code>SPI_CS</code>
+(GPIO5) is a PCB net label, not a usable chip select: it is not one of
+these indices and no firmware claims or drives it. See
+<a href="https://github.com/OpenDevicePartnership/pico-de-gallo/issues/99">issue #99</a>.</p>
 <p>For the SPI chip select in <code>gallo_spi_batch</code>, prefer the <em>runtime</em> count
 from <code>gallo_num_gpios</code> over this compile-time constant — see below.
 <code>GALLO_NUM_GPIOS</code> is only this build’s default, and the library checks
