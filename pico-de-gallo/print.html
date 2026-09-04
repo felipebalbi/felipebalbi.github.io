@@ -38,7 +38,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-62a29e80.js";
+            window.path_to_searchindex_js = "searchindex-2d1d2be5.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-3e975730.js"></script>
@@ -3802,9 +3802,11 @@ the device.</p>
 <p>That split is deliberate:</p>
 <ul>
 <li><code>PicoDeGalloError::Comms(...)</code> means the transport failed: disconnect,
-timeout, wire decode issue, closed connection, and similar host-side problems.</li>
+wire decode issue, closed connection, and similar host-side problems.</li>
 <li><code>PicoDeGalloError::Endpoint(E)</code> means the request made it to firmware and the
 endpoint itself reported an error.</li>
+<li><code>PicoDeGalloError::Timeout { waited }</code> means the request was transmitted but
+no reply arrived within this call’s bound. See <a href="#call-timeouts">Call Timeouts</a>.</li>
 </ul>
 <p>The endpoint-specific <code>E</code> is one of the protocol error enums:</p>
 <ul>
@@ -3835,6 +3837,57 @@ async fn read_sensor(gallo: &amp;PicoDeGallo) {
     }
 }
 <span class="boring">}</span></code></pre>
+<h2 id="call-timeouts"><a class="header" href="#call-timeouts">Call Timeouts</a></h2>
+<p>Every RPC is bounded. Without a bound, a request whose response is never
+produced parks the caller forever, because there is no lower layer that gives
+up. That is not hypothetical: a request frame larger than the firmware’s
+receive buffer is dropped before the dispatcher ever sees it, so the board
+stays perfectly healthy — measured answering 40 of 40 concurrent pings — while
+the call waits indefinitely.</p>
+<p>The default is <code>DEFAULT_CALL_TIMEOUT</code>, <strong>5 seconds</strong>, roughly twice the
+slowest measured legitimate operation (a 4096-byte 1-Wire read, about 2.4 s).</p>
+<p>Calls that can legitimately take longer are not bounded by that default. They
+derive their own bound from what the firmware itself allows, plus the
+configured call timeout as transport slack:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Call</th><th>Firmware-side term</th></tr>
+</thead>
+<tbody>
+<tr><td><code>i2c_scan</code></td><td><code>UNDECLARED_DISPATCH_BUDGET_MS</code> (10 s) — it probes up to 128 addresses</td></tr>
+<tr><td><code>uart_read</code></td><td>the caller’s <code>timeout_ms</code></td></tr>
+<tr><td><code>gpio_wait_*_with_timeout</code></td><td>the caller’s <code>timeout_ms</code></td></tr>
+<tr><td><code>gpio_wait_*</code> (no timeout)</td><td><code>MAX_HANDLER_TIMEOUT_MS</code> (30 min)</td></tr>
+<tr><td><code>onewire_write_pullup</code></td><td>the caller’s <code>pullup_duration_ms</code></td></tr>
+<tr><td><code>spi_batch</code></td><td>the sum of its <code>DelayNs</code> operations</td></tr>
+<tr><td><code>device_info</code>, <code>validate</code></td><td><code>DEVICE_INFO_TIMEOUT</code> (300 s)</td></tr>
+</tbody>
+</table>
+</div>
+<p>Note that a <code>timeout_ms</code> of <code>0</code> selects the firmware’s 30-minute ceiling
+rather than meaning “wait forever”; the host mirrors that clamp exactly.</p>
+<p>Override the default with <code>with_call_timeout</code>, which also widens every
+derived bound:</p>
+<p>``rust,no_run
+use pico_de_gallo_lib::PicoDeGallo;
+use std::time::Duration;</p>
+<p>let gallo = PicoDeGallo::try_new()?.with_call_timeout(Duration::from_secs(30));</p>
+<h1 id="ok-string"><a class="header" href="#ok-string">Ok::&lt;(), String&gt;(())</a></h1>
+<p>``</p>
+<p>A timed-out call leaves the handle usable: abandoning it drops the reply
+waiter, and sequence numbers are never reused, so a late reply is discarded
+rather than mismatched onto a later call.</p>
+<h3 id="concurrency-caveat"><a class="header" href="#concurrency-caveat">Concurrency caveat</a></h3>
+<p>Firmware dispatch is <strong>serial</strong> — one handler runs at a time. A call issued
+while another is in flight waits for that one to finish before its own handler
+starts, and the host cannot observe when that happens.</p>
+<p>So if you share one handle across tasks and one of them issues a long call (a
+<code>gpio_wait_*</code>, or an <code>spi_batch</code> carrying large <code>DelayNs</code> operations),
+concurrent calls can exceed the default through no fault of the device.</p>
+<p>Sequential use — which is what the <code>embedded-hal</code> implementations produce,
+and the overwhelmingly common pattern — is unaffected. If you do drive a board
+concurrently alongside long calls, raise the bound.</p>
 <h2 id="validate-and-schema-compatibility"><a class="header" href="#validate-and-schema-compatibility"><code>validate()</code> and Schema Compatibility</a></h2>
 <p><code>validate().await</code> is the strict compatibility gate.</p>
 <p>It calls the <code>device/info</code> endpoint and checks the firmware’s schema version
@@ -7420,9 +7473,18 @@ that doesn’t appear in your header means success.</p>
 <tr><td><code>SpiCsPinMonitored</code></td><td style="text-align: right">−73</td><td>SPI chip-select pin is monitored for GPIO events</td></tr>
 <tr><td><code>SpiNoGpios</code></td><td style="text-align: right">−74</td><td>Device reports zero GPIOs, so no chip-select pin exists</td></tr>
 <tr><td><code>DeviceInfoTimeout</code></td><td style="text-align: right">−75</td><td><code>device/info</code> did not respond within 300 seconds</td></tr>
+<tr><td><code>CallTimeout</code></td><td style="text-align: right">−76</td><td>Device did not answer an RPC within its bound</td></tr>
 </tbody>
 </table>
 </div>
+<p><code>CallTimeout</code> (−76) means the request was transmitted but no reply arrived.
+It is deliberately distinct from <code>CommsFailed</code> (−20): the transport is
+healthy and the device very likely is too, so it is not a link failure. It
+is also distinct from <code>DeviceInfoTimeout</code> (−75), which covers only the
+validated metadata fetch and has a far longer bound. The handle stays
+usable, so the call may simply be retried — except after a batch, whose
+fate is unknown (it may have executed fully, partially, or not at all), so
+a blind retry there can repeat side effects.</p>
 <p><code>SpiInvalidCsPin</code> (−71) and <code>SpiNoGpios</code> (−74) are host-side refusals: the
 chip-select was rejected before anything was transmitted, and no pin was
 driven. <code>DeviceInfoFailed</code> (−62), <code>SchemaMismatch</code> (−63),

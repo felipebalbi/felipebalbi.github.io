@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-62a29e80.js";
+            window.path_to_searchindex_js = "../searchindex-2d1d2be5.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3e975730.js"></script>
@@ -283,9 +283,18 @@ that doesn’t appear in your header means success.</p>
 <tr><td><code>SpiCsPinMonitored</code></td><td style="text-align: right">−73</td><td>SPI chip-select pin is monitored for GPIO events</td></tr>
 <tr><td><code>SpiNoGpios</code></td><td style="text-align: right">−74</td><td>Device reports zero GPIOs, so no chip-select pin exists</td></tr>
 <tr><td><code>DeviceInfoTimeout</code></td><td style="text-align: right">−75</td><td><code>device/info</code> did not respond within 300 seconds</td></tr>
+<tr><td><code>CallTimeout</code></td><td style="text-align: right">−76</td><td>Device did not answer an RPC within its bound</td></tr>
 </tbody>
 </table>
 </div>
+<p><code>CallTimeout</code> (−76) means the request was transmitted but no reply arrived.
+It is deliberately distinct from <code>CommsFailed</code> (−20): the transport is
+healthy and the device very likely is too, so it is not a link failure. It
+is also distinct from <code>DeviceInfoTimeout</code> (−75), which covers only the
+validated metadata fetch and has a far longer bound. The handle stays
+usable, so the call may simply be retried — except after a batch, whose
+fate is unknown (it may have executed fully, partially, or not at all), so
+a blind retry there can repeat side effects.</p>
 <p><code>SpiInvalidCsPin</code> (−71) and <code>SpiNoGpios</code> (−74) are host-side refusals: the
 chip-select was rejected before anything was transmitted, and no pin was
 driven. <code>DeviceInfoFailed</code> (−62), <code>SchemaMismatch</code> (−63),
