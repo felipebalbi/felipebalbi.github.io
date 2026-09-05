@@ -1,0 +1,718 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>gallo-mcp MCP server - Pico de Gallo</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+        <!-- MathJax -->
+        <script async src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-2d1d2be5.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-3e975730.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Pico de Gallo</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="gallo-mcp--mcp-server"><a class="header" href="#gallo-mcp--mcp-server">gallo-mcp — MCP server</a></h1>
+<p><code>gallo-mcp</code> bridges a Pico de Gallo to AI coding agents. It runs a
+<a href="https://modelcontextprotocol.io/">Model Context Protocol</a> server over
+stdio, wrapping <code>pico-de-gallo-lib</code> and exposing one tool per peripheral
+operation across I<sup>2</sup>C, SPI, UART, GPIO, PWM, ADC, and 1-Wire.</p>
+<p>The point is the on-your-laptop development loop: while an agent writes
+an embedded driver, it can probe and drive real hardware through the same
+board <code>gallo</code> talks to — reading a sensor register, scanning a bus,
+toggling a pin — without cross-compiling or flashing anything.</p>
+<p>Use it for:</p>
+<ul>
+<li>letting an AI agent explore an unfamiliar device interactively,</li>
+<li>generating and validating register-level driver code against real
+silicon,</li>
+<li>turning “what does this chip return?” into a tool call the agent can
+make itself.</li>
+</ul>
+<h2 id="install"><a class="header" href="#install">Install</a></h2>
+<pre><code class="language-console">$ cargo install gallo-mcp
+</code></pre>
+<h2 id="run"><a class="header" href="#run">Run</a></h2>
+<pre><code class="language-console">$ gallo-mcp [--serial-number &lt;SN&gt;]
+</code></pre>
+<p><code>gallo-mcp</code> speaks the MCP protocol on <strong>stdout</strong> and logs to <strong>stderr</strong>,
+so it is meant to be launched by an MCP client rather than run
+interactively.</p>
+<ul>
+<li><code>-s, --serial-number &lt;SN&gt;</code> <strong>pins</strong> the server to one board. A pinned
+server cannot address any other board: a tool call naming a different
+serial is refused. This is the way to scope an agent session to a
+single board. If the pinned serial is not among the attached boards at
+startup, the server logs a warning naming the serials it did find, and
+starts anyway — see below.</li>
+<li><strong>Per-call connection:</strong> the server holds no persistent USB claim. Each
+tool call opens the board, runs, and releases it when the call completes,
+so the device is free for the <code>gallo</code> CLI or other host processes between
+calls. Each call re-opens and re-validates the board, so there is a small
+fixed per-call connection cost. The server starts even with no board
+attached and tools begin working as soon as a Pico de Gallo is present;
+you can plug the board in mid-session.</li>
+</ul>
+<p>The pin is checked once at startup, and an unusable one is a <strong>warning</strong>
+rather than a startup failure — starting with no board attached has to
+keep working, so the server cannot treat “pin not attached” as fatal:</p>
+<pre><code class="language-text">WARN gallo_mcp: This server is pinned to serial number 'BOGUSSERIAL' (--serial-number), which is not attached.
+Available: 5256657D8A5D7F03
+</code></pre>
+<p>Nothing is logged when the pin resolves, when no pin was given, or when
+no board is attached at all — that last case is indistinguishable from
+“not plugged in yet”, which is supported. So the warning firing means a
+board <em>is</em> attached and the pin does not match it, which in practice
+means a typo. Without it a mistyped pin starts a server that looks
+healthy and then fails every device call for the rest of the session.</p>
+<p>This warning is on <strong>by default</strong> — it has to be, because MCP clients
+launch the server with whatever environment they have and rarely set
+<code>RUST_LOG</code>. Logs go to stderr, so they never disturb the JSON-RPC stream
+on stdout. <code>RUST_LOG</code> still controls verbosity when you set it, and
+overrides the default entirely: <code>RUST_LOG=error</code> silences the warning,
+<code>RUST_LOG=gallo_mcp=debug</code> adds the per-call board-lock tracing.</p>
+<h2 id="protocol-revisions"><a class="header" href="#protocol-revisions">Protocol revisions</a></h2>
+<p><code>gallo-mcp</code> supports every MCP revision its SDK knows — <code>2024-11-05</code>,
+<code>2025-03-26</code>, <code>2025-06-18</code>, <code>2025-11-25</code>, and <code>2026-07-28</code> — and
+negotiates during <code>initialize</code>: it echoes the revision the client asks
+for when it is one of those, and otherwise falls back to <code>2025-11-25</code>.
+The <code>initialize</code> result identifies the server as <code>gallo-mcp</code> with this
+crate’s version.</p>
+<p>The <strong>tool surface does not vary by revision.</strong> The same 43 tools, with
+the same names, arguments, annotations, and JSON payloads, are served to
+every client. What changes is the envelope around them:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th></th><th><code>2025-11-25</code> and older</th><th><code>2026-07-28</code></th></tr>
+</thead>
+<tbody>
+<tr><td><code>resultType</code> on results</td><td>absent</td><td><code>"complete"</code></td></tr>
+<tr><td><code>ttlMs</code> / <code>cacheScope</code> cache hints</td><td>absent</td><td>present</td></tr>
+<tr><td><code>server/discover</code></td><td>not available</td><td>answered</td></tr>
+</tbody>
+</table>
+</div>
+<p>A client that negotiates <code>2026-07-28</code> may therefore start with a
+stateless <code>server/discover</code> instead of <code>initialize</code>, and will see the
+SEP-2322 result discriminator and SEP-2549 cache hints on every result.
+Everything else — tool payloads, the <code>serial_number</code> echo, error
+mapping — is byte-for-byte identical across revisions.</p>
+<h2 id="choosing-a-board"><a class="header" href="#choosing-a-board">Choosing a board</a></h2>
+<p>Every tool except <code>list_devices</code> takes an optional <code>serial_number</code>, and
+every response that came from a board names the board it came from:</p>
+<pre><code class="language-json">// i2c_scan {"serial_number":"5256657D8A5D7F03"}
+{
+  "serial_number": "5256657D8A5D7F03",
+  "result": { "addresses": ["0x48"], "raw": [72] }
+}
+</code></pre>
+<p>That <code>{ "serial_number", "result" }</code> envelope wraps every device tool
+response but two. <code>list_devices</code> opens no board at all, and <code>status</code>
+reports its serial as a top-level field of its own result rather than
+nesting a serial under a serial.</p>
+<p>The envelope’s <code>serial_number</code> is <code>null</code> in exactly one case: the sole
+attached board reports no USB serial number. The field is always
+present, so <code>null</code> there means “a board that has no serial answered” —
+never “this response was not enveloped”. <code>status</code>’s <code>available</code> list
+carries <code>null</code> entries for the same reason.</p>
+<p>How the target is chosen:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Boards attached</th><th><code>serial_number</code></th><th>Result</th></tr>
+</thead>
+<tbody>
+<tr><td>0</td><td>—</td><td>error: no device attached</td></tr>
+<tr><td>1</td><td>omitted</td><td>that board</td></tr>
+<tr><td>1</td><td>given</td><td>that board, if it matches</td></tr>
+<tr><td>≥2</td><td>omitted</td><td><strong>error</strong>, listing the available serials</td></tr>
+<tr><td>≥2</td><td>given</td><td>the named board, if exactly one matches</td></tr>
+</tbody>
+</table>
+</div>
+<p>With one board attached nothing changes — omit <code>serial_number</code> and it
+just works. With two or more, omitting it is an error rather than a
+guess:</p>
+<pre><code class="language-text">Multiple Pico de Gallo devices attached; `serial_number` is required.
+Available: 5256657D8A5D7F03, 568E9AAEC72B0D49
+</code></pre>
+<p>That is deliberate. Guessing turns a recoverable mistake into a
+confident wrong answer with no signal that anything went wrong; the
+error names the serials, so the next call succeeds.</p>
+<p>Two boards can also report the <em>same</em> serial, which is refused for the
+same reason — naming it no longer identifies a board:</p>
+<pre><code class="language-text">2 attached Pico de Gallo devices report serial number '0000000000000000'; they cannot be told apart. Detach all but one and retry.
+</code></pre>
+<p>That is reachable rather than hypothetical. The firmware derives the USB
+serial from the RP2350 chip ID and falls back to all-zeros when the OTP
+read fails, which its own comment notes happens on some dev boards, so
+two such boards collide. No argument fixes it; detach one.</p>
+<p>A server started with <code>-s</code> is <strong>pinned</strong>, and the two <code>≥2</code> rows above no
+longer apply: <code>serial_number</code> is optional again however many boards are
+attached. An omitted argument uses the pinned board, a matching one is
+accepted, and a different one is refused:</p>
+<pre><code class="language-text">This server is pinned to serial number '5256657D8A5D7F03' (--serial-number); it cannot address '568E9AAEC72B0D49'. Omit serial_number, or pass '5256657D8A5D7F03'.
+</code></pre>
+<p>Device state is <strong>per board</strong> — bus configuration, GPIO direction, PWM
+enable, and 1-Wire search progress all live on the board you addressed —
+so a follow-up call must repeat the <code>serial_number</code> of the call that set
+it up.</p>
+<p><code>list_devices</code> tells you which case you are in without connecting:</p>
+<pre><code class="language-json">// list_devices {}
+{
+  "devices": [
+    { "serial_number": "5256657D8A5D7F03", "manufacturer": null,
+      "product": "Pico de Gallo", "pinned": false, "default_target": false },
+    { "serial_number": "568E9AAEC72B0D49", "manufacturer": null,
+      "product": "Pico de Gallo", "pinned": false, "default_target": false }
+  ],
+  "pinned": null,
+  "serial_number_required": true,
+  "note": "2 devices attached and this server is not pinned; pass serial_number on every device tool call."
+}
+</code></pre>
+<p><code>note</code> is present only when <code>serial_number_required</code> is true.</p>
+<p><code>status</code> never errors, so it stays answerable even when the target is
+ambiguous:</p>
+<pre><code class="language-json">// status {}
+{
+  "attached": true,
+  "serial_number": null,
+  "ambiguous": true,
+  "available": ["5256657D8A5D7F03", "568E9AAEC72B0D49"],
+  "pinned": null,
+  "reason": "Multiple Pico de Gallo devices attached; `serial_number` is required.\nAvailable: 5256657D8A5D7F03, 568E9AAEC72B0D49",
+  "firmware_version": null,
+  "schema_major": null,
+  "schema_minor": null,
+  "build_id": null
+}
+</code></pre>
+<p><code>ambiguous</code> answers “would a call that omits <code>serial_number</code> be
+<em>ambiguous</em>?” — not “would it fail?”. A bare call also fails with no
+board attached, and when the server is pinned to a board that is not
+attached; <code>ambiguous</code> is <code>false</code> in both. It stays true even when this
+particular <code>status</code> call named a board. <code>reason</code> is present only when
+no board was reached.</p>
+<p>When <code>status</code> reaches a board, <code>build_id</code> contains that firmware image’s
+<code>git describe</code> identity; the key is always present and remains <code>null</code> before a
+connection succeeds. <code>device_info</code> returns the same identity. Each successful
+connection also logs the serial number, firmware version, and build identity at
+<code>info</code> level on stderr. The default filter enables that event; set <code>RUST_LOG</code>
+to override it.</p>
+<h2 id="concurrency"><a class="header" href="#concurrency">Concurrency</a></h2>
+<p>The connection lock is keyed on the <strong>board</strong>, not on the server. Calls
+to different boards run concurrently; calls to the same board queue. A
+long-running tool — a <code>gpio_wait_*</code> sitting on its full <code>timeout_ms</code> —
+holds only the board it addressed, so traffic to every other board keeps
+flowing. Firmware clamps that timeout to a maximum of 30 minutes.</p>
+<p><code>list_devices</code> connects to nothing and always answers immediately.
+<code>status</code> does open the board it names, so it queues behind a call that is
+still holding that board.</p>
+<h2 id="using-it-with-an-mcp-client"><a class="header" href="#using-it-with-an-mcp-client">Using it with an MCP client</a></h2>
+<p>Add <code>gallo-mcp</code> as a local (stdio) server in your client’s config. These
+files are safe to commit per-project, so the tools appear only in repos
+that opt in.</p>
+<h3 id="opencode-opencodejson"><a class="header" href="#opencode-opencodejson">opencode (<code>opencode.json</code>)</a></h3>
+<pre><code class="language-json">{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "pico-de-gallo": { "type": "local", "command": ["gallo-mcp"], "enabled": true }
+  }
+}
+</code></pre>
+<h3 id="claude-code-mcpjson"><a class="header" href="#claude-code-mcpjson">Claude Code (<code>.mcp.json</code>)</a></h3>
+<pre><code class="language-json">{ "mcpServers": { "pico-de-gallo": { "command": "gallo-mcp", "args": [] } } }
+</code></pre>
+<h3 id="cursor-cursormcpjson"><a class="header" href="#cursor-cursormcpjson">Cursor (<code>.cursor/mcp.json</code>)</a></h3>
+<pre><code class="language-json">{ "mcpServers": { "pico-de-gallo": { "command": "gallo-mcp", "args": [] } } }
+</code></pre>
+<h2 id="byte-conventions"><a class="header" href="#byte-conventions">Byte conventions</a></h2>
+<p>Byte payloads go in as <strong>hex strings</strong> and come back as both hex and a
+decimal array. Input accepts comma-separated or bare hex (<code>"0x00,0x10"</code>
+or <code>"0010"</code>); reads return <code>{ "hex": ..., "bytes": ... }</code> inside the
+response envelope.</p>
+<pre><code class="language-json">// i2c_write_read {"address":72,"data":"0x00","count":2}
+{
+  "serial_number": "5256657D8A5D7F03",
+  "result": { "hex": "0x0B,0x8E", "bytes": [11, 142] }
+}
+</code></pre>
+<h2 id="tool-catalog"><a class="header" href="#tool-catalog">Tool catalog</a></h2>
+<p>43 tools, grouped by peripheral. Read-only tools carry the
+<code>readOnlyHint</code> annotation; write/actuation tools carry <code>destructiveHint</code>.
+Every tool except <code>list_devices</code> accepts an optional <code>serial_number</code>.</p>
+<h3 id="device-read-only"><a class="header" href="#device-read-only">device (read-only)</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Tool</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>list_devices</code></td><td>List connected Pico de Gallo boards</td></tr>
+<tr><td><code>status</code></td><td>Which board is reachable, why not when none is, plus firmware/schema/build identity</td></tr>
+<tr><td><code>device_info</code></td><td>Firmware version, schema version, capabilities, runtime GPIO count, build identity</td></tr>
+<tr><td><code>version</code></td><td>Firmware version</td></tr>
+<tr><td><code>ping</code></td><td>Echo a value (liveness check)</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="i2c"><a class="header" href="#i2c">i2c</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Tool</th><th>Description</th><th>Kind</th></tr>
+</thead>
+<tbody>
+<tr><td><code>i2c_read</code></td><td>Read bytes from a target address</td><td>read-only</td></tr>
+<tr><td><code>i2c_write_read</code></td><td>Write then read without releasing the bus</td><td>read-only</td></tr>
+<tr><td><code>i2c_scan</code></td><td>Probe the bus for responding addresses</td><td>read-only</td></tr>
+<tr><td><code>i2c_get_config</code></td><td>Show the active I<sup>2</sup>C frequency</td><td>read-only</td></tr>
+<tr><td><code>i2c_write</code></td><td>Write bytes to a target address</td><td>destructive</td></tr>
+<tr><td><code>i2c_set_config</code></td><td>Set the I<sup>2</sup>C frequency</td><td>destructive</td></tr>
+<tr><td><code>i2c_batch</code></td><td>Atomic multi-step transaction under one I<sup>2</sup>C address</td><td>destructive</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="spi"><a class="header" href="#spi">spi</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Tool</th><th>Description</th><th>Kind</th></tr>
+</thead>
+<tbody>
+<tr><td><code>spi_read</code></td><td>Clock in bytes</td><td>read-only</td></tr>
+<tr><td><code>spi_transfer</code></td><td>Full-duplex transfer</td><td>read-only</td></tr>
+<tr><td><code>spi_get_config</code></td><td>Show the active SPI configuration</td><td>read-only</td></tr>
+<tr><td><code>spi_write</code></td><td>Clock out bytes</td><td>destructive</td></tr>
+<tr><td><code>spi_flush</code></td><td>Flush the SPI buffer</td><td>destructive</td></tr>
+<tr><td><code>spi_set_config</code></td><td>Set frequency, phase, and polarity</td><td>destructive</td></tr>
+<tr><td><code>spi_batch</code></td><td>Atomic multi-step transaction under chip-select</td><td>destructive</td></tr>
+</tbody>
+</table>
+</div>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>MCP SPI tools are not protected by the Zephyr driver’s 1013-byte containment.
+A 1015-byte TX-only request reproduced a device-wide firmware-dispatcher
+wedge. Keep individual SPI payloads at or below 512 bytes; see
+<a href="../appendix/troubleshooting.html#buffertoolong-22">troubleshooting</a>.</p>
+</blockquote>
+<p><code>spi_batch</code> takes <code>cs</code> as a <code>u8</code> and runs its steps in a fixed order:
+parse every operation payload, connect exactly once, read the GPIO count
+from the <code>DeviceInfo</code> that connection already validated, classify <code>cs</code>,
+then call the library once. No second metadata query is issued.</p>
+<p>Parsing comes first on purpose. <code>connect</code> runs
+<code>system_reset_subscriptions</code>, which tears down every GPIO subscription on
+the board — including ones owned by other host processes — so a malformed
+request must not reach it. A payload that fails to parse returns
+<code>-32602</code> (invalid params) without connecting.</p>
+<p>An out-of-range <code>cs</code> and a device reporting zero GPIOs are also <code>-32602</code>,
+with distinct messages, and nothing is transmitted. A failure to
+establish the count — transport, 300-second <code>device/info</code> timeout, legacy
+firmware, or schema mismatch — is <code>-32603</code> (internal error), never
+<code>-32602</code>: it is not a complaint about your argument.</p>
+<h3 id="uart"><a class="header" href="#uart">uart</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Tool</th><th>Description</th><th>Kind</th></tr>
+</thead>
+<tbody>
+<tr><td><code>uart_read</code></td><td>Read bytes with a timeout</td><td>read-only</td></tr>
+<tr><td><code>uart_get_config</code></td><td>Show the active UART configuration</td><td>read-only</td></tr>
+<tr><td><code>uart_write</code></td><td>Write raw bytes</td><td>destructive</td></tr>
+<tr><td><code>uart_flush</code></td><td>Drain the transmit buffer</td><td>destructive</td></tr>
+<tr><td><code>uart_set_config</code></td><td>Set baud rate</td><td>destructive</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="gpio"><a class="header" href="#gpio">gpio</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Tool</th><th>Description</th><th>Kind</th></tr>
+</thead>
+<tbody>
+<tr><td><code>gpio_get</code></td><td>Read the current level of a pin</td><td>read-only</td></tr>
+<tr><td><code>gpio_wait_for_rising_edge_with_timeout</code></td><td>Wait for a rising edge (bounded)</td><td>read-only</td></tr>
+<tr><td><code>gpio_wait_for_falling_edge_with_timeout</code></td><td>Wait for a falling edge (bounded)</td><td>read-only</td></tr>
+<tr><td><code>gpio_wait_for_any_edge_with_timeout</code></td><td>Wait for any edge (bounded)</td><td>read-only</td></tr>
+<tr><td><code>gpio_put</code></td><td>Drive a pin high or low</td><td>destructive</td></tr>
+<tr><td><code>gpio_set_config</code></td><td>Set direction and pull resistor</td><td>destructive</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="pwm"><a class="header" href="#pwm">pwm</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Tool</th><th>Description</th><th>Kind</th></tr>
+</thead>
+<tbody>
+<tr><td><code>pwm_get_duty_cycle</code></td><td>Read current and maximum duty</td><td>read-only</td></tr>
+<tr><td><code>pwm_get_config</code></td><td>Show the active PWM configuration</td><td>read-only</td></tr>
+<tr><td><code>pwm_set_duty_cycle</code></td><td>Set a raw duty-cycle value</td><td>destructive</td></tr>
+<tr><td><code>pwm_enable</code></td><td>Enable the slice behind a channel</td><td>destructive</td></tr>
+<tr><td><code>pwm_disable</code></td><td>Disable the slice behind a channel</td><td>destructive</td></tr>
+<tr><td><code>pwm_set_config</code></td><td>Set frequency and phase-correct mode</td><td>destructive</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="adc-read-only"><a class="header" href="#adc-read-only">adc (read-only)</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Tool</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>adc_read</code></td><td>Read one ADC sample</td></tr>
+<tr><td><code>adc_get_config</code></td><td>Show resolution, reference, and channel count</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="onewire"><a class="header" href="#onewire">onewire</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Tool</th><th>Description</th><th>Kind</th></tr>
+</thead>
+<tbody>
+<tr><td><code>onewire_read</code></td><td>Read raw bytes</td><td>read-only</td></tr>
+<tr><td><code>onewire_search</code></td><td>Enumerate ROM IDs on the bus</td><td>read-only</td></tr>
+<tr><td><code>onewire_reset</code></td><td>Reset the bus and report presence</td><td>destructive</td></tr>
+<tr><td><code>onewire_write</code></td><td>Write raw bytes</td><td>destructive</td></tr>
+<tr><td><code>onewire_write_pullup</code></td><td>Write, then hold the line high (parasitic power)</td><td>destructive</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="gpio-waits-and-v1-limits"><a class="header" href="#gpio-waits-and-v1-limits">GPIO waits and v1 limits</a></h2>
+<p>GPIO edge waits are <strong>timeout-bounded only</strong>: each of the three wait
+tools requires a non-zero <code>timeout_ms</code>. This release deliberately does
+<strong>not</strong> expose <code>0</code>, which would select the firmware’s 30-minute ceiling,
+or push-based edge subscriptions — holding an MCP request for that full
+ceiling is undesirable, and event streaming is out of scope for v1.
+Oversized non-zero values are clamped to the same ceiling; expiry returns
+the GPIO endpoint’s <code>Timeout</code> error.</p>
+<p><code>uart_read</code>’s <code>timeout_ms</code> is <strong>not</strong> covered by that rule: there <code>0</code> is
+legal and means a non-blocking poll that returns whatever is already
+buffered after 1 ms. Its non-zero path is clamped to the 30-minute ceiling.
+The asymmetry is deliberate.</p>
+<p><code>uart_read</code> is also one of the twelve tools that hard-fail on a
+<code>hw-rev1</code> board: that revision supports only I<sup>2</sup>C, SPI, GPIO,
+and PWM, so every <code>uart_*</code>, <code>adc_*</code>, and <code>onewire_*</code> call returns
+<code>Unsupported</code> there. Two boards on one bench can be different
+revisions, so call <code>device_info</code> per board rather than assuming they
+are interchangeable.</p>
+<h2 id="security"><a class="header" href="#security">Security</a></h2>
+<p><code>gallo-mcp</code> does <strong>not</strong> gate writes itself. Write approval is delegated
+to the MCP client through tool annotations:</p>
+<ul>
+<li>read tools are marked <code>readOnlyHint</code>,</li>
+<li>write and actuation tools are marked <code>destructiveHint</code>.</li>
+</ul>
+<p>A well-configured client uses those hints to prompt for confirmation
+before a destructive tool call. <strong>Configure your client’s permissions
+accordingly.</strong></p>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>Under a permission-less or blanket-allow client, an agent can actuate
+hardware — drive pins, write buses, change configuration — without
+confirmation. If the board is wired to anything you care about, run the
+server behind a client that honors <code>destructiveHint</code>.</p>
+</blockquote>
+<h3 id="every-call-resets-that-boards-gpio-subscriptions"><a class="header" href="#every-call-resets-that-boards-gpio-subscriptions">Every call resets that board’s GPIO subscriptions</a></h3>
+<p>Opening a board tears down <strong>every</strong> GPIO edge subscription on it,
+including ones owned by other host processes. A <code>gallo</code> CLI session or a
+user program watching a pin loses that watch the moment a tool call
+touches the same board.</p>
+<p>That is the documented host protocol rather than a bug — it is how a
+host recovers pins stranded by a previous host that died mid-watch — but
+two things about it are easy to miss:</p>
+<ul>
+<li><strong><code>readOnlyHint</code> does not cover it.</strong> <code>status</code>, <code>device_info</code>,
+<code>version</code>, <code>ping</code>, and <code>i2c_scan</code> are annotated read-only and appear
+in the read-only rows of the catalog below, yet each opens a board and
+so each resets its subscriptions. A client gating on <code>destructiveHint</code>
+will not prompt for any of them.</li>
+<li><strong>Per-call selection widened the blast radius.</strong> It used to reach only
+the single board the server was bound to. Now any call can name any
+attached board, so on a multi-board bench a call carrying
+<code>serial_number</code> for board B disturbs board B — even if every previous
+call in the session went to board A.</li>
+</ul>
+<p><code>list_devices</code> is the one exception: it opens no board, so it disturbs
+nothing.</p>
+<p>If a long-lived watch matters, pin the server with <code>-s</code> to keep it away
+from the board running the watch.</p>
+<h2 id="validation"><a class="header" href="#validation">Validation</a></h2>
+<p>The server was validated on real hardware: a Pico de Gallo (serial
+<code>5256657D8A5D7F03</code>, firmware v0.10.1, schema v0.6.1, HW rev2) with a
+TMP108 temperature sensor on I<sup>2</sup>C.</p>
+<p>Over stdio, <code>status</code> reports the attached board:</p>
+<pre><code class="language-json">// status {}
+{
+  "attached": true,
+  "serial_number": "5256657D8A5D7F03",
+  "ambiguous": false,
+  "available": ["5256657D8A5D7F03"],
+  "pinned": null,
+  "firmware_version": "0.12.0",
+  "schema_major": 0,
+  "schema_minor": 8,
+  "build_id": "firmware-v0.12.0"
+}
+</code></pre>
+<p><code>i2c_scan</code> finds the sensor at address <code>0x48</code>:</p>
+<pre><code class="language-json">// i2c_scan {"include_reserved":false}
+{
+  "serial_number": "5256657D8A5D7F03",
+  "result": { "addresses": ["0x48"], "raw": [72] }
+}
+</code></pre>
+<p>And <code>i2c_write_read</code> reads its two temperature bytes:</p>
+<pre><code class="language-json">// i2c_write_read {"address":72,"data":"0x00","count":2}
+{
+  "serial_number": "5256657D8A5D7F03",
+  "result": { "hex": "0x0B,0x8E", "bytes": [11, 142] }
+}
+</code></pre>
+<p>Those bytes are <strong>byte-for-byte identical</strong> to the <code>gallo</code> CLI:</p>
+<pre><code class="language-console">$ gallo i2c write-read -a 0x48 -b 0x00 -c 2
+0b 8e
+</code></pre>
+<p>Board selection was validated on the same bench with a second board
+attached (<code>568E9AAEC72B0D49</code>, bare bus): a bare <code>i2c_scan</code> is refused
+rather than answered from an arbitrary board, and naming either serial
+reaches that board. See <a href="#choosing-a-board">Choosing a board</a>.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>Decoding <code>0x0B8E</code> into degrees Celsius is left to the reader and the
+TMP108 datasheet — it is not asserted here. The point of this
+walkthrough is that the MCP round-trip returns exactly what the CLI
+does, so an agent driving the board through <code>gallo-mcp</code> sees the same
+truth you would at the shell.</p>
+</blockquote>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../crates/python.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../driver/index.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../crates/python.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../driver/index.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>
