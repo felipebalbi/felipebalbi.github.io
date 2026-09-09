@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-72da9543.js";
+            window.path_to_searchindex_js = "../searchindex-23fb8a90.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3e975730.js"></script>
@@ -237,9 +237,12 @@ sequence) − 1 postcard <code>Result</code> discriminant − 2 bytes of varint 
 = 1014. It is a host-transport property that firmware cannot observe.
 Full-duplex <code>spi/transfer</code> proves why both constants are needed: its one length
 travels in both directions, so the tighter response ceiling applies.</p>
-<p>Issue #158 added local validation and firmware bounds without changing an
-endpoint, request or response type. It is therefore not a wire change and did
-not require a schema change or version bump.</p>
+<p>A third constant, <code>MAX_REQUEST_FRAME</code> (5119), bounds the whole request <em>frame</em>
+rather than any one argument. It only binds the batch endpoints; the section
+below derives it.</p>
+<p>Issues #158 and #186 added local validation and firmware bounds without
+changing an endpoint, request or response type. Neither is therefore a wire
+change, and neither required a schema change or version bump.</p>
 <h2 id="the-request-frame-ceiling"><a class="header" href="#the-request-frame-ceiling">The request frame ceiling</a></h2>
 <p><code>MAX_TRANSFER_SIZE</code> bounds a single <em>argument</em>. Independently of it, the whole
 request <strong>frame</strong> — header plus postcard body — has to fit in the firmware’s
@@ -308,13 +311,22 @@ no reply came back.</p>
 </div>
 <p><strong>No supported single-argument call can reach this.</strong> Since #158 every host
 surface caps a write argument at <code>MAX_TRANSFER_SIZE</code>, which puts the worst-case
-frame a little over 4110 bytes — a kilobyte clear of the ceiling. Batches are
-the exception: nothing bounds a batch’s aggregate <em>write</em> bytes, so <code>i2c/batch</code>
-and <code>spi/batch</code> can still build an over-ceiling frame and lose it silently. See
+frame a little over 4110 bytes — a kilobyte clear of the ceiling.
+<code>pico-de-gallo-internal</code> asserts that ordering at compile time, so it cannot
+quietly stop being true.</p>
+<p>Batches were the exception, because nothing bounded their aggregate <em>write</em>
+bytes: <code>i2c/batch</code> and <code>spi/batch</code> could build an over-ceiling frame and lose
+it silently. Since #186 both are bounded host-side against <code>MAX_REQUEST_FRAME</code>
+before transmission, using the <strong>wide</strong> header so the answer does not depend on
+whether the client has received a reply yet. The firmware cannot help here — it
+never sees the frame — which is what makes this the one ceiling with no
+device-side counterpart. See
 <a href="../interfaces/batching.html#the-request-frame-ceiling">Transaction Batching</a>.</p>
 <p>Measured on board <code>49742081C885AC69</code> (hw-rev2, firmware
 <code>firmware-v0.11.0-79-gc3c6a3e07bec</code>) under Linux/nusb, and previously on
-<code>5256657D8A5D7F03</code> under Windows/WinUSB with identical edges — issue #180.</p>
+<code>5256657D8A5D7F03</code> under Windows/WinUSB with identical edges — issue #180. The
+5119/5120 edge was re-measured on <code>firmware-v0.11.0-88-gfcb38de3a1ff</code> for
+issue #186, with the new host guard stubbed out, and was unchanged.</p>
 <h2 id="endpoints-and-topics"><a class="header" href="#endpoints-and-topics">Endpoints and topics</a></h2>
 <p>Endpoints are normal request/response RPCs declared with <code>endpoints!</code>. Topics
 are push-style messages declared with <code>topics!</code>.</p>

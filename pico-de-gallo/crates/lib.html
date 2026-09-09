@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-72da9543.js";
+            window.path_to_searchindex_js = "../searchindex-23fb8a90.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3e975730.js"></script>
@@ -522,7 +522,10 @@ host already has a buffer waiting when the first edge arrives.</p>
 Data returned by the device is limited to <code>MAX_RESPONSE_PAYLOAD</code> (1014
 bytes); data sent to it is limited to <code>MAX_TRANSFER_SIZE</code> (4096 bytes).
 Full-duplex <code>spi_transfer</code> is limited to 1014 bytes because the same length
-must fit in both directions. A refusal is
+must fit in both directions. <code>i2c_batch</code> and <code>spi_batch</code> are bounded a third
+way: their aggregate outgoing bytes must fit one <code>MAX_REQUEST_FRAME</code>
+(5119-byte) request frame, which <code>i2c_batch_request_frame_len</code> and
+<code>spi_batch_request_frame_len</code> compute. A refusal is
 <code>PicoDeGalloError::Endpoint(...::BufferTooLong)</code>; see
 <a href="../appendix/troubleshooting.html#buffertoolong-22">troubleshooting</a>.</p>
 </blockquote>

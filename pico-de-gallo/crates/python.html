@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-72da9543.js";
+            window.path_to_searchindex_js = "../searchindex-23fb8a90.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3e975730.js"></script>
@@ -301,8 +301,10 @@ pg.spi_set_config(
 returned by the device is limited to <code>MAX_RESPONSE_PAYLOAD</code> (1014 bytes),
 while data sent to it is limited to <code>MAX_TRANSFER_SIZE</code> (4096 bytes).
 Full-duplex <code>spi_transfer</code> is therefore limited to 1014 bytes even though
-<code>spi_write</code> accepts 4096. An over-ceiling call raises <code>RuntimeError</code> with the
-<code>BufferTooLong</code> message; see
+<code>spi_write</code> accepts 4096. <code>i2c_batch</code> and <code>spi_batch</code> are bounded a third
+way: their aggregate outgoing bytes must fit one <code>MAX_REQUEST_FRAME</code>
+(5119-byte) request frame. An over-ceiling call raises <code>RuntimeError</code> with
+the <code>BufferTooLong</code> message; see
 <a href="../appendix/troubleshooting.html#buffertoolong-22">troubleshooting</a>.</p>
 </blockquote>
 <pre><code class="language-python">import pyco_de_gallo as gallo

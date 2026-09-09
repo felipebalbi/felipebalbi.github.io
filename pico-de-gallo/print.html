@@ -38,7 +38,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-72da9543.js";
+            window.path_to_searchindex_js = "searchindex-23fb8a90.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-3e975730.js"></script>
@@ -3364,12 +3364,12 @@ from the request, so no framing is needed in the response.</p>
 <tr><td>Maximum operations per batch</td><td>64 (<code>MAX_BATCH_OPS</code>)</td></tr>
 <tr><td>Maximum size of an individual operation</td><td>None — bounded only by the totals below</td></tr>
 <tr><td><strong>Total bytes a batch may return</strong></td><td><strong>1014 (<code>MAX_RESPONSE_PAYLOAD</code>)</strong></td></tr>
-<tr><td><strong>Total bytes a batch may send</strong></td><td><strong>Unenforced. The whole request frame must stay at or below 5119 bytes or it is dropped without an error — see <a href="#the-request-frame-ceiling">The request-frame ceiling</a></strong></td></tr>
+<tr><td><strong>Total bytes a batch may send</strong></td><td><strong>Bounded by the whole request frame: 5119 bytes (<code>MAX_REQUEST_FRAME</code>), header and encoding overhead included — see <a href="#the-request-frame-ceiling">The request-frame ceiling</a></strong></td></tr>
 <tr><td>Protocol packet-buffer/argument bound</td><td>4096 bytes (<code>MAX_TRANSFER_SIZE</code>)</td></tr>
 <tr><td>Plain read/duplex endpoint bound</td><td>1014 bytes (<code>MAX_RESPONSE_PAYLOAD</code>)</td></tr>
 <tr><td>Plain write endpoint bound</td><td>4096 bytes (<code>MAX_TRANSFER_SIZE</code>)</td></tr>
 <tr><td>Direct I²C RPC measurements</td><td>Read: 1014 bytes after a 1-byte write; write: no failure through 4096 bytes</td></tr>
-<tr><td>Batch measurements</td><td>Reads totalling 1014 bytes return in full; 1015 is refused with <code>BufferTooLong</code>, on both <code>i2c/batch</code> and <code>spi/batch</code></td></tr>
+<tr><td>Batch measurements</td><td>Reads totalling 1014 bytes return in full; 1015 is refused with <code>BufferTooLong</code>, on both <code>i2c/batch</code> and <code>spi/batch</code>. A request frame of 5119 bytes is executed; 5120 is refused with <code>BufferTooLong</code></td></tr>
 <tr><td>Demonstrated SPI payload (send direction)</td><td>Shape-dependent and below 4096; no general ceiling is published</td></tr>
 <tr><td>Zero-length I²C writes</td><td>Rejected with <code>ZeroLengthWrite</code> before bus access</td></tr>
 </tbody>
@@ -3390,8 +3390,9 @@ through <code>i2c/batch</code> and <code>spi/batch</code>. See the measured I²C
 <p>Issue #179 introduced the aggregate returned-data bound for batches. Issue
 #158 applies the same directional rule to the plain endpoints and every host
 surface: reads and full-duplex transfers use <code>MAX_RESPONSE_PAYLOAD</code>, while
-send-only writes use <code>MAX_TRANSFER_SIZE</code>. In both cases an over-ceiling call is
-refused before transmission.</p>
+send-only writes use <code>MAX_TRANSFER_SIZE</code>. Issue #186 completed the pair by
+bounding a batch’s aggregate <em>outgoing</em> bytes against <code>MAX_REQUEST_FRAME</code>. In
+every case an over-ceiling call is refused before transmission.</p>
 <h4 id="the-response-ceiling"><a class="header" href="#the-response-ceiling">The response ceiling</a></h4>
 <p><code>MAX_RESPONSE_PAYLOAD</code> bounds what a batch may send <strong>back</strong>, not what the
 firmware can buffer. For I<sup>2</sup>C only <code>Read</code> counts towards it; for SPI,
@@ -3411,41 +3412,76 @@ fault and invites a retry that repeats every write.</p>
 buys the guarantee that a batch the device accepts is a batch whose result the
 caller can actually see. Split larger reads across several batches.</p>
 <h4 id="the-request-frame-ceiling"><a class="header" href="#the-request-frame-ceiling">The request-frame ceiling</a></h4>
-<p>The response ceiling has a mirror image that <strong>is not enforced anywhere</strong>.</p>
-<p>A batch’s <code>Write</code> (and SPI <code>Transfer</code>) bytes all travel out in one request
-frame, and that frame has to fit in the firmware’s 5120-byte receive buffer.
-The usable maximum is 5119 bytes, header included; a longer frame is discarded
-with no reply at all, so the call fails with <code>Timeout</code> rather than
-<code>BufferTooLong</code>. <a href="#the-request-frame-ceiling-1">Wire Protocol</a>
-derives the number term by term and explains why the last byte is unusable.</p>
-<p>Nothing checks this. <code>check_i2c_batch_ops</code> validates per-operation emptiness
-and the read aggregate; the firmware’s <code>i2c_batch_handler</code> does the same; and
-<code>encode_i2c_batch_ops</code> says so in its own documentation — <em>“Callers remain
-responsible for keeping the total request within the transport’s framing
-budget; this function does not police that.”</em> Batches are therefore the one
-remaining way to build an over-ceiling request from a supported host surface,
-because #158 capped every single-argument write at <code>MAX_TRANSFER_SIZE</code>.</p>
+<p><code>MAX_REQUEST_FRAME</code> (5119) bounds what a batch may send <strong>out</strong>, and it is the
+only thing that does. A batch’s <code>Write</code> (and SPI <code>Transfer</code>) bytes all travel
+in one request frame, and that frame has to fit in the firmware’s 5120-byte
+receive buffer, less one byte that an exactly-filling frame cannot use.
+<a href="#the-request-frame-ceiling-1">Wire Protocol</a>
+derives both numbers term by term.</p>
+<p>Unlike the response ceiling, this one is <strong>not</strong> the firmware’s to enforce. An
+over-ceiling frame is discarded by postcard-rpc’s receiver before any handler
+runs, so the device cannot refuse what it never sees. The bound is applied
+host-side, before transmission, in <code>check_i2c_batch_ops</code> and
+<code>check_spi_batch_ops</code>; an over-ceiling batch is rejected with
+<code>BufferTooLong</code> and <code>failed_op = 0</code>, the same aggregate-overflow convention the
+response ceiling uses.</p>
+<p>It bounds the <strong>aggregate</strong>, not any single operation. Two consequences worth
+stating plainly:</p>
+<ul>
+<li>A batch of individually modest writes can still overrun it. The hardware
+measurement below tripped it with eight 635-byte writes, none of them
+anywhere near <code>MAX_TRANSFER_SIZE</code>.</li>
+<li>Conversely, a single batch <code>Write</code> <em>is</em> allowed past <code>MAX_TRANSFER_SIZE</code>,
+which a plain <code>i2c_write</code> would refuse. That is deliberate: a batch write
+streams straight out of the received frame and never enters the firmware’s
+4096-byte scratch buffer, so the argument bound does not apply to it. The
+frame is its real limit.</li>
+</ul>
+<p>Sizing a batch exactly means accounting for postcard overhead — a variant byte
+and a length varint per operation, plus a header, a selector byte and two more
+varints for the request. <code>pico-de-gallo-lib</code> exports
+<code>i2c_batch_request_frame_len</code> and <code>spi_batch_request_frame_len</code> so callers can
+compute it rather than model it. Callers who would rather not: keep a batch’s
+total payload comfortably under 5000 bytes, or split it.</p>
+<h5 id="why-the-bound-is-slightly-conservative"><a class="header" href="#why-the-bound-is-slightly-conservative">Why the bound is slightly conservative</a></h5>
+<p>The frame’s header is 13 bytes until the client has received its first reply
+and 7 bytes afterwards, because postcard-rpc narrows the key width only once a
+reply comes back (see
+<a href="#the-request-frame-ceiling-1">Wire Protocol</a>). The
+host cannot ask which state it is in — the field is private to postcard-rpc —
+so the bound assumes the wider header. On a connection that has already
+received a reply, six more payload bytes would in fact have fitted.</p>
+<p>That is the price of an answer that does not depend on connection state. The
+alternative is worse: a bound computed from the narrow header would accept a
+batch that is silently dropped whenever it happens to be the first request a
+process sends.</p>
+<h5 id="measurements"><a class="header" href="#measurements">Measurements</a></h5>
 <p>Measured through <code>pico-de-gallo-lib</code>’s <code>i2c_batch</code> on board
-<code>49742081C885AC69</code> (hw-rev2, firmware <code>firmware-v0.11.0-79-gc3c6a3e07bec</code>),
-one <code>Write</code> operation against a non-responding address:</p>
+<code>49742081C885AC69</code> (hw-rev2), one <code>Write</code> operation against a non-responding
+address, from a fresh process so the header is the wide one:</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th style="text-align: right">Payload</th><th style="text-align: right">Encoded ops</th><th style="text-align: right">Request frame</th><th>Result</th></tr>
+<tr><th style="text-align: right">Payload</th><th style="text-align: right">Encoded ops</th><th style="text-align: right">Request frame</th><th>Result before #186</th><th>Result now</th></tr>
 </thead>
 <tbody>
-<tr><td style="text-align: right">5099</td><td style="text-align: right">5102</td><td style="text-align: right">5119</td><td><code>NoAcknowledge</code> — the batch ran</td></tr>
-<tr><td style="text-align: right">5100</td><td style="text-align: right">5103</td><td style="text-align: right">5120</td><td><code>Timeout</code> after 5 s — the frame never arrived</td></tr>
+<tr><td style="text-align: right">5099</td><td style="text-align: right">5102</td><td style="text-align: right">5119</td><td><code>NoAcknowledge</code> — the batch ran</td><td>unchanged</td></tr>
+<tr><td style="text-align: right">5100</td><td style="text-align: right">5103</td><td style="text-align: right">5120</td><td><code>Timeout</code> after 5 s — the frame never arrived</td><td><code>BufferTooLong</code>, immediately</td></tr>
 </tbody>
 </table>
 </div>
-<p>The same measurement after a <code>validate()</code> call shifts both rows up by six
-bytes, for the key-width reason described in
-<a href="#the-request-frame-ceiling-1">Wire Protocol</a>.
-Note also that the 5099-byte row is a single batch <code>Write</code> well past
-<code>MAX_TRANSFER_SIZE</code>, which a plain <code>i2c_write</code> would have refused.</p>
-<p>Until this is bounded, keep a batch’s total outgoing bytes comfortably below
-5000, or split it.</p>
+<p>Re-measured on firmware <code>firmware-v0.11.0-88-gfcb38de3a1ff</code> for issue #186,
+with the host guard deliberately stubbed out to exercise the device alone; the
+edge was identical to the original <code>-79-gc3c6a3e07bec</code> run. The multi-operation
+arm, eight writes against the same address, tripped at 635 bytes each and
+passed at 634.</p>
+<p>The pre-#186 failure was worse on SPI than on I²C. A batch carrying no
+<code>DelayNs</code> operation is bounded by the firmware’s 30-minute handler ceiling
+rather than the ordinary call timeout, so an over-ceiling <code>spi/batch</code> left the
+caller waiting over half an hour — confirmed still running after 90 seconds in
+the same control arm — for a request the device had never received. Nothing was
+driven in either case: the bus stayed idle and chip-select never moved, which
+is why this is a diagnosability defect rather than a corruption one.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="crate-map"><a class="header" href="#crate-map">Crate Map</a></h1>
 <p>Pico de Gallo is split into small crates on purpose. You can start at the
@@ -3708,7 +3744,9 @@ exactly the situation <code>ping</code> exists to diagnose. See
 returned by the device is limited to <code>MAX_RESPONSE_PAYLOAD</code> (1014 bytes),
 while data sent to it is limited to <code>MAX_TRANSFER_SIZE</code> (4096 bytes).
 Full-duplex <code>spi transfer</code> is therefore limited to 1014 bytes even though
-<code>spi write</code> accepts 4096. The command reports <code>BufferTooLong</code>; see
+<code>spi write</code> accepts 4096. A <code>batch</code> is bounded a third way: its aggregate
+outgoing bytes must fit one <code>MAX_REQUEST_FRAME</code> (5119-byte) request frame.
+The command reports <code>BufferTooLong</code>; see
 <a href="#buffertoolong-22">troubleshooting</a>.</p>
 </blockquote>
 <p>The read counts accepted by <code>i2c read -c</code>, <code>i2c write-read -c</code>, <code>spi read -c</code>,
@@ -4164,7 +4202,10 @@ host already has a buffer waiting when the first edge arrives.</p>
 Data returned by the device is limited to <code>MAX_RESPONSE_PAYLOAD</code> (1014
 bytes); data sent to it is limited to <code>MAX_TRANSFER_SIZE</code> (4096 bytes).
 Full-duplex <code>spi_transfer</code> is limited to 1014 bytes because the same length
-must fit in both directions. A refusal is
+must fit in both directions. <code>i2c_batch</code> and <code>spi_batch</code> are bounded a third
+way: their aggregate outgoing bytes must fit one <code>MAX_REQUEST_FRAME</code>
+(5119-byte) request frame, which <code>i2c_batch_request_frame_len</code> and
+<code>spi_batch_request_frame_len</code> compute. A refusal is
 <code>PicoDeGalloError::Endpoint(...::BufferTooLong)</code>; see
 <a href="#buffertoolong-22">troubleshooting</a>.</p>
 </blockquote>
@@ -4456,6 +4497,7 @@ callers can size buffers and validate indices from the same numbers the
 firmware enforces instead of hard-coding copies:</p>
 <pre><code class="language-c">#define GALLO_MAX_TRANSFER_SIZE 4096
 #define GALLO_MAX_RESPONSE_PAYLOAD 1014
+#define GALLO_MAX_REQUEST_FRAME 5119
 #define GALLO_MAX_BATCH_OPS 64
 #define GALLO_NUM_GPIOS 4
 </code></pre>
@@ -4464,7 +4506,11 @@ firmware enforces instead of hard-coding copies:</p>
 <code>GALLO_MAX_RESPONSE_PAYLOAD</code> is the 1014-byte limit for data the device must
 return, including the aggregate returned by a batch. A full-duplex
 <code>gallo_spi_transfer</code> uses the response limit for its entire length because each
-byte travels in both directions. Exceeding either limit yields
+byte travels in both directions. <code>GALLO_MAX_REQUEST_FRAME</code> is the 5119-byte
+limit on a whole request frame; it binds only <code>gallo_i2c_batch</code> and
+<code>gallo_spi_batch</code>, whose aggregate outgoing bytes nothing else bounds — an
+individual batch <code>Write</code> is deliberately <em>not</em> capped at
+<code>GALLO_MAX_TRANSFER_SIZE</code>. Exceeding any of the three yields
 <code>Status::BufferTooLong</code> locally, before transmission. See
 <a href="#buffertoolong-22">troubleshooting</a>.
 Exceeding <code>GALLO_MAX_BATCH_OPS</code> in <code>gallo_i2c_batch</code> or <code>gallo_spi_batch</code>
@@ -5017,8 +5063,10 @@ pg.spi_set_config(
 returned by the device is limited to <code>MAX_RESPONSE_PAYLOAD</code> (1014 bytes),
 while data sent to it is limited to <code>MAX_TRANSFER_SIZE</code> (4096 bytes).
 Full-duplex <code>spi_transfer</code> is therefore limited to 1014 bytes even though
-<code>spi_write</code> accepts 4096. An over-ceiling call raises <code>RuntimeError</code> with the
-<code>BufferTooLong</code> message; see
+<code>spi_write</code> accepts 4096. <code>i2c_batch</code> and <code>spi_batch</code> are bounded a third
+way: their aggregate outgoing bytes must fit one <code>MAX_REQUEST_FRAME</code>
+(5119-byte) request frame. An over-ceiling call raises <code>RuntimeError</code> with
+the <code>BufferTooLong</code> message; see
 <a href="#buffertoolong-22">troubleshooting</a>.</p>
 </blockquote>
 <pre><code class="language-python">import pyco_de_gallo as gallo
@@ -5375,7 +5423,9 @@ Every tool except <code>list_devices</code> accepts an optional <code>serial_num
 board. Data returned by the device is limited to <code>MAX_RESPONSE_PAYLOAD</code>
 (1014 bytes), while data sent to it is limited to <code>MAX_TRANSFER_SIZE</code>
 (4096 bytes). Full-duplex <code>spi_transfer</code> is therefore limited to 1014
-bytes even though <code>spi_write</code> accepts 4096. The refusal is an
+bytes even though <code>spi_write</code> accepts 4096. <code>i2c_batch</code> and <code>spi_batch</code> are
+bounded a third way: their aggregate outgoing bytes must fit one
+<code>MAX_REQUEST_FRAME</code> (5119-byte) request frame. The refusal is an
 <code>invalid_params</code> error naming the offending size, the limit and the
 remedy — not the bare <code>BufferTooLong</code> a device-side refusal would
 produce. See
@@ -6931,9 +6981,12 @@ sequence) − 1 postcard <code>Result</code> discriminant − 2 bytes of varint 
 = 1014. It is a host-transport property that firmware cannot observe.
 Full-duplex <code>spi/transfer</code> proves why both constants are needed: its one length
 travels in both directions, so the tighter response ceiling applies.</p>
-<p>Issue #158 added local validation and firmware bounds without changing an
-endpoint, request or response type. It is therefore not a wire change and did
-not require a schema change or version bump.</p>
+<p>A third constant, <code>MAX_REQUEST_FRAME</code> (5119), bounds the whole request <em>frame</em>
+rather than any one argument. It only binds the batch endpoints; the section
+below derives it.</p>
+<p>Issues #158 and #186 added local validation and firmware bounds without
+changing an endpoint, request or response type. Neither is therefore a wire
+change, and neither required a schema change or version bump.</p>
 <h2 id="the-request-frame-ceiling-1"><a class="header" href="#the-request-frame-ceiling-1">The request frame ceiling</a></h2>
 <p><code>MAX_TRANSFER_SIZE</code> bounds a single <em>argument</em>. Independently of it, the whole
 request <strong>frame</strong> — header plus postcard body — has to fit in the firmware’s
@@ -7002,13 +7055,22 @@ no reply came back.</p>
 </div>
 <p><strong>No supported single-argument call can reach this.</strong> Since #158 every host
 surface caps a write argument at <code>MAX_TRANSFER_SIZE</code>, which puts the worst-case
-frame a little over 4110 bytes — a kilobyte clear of the ceiling. Batches are
-the exception: nothing bounds a batch’s aggregate <em>write</em> bytes, so <code>i2c/batch</code>
-and <code>spi/batch</code> can still build an over-ceiling frame and lose it silently. See
+frame a little over 4110 bytes — a kilobyte clear of the ceiling.
+<code>pico-de-gallo-internal</code> asserts that ordering at compile time, so it cannot
+quietly stop being true.</p>
+<p>Batches were the exception, because nothing bounded their aggregate <em>write</em>
+bytes: <code>i2c/batch</code> and <code>spi/batch</code> could build an over-ceiling frame and lose
+it silently. Since #186 both are bounded host-side against <code>MAX_REQUEST_FRAME</code>
+before transmission, using the <strong>wide</strong> header so the answer does not depend on
+whether the client has received a reply yet. The firmware cannot help here — it
+never sees the frame — which is what makes this the one ceiling with no
+device-side counterpart. See
 <a href="#the-request-frame-ceiling">Transaction Batching</a>.</p>
 <p>Measured on board <code>49742081C885AC69</code> (hw-rev2, firmware
 <code>firmware-v0.11.0-79-gc3c6a3e07bec</code>) under Linux/nusb, and previously on
-<code>5256657D8A5D7F03</code> under Windows/WinUSB with identical edges — issue #180.</p>
+<code>5256657D8A5D7F03</code> under Windows/WinUSB with identical edges — issue #180. The
+5119/5120 edge was re-measured on <code>firmware-v0.11.0-88-gfcb38de3a1ff</code> for
+issue #186, with the new host guard stubbed out, and was unchanged.</p>
 <h2 id="endpoints-and-topics"><a class="header" href="#endpoints-and-topics">Endpoints and topics</a></h2>
 <p>Endpoints are normal request/response RPCs declared with <code>endpoints!</code>. Topics
 are push-style messages declared with <code>topics!</code>.</p>
@@ -7708,9 +7770,11 @@ a blind retry there can repeat side effects.</p>
 <p><code>BufferTooLong</code> (−22) is also a host-side refusal. Data returned by the device
 is limited to <code>GALLO_MAX_RESPONSE_PAYLOAD</code> (1014 bytes), while data sent to it
 is limited to <code>GALLO_MAX_TRANSFER_SIZE</code> (4096 bytes). Full-duplex SPI transfer
-uses the tighter response ceiling. The same status still represents a
+uses the tighter response ceiling. A batch is bounded a third way, by
+<code>GALLO_MAX_REQUEST_FRAME</code> (5119 bytes) on its whole request frame — the only
+bound on its aggregate outgoing bytes. The same status still represents a
 device-side buffer refusal, but an over-ceiling argument is rejected locally
-before transmission. Issue #158 added no new <code>Status</code> value.</p>
+before transmission. Issues #158, #179 and #186 added no new <code>Status</code> value.</p>
 <p><code>SpiInvalidCsPin</code> (−71) and <code>SpiNoGpios</code> (−74) are host-side refusals: the
 chip-select was rejected before anything was transmitted, and no pin was
 driven. <code>DeviceInfoFailed</code> (−62), <code>SchemaMismatch</code> (−63),
@@ -7949,8 +8013,9 @@ at 3.3 V on the bus pads).</li>
 <p>Usually a wiring issue (long stub leads, no pull-ups, multi-master
 collisions). Try a slower clock with <code>gallo i2c set-config --frequency standard</code>.</p>
 <h3 id="buffertoolong-22"><a class="header" href="#buffertoolong-22"><code>BufferTooLong</code> (−22)</a></h3>
-<p>The argument exceeds one of two independent ceilings. Choose the ceiling by
-the direction of the bytes, not by the endpoint:</p>
+<p>The argument exceeds one of three independent ceilings. Choose the ceiling by
+the direction of the bytes and by whether the call is a batch, not by the
+endpoint:</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -7959,6 +8024,7 @@ the direction of the bytes, not by the endpoint:</p>
 <tbody>
 <tr><td>device → host</td><td><code>MAX_RESPONSE_PAYLOAD</code></td><td style="text-align: right">1014</td><td>reads, the read half of I²C write-read, batch returning operations, all of full-duplex SPI transfer</td></tr>
 <tr><td>host → device</td><td><code>MAX_TRANSFER_SIZE</code></td><td style="text-align: right">4096</td><td>writes and the write half of I²C write-read</td></tr>
+<tr><td>host → device, whole frame</td><td><code>MAX_REQUEST_FRAME</code></td><td style="text-align: right">5119</td><td>a batch’s aggregate outgoing bytes, header and encoding included</td></tr>
 </tbody>
 </table>
 </div>
@@ -7969,22 +8035,32 @@ host-transport property that firmware cannot observe. <code>spi_transfer</code> 
 distinction visible: it is full duplex, so its whole argument is limited to
 1014, while send-only <code>spi_write</code> accepts 4096. Issue #158 measured
 <code>spi/write</code> succeeding at 1015 bytes exactly where <code>spi/transfer</code> fails.</p>
+<p><code>MAX_REQUEST_FRAME</code> applies only to <code>i2c/batch</code> and <code>spi/batch</code>, because every
+other endpoint is kept a kilobyte clear of it by <code>MAX_TRANSFER_SIZE</code>. It bounds
+the aggregate, so a batch of individually modest writes can trip it; and it
+does <em>not</em> cap an individual batch <code>Write</code> at 4096, because a batch write never
+enters the firmware’s scratch buffer. See
+<a href="#the-request-frame-ceiling">Transaction Batching</a>,
+and use <code>i2c_batch_request_frame_len</code> / <code>spi_batch_request_frame_len</code> rather
+than modelling the overhead by hand.</p>
 <p>Every host surface now rejects an over-ceiling argument locally before
 transmitting. Rust and MCP report <code>BufferTooLong</code>; C returns
 <code>Status::BufferTooLong</code>; Python raises <code>RuntimeError</code>; Zephyr returns
 <code>-EMSGSIZE</code>. No new C <code>Status</code> value was added. To fix the call, split or chunk
 the transfer. A batch’s returning operations count in aggregate, so dividing a
-large read into operations inside one batch does not evade the response limit.</p>
+large read into operations inside one batch does not evade the response limit;
+the same is true of its outgoing operations and the frame limit.</p>
 <p>The historical measurements explain why these guards exist. Before issue #179,
 a batch returning 1015–4096 bytes executed its bus operations and only then lost
 the response with <code>Postcard(DeserializeUnexpectedEnd)</code>; #179 added the aggregate
 batch ceiling. Before #158, plain I²C reads showed the same 1014/1015 edge, while
 I²C write requests reached 4096 and initiated a transaction at an unpopulated
 address. That verifies request framing, not successful clocking of a 4096-byte
-payload, and no I²C hang found in that range proves none exists.</p>
+payload, and no I²C hang found in that range proves none exists. Before #186 an
+over-ceiling batch <em>frame</em> produced no error at all — see the next section.</p>
 <p>These figures come from the issue #158 measurements on board
-<code>5256657D8A5D7F03</code> and the issue #179 measurements on board
-<code>49742081C885AC69</code>; this documentation update did not repeat them.</p>
+<code>5256657D8A5D7F03</code> and the issue #179 and #186 measurements on board
+<code>49742081C885AC69</code>.</p>
 <p>The older Zephyr SPI guidance capped transfers at 1013 and documented full
 duplex only through 512 because 1014 and the 513–1013 range had not been tested.
 Issue #158 superseded it: <code>spi/transfer</code> was measured at 1014 successfully, and
@@ -8009,19 +8085,23 @@ must fit in the firmware’s 5120-byte receive buffer, and the usable maximum is
 5119 bytes. A longer frame is discarded by the server with no reply, so the
 call ends in <code>Timeout</code> (or, on firmware older than the #178 host-side bounds,
 hangs). The board stays fully responsive; this is not a wedge.</p>
-<p><code>MAX_TRANSFER_SIZE</code> keeps every single-argument call clear of it: 4096 bytes of
-payload plus a header and the request struct’s own encoding lands a little over
-4110 bytes. <strong>Batches are the exception</strong> — nothing bounds a batch’s aggregate
-outgoing bytes, so a batch of writes can build an over-ceiling frame and lose
-it. See
-<a href="#the-request-frame-ceiling">Transaction Batching</a>.</p>
+<p><strong>Since issue #186 no supported call should reach this.</strong> <code>MAX_TRANSFER_SIZE</code>
+keeps every single-argument call clear of it — 4096 bytes of payload plus a
+header and the request struct’s own encoding lands a little over 4110 bytes —
+and the batch endpoints, which were the one remaining route, are now bounded
+against <code>MAX_REQUEST_FRAME</code> host-side and report <code>BufferTooLong</code> instead. If
+you still see a timeout in this range, you are either on firmware and host
+built from different trees, or you have found a new route into the ceiling
+worth reporting.</p>
 <p>Two details are worth knowing if you are measuring this yourself, because both
 have produced wrong answers before:</p>
 <ul>
 <li>The usable payload is <strong>six bytes smaller until the connection has received
 its first reply</strong>. postcard-rpc’s <code>HostClient</code> starts with an 8-byte key in
 the request header and narrows to the server’s 2-byte key only after a reply
-arrives. A request that is itself dropped narrows nothing.</li>
+arrives. A request that is itself dropped narrows nothing. This is also why
+the batch guard assumes the wide header and so refuses up to six bytes
+earlier than a warm connection strictly requires.</li>
 <li>A probe that does not reproduce the real client’s header measures a
 different protocol. See
 <a href="#the-request-frame-ceiling-1">Wire Protocol</a>.</li>

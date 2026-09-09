@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-72da9543.js";
+            window.path_to_searchindex_js = "../searchindex-23fb8a90.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3e975730.js"></script>
@@ -245,6 +245,7 @@ callers can size buffers and validate indices from the same numbers the
 firmware enforces instead of hard-coding copies:</p>
 <pre><code class="language-c">#define GALLO_MAX_TRANSFER_SIZE 4096
 #define GALLO_MAX_RESPONSE_PAYLOAD 1014
+#define GALLO_MAX_REQUEST_FRAME 5119
 #define GALLO_MAX_BATCH_OPS 64
 #define GALLO_NUM_GPIOS 4
 </code></pre>
@@ -253,7 +254,11 @@ firmware enforces instead of hard-coding copies:</p>
 <code>GALLO_MAX_RESPONSE_PAYLOAD</code> is the 1014-byte limit for data the device must
 return, including the aggregate returned by a batch. A full-duplex
 <code>gallo_spi_transfer</code> uses the response limit for its entire length because each
-byte travels in both directions. Exceeding either limit yields
+byte travels in both directions. <code>GALLO_MAX_REQUEST_FRAME</code> is the 5119-byte
+limit on a whole request frame; it binds only <code>gallo_i2c_batch</code> and
+<code>gallo_spi_batch</code>, whose aggregate outgoing bytes nothing else bounds — an
+individual batch <code>Write</code> is deliberately <em>not</em> capped at
+<code>GALLO_MAX_TRANSFER_SIZE</code>. Exceeding any of the three yields
 <code>Status::BufferTooLong</code> locally, before transmission. See
 <a href="../appendix/troubleshooting.html#buffertoolong-22">troubleshooting</a>.
 Exceeding <code>GALLO_MAX_BATCH_OPS</code> in <code>gallo_i2c_batch</code> or <code>gallo_spi_batch</code>
