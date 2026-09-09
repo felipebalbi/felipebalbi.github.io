@@ -38,7 +38,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-698ea0ef.js";
+            window.path_to_searchindex_js = "searchindex-72da9543.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-3e975730.js"></script>
@@ -3364,6 +3364,7 @@ from the request, so no framing is needed in the response.</p>
 <tr><td>Maximum operations per batch</td><td>64 (<code>MAX_BATCH_OPS</code>)</td></tr>
 <tr><td>Maximum size of an individual operation</td><td>None — bounded only by the totals below</td></tr>
 <tr><td><strong>Total bytes a batch may return</strong></td><td><strong>1014 (<code>MAX_RESPONSE_PAYLOAD</code>)</strong></td></tr>
+<tr><td><strong>Total bytes a batch may send</strong></td><td><strong>Unenforced. The whole request frame must stay at or below 5119 bytes or it is dropped without an error — see <a href="#the-request-frame-ceiling">The request-frame ceiling</a></strong></td></tr>
 <tr><td>Protocol packet-buffer/argument bound</td><td>4096 bytes (<code>MAX_TRANSFER_SIZE</code>)</td></tr>
 <tr><td>Plain read/duplex endpoint bound</td><td>1014 bytes (<code>MAX_RESPONSE_PAYLOAD</code>)</td></tr>
 <tr><td>Plain write endpoint bound</td><td>4096 bytes (<code>MAX_TRANSFER_SIZE</code>)</td></tr>
@@ -3409,6 +3410,42 @@ fault and invites a retry that repeats every write.</p>
 <p>Refusing up front costs the 1015–4096 range, which never worked anyway, and
 buys the guarantee that a batch the device accepts is a batch whose result the
 caller can actually see. Split larger reads across several batches.</p>
+<h4 id="the-request-frame-ceiling"><a class="header" href="#the-request-frame-ceiling">The request-frame ceiling</a></h4>
+<p>The response ceiling has a mirror image that <strong>is not enforced anywhere</strong>.</p>
+<p>A batch’s <code>Write</code> (and SPI <code>Transfer</code>) bytes all travel out in one request
+frame, and that frame has to fit in the firmware’s 5120-byte receive buffer.
+The usable maximum is 5119 bytes, header included; a longer frame is discarded
+with no reply at all, so the call fails with <code>Timeout</code> rather than
+<code>BufferTooLong</code>. <a href="#the-request-frame-ceiling-1">Wire Protocol</a>
+derives the number term by term and explains why the last byte is unusable.</p>
+<p>Nothing checks this. <code>check_i2c_batch_ops</code> validates per-operation emptiness
+and the read aggregate; the firmware’s <code>i2c_batch_handler</code> does the same; and
+<code>encode_i2c_batch_ops</code> says so in its own documentation — <em>“Callers remain
+responsible for keeping the total request within the transport’s framing
+budget; this function does not police that.”</em> Batches are therefore the one
+remaining way to build an over-ceiling request from a supported host surface,
+because #158 capped every single-argument write at <code>MAX_TRANSFER_SIZE</code>.</p>
+<p>Measured through <code>pico-de-gallo-lib</code>’s <code>i2c_batch</code> on board
+<code>49742081C885AC69</code> (hw-rev2, firmware <code>firmware-v0.11.0-79-gc3c6a3e07bec</code>),
+one <code>Write</code> operation against a non-responding address:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th style="text-align: right">Payload</th><th style="text-align: right">Encoded ops</th><th style="text-align: right">Request frame</th><th>Result</th></tr>
+</thead>
+<tbody>
+<tr><td style="text-align: right">5099</td><td style="text-align: right">5102</td><td style="text-align: right">5119</td><td><code>NoAcknowledge</code> — the batch ran</td></tr>
+<tr><td style="text-align: right">5100</td><td style="text-align: right">5103</td><td style="text-align: right">5120</td><td><code>Timeout</code> after 5 s — the frame never arrived</td></tr>
+</tbody>
+</table>
+</div>
+<p>The same measurement after a <code>validate()</code> call shifts both rows up by six
+bytes, for the key-width reason described in
+<a href="#the-request-frame-ceiling-1">Wire Protocol</a>.
+Note also that the 5099-byte row is a single batch <code>Write</code> well past
+<code>MAX_TRANSFER_SIZE</code>, which a plain <code>i2c_write</code> would have refused.</p>
+<p>Until this is bounded, keep a batch’s total outgoing bytes comfortably below
+5000, or split it.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="crate-map"><a class="header" href="#crate-map">Crate Map</a></h1>
 <p>Pico de Gallo is split into small crates on purpose. You can start at the
@@ -6897,6 +6934,81 @@ travels in both directions, so the tighter response ceiling applies.</p>
 <p>Issue #158 added local validation and firmware bounds without changing an
 endpoint, request or response type. It is therefore not a wire change and did
 not require a schema change or version bump.</p>
+<h2 id="the-request-frame-ceiling-1"><a class="header" href="#the-request-frame-ceiling-1">The request frame ceiling</a></h2>
+<p><code>MAX_TRANSFER_SIZE</code> bounds a single <em>argument</em>. Independently of it, the whole
+request <strong>frame</strong> — header plus postcard body — has to fit in the firmware’s
+receive buffer, which is <code>MAX_TRANSFER_SIZE + 1024</code> = 5120 bytes (<code>BufStorage</code>
+in <code>crates/pico-de-gallo-firmware/src/main.rs</code>).</p>
+<p>A frame that does not fit is discarded <strong>silently</strong>. postcard-rpc’s server maps
+<code>WireRxErrorKind::ReceivedMessageTooLarge</code> to <code>continue</code>, so nothing is sent
+back; the caller sees only its own timeout. That is the failure mode to expect
+here, not <code>BufferTooLong</code>.</p>
+<p>The largest frame the firmware accepts is one byte less than the buffer:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th style="text-align: right">Bytes</th><th>Term</th></tr>
+</thead>
+<tbody>
+<tr><td style="text-align: right"><code>5120</code></td><td>firmware receive buffer, <code>MAX_TRANSFER_SIZE + 1024</code></td></tr>
+<tr><td style="text-align: right"><code>-1</code></td><td>a frame that <em>exactly</em> fills the buffer is refused</td></tr>
+<tr><td style="text-align: right"><strong><code>= 5119</code></strong></td><td>largest accepted request frame</td></tr>
+</tbody>
+</table>
+</div>
+<p>That <code>-1</code> is a mechanism, not a safety margin. postcard-rpc’s
+<code>EUsbWireRx::receive</code> ends a frame when a <strong>short</strong> USB packet arrives, and
+loops <code>while !window.is_empty()</code>. A frame whose length equals the buffer size
+fills the window with full 64-byte packets, so the loop runs out of window
+before it ever sees a short packet, falls into its “ran out of space” branch,
+reads the transfer-terminating zero-length packet there, and reports
+<code>ReceivedMessageTooLarge</code>. Frames that are a multiple of 64 but <em>smaller</em> than
+the buffer are unaffected, because window remains and the zero-length packet
+ends the frame in the normal path.</p>
+<p>What is left for the payload depends on the header, which is <strong>not</strong> a
+constant:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th style="text-align: right">Bytes</th><th>Term</th></tr>
+</thead>
+<tbody>
+<tr><td style="text-align: right"><code>5119</code></td><td>largest accepted request frame</td></tr>
+<tr><td style="text-align: right"><code>-1</code></td><td>header discriminant</td></tr>
+<tr><td style="text-align: right"><code>-8</code> or <code>-2</code></td><td>header key — see below</td></tr>
+<tr><td style="text-align: right"><code>-4</code></td><td>header sequence number (<code>VarSeq::Seq4</code>, always; <code>VarSeq::resize</code> is defined in postcard-rpc 0.12.1 and called nowhere in it, so the <code>VarSeqKind</code> this repo passes never takes effect)</td></tr>
+<tr><td style="text-align: right"><code>-N</code></td><td>whatever the request struct encodes around the payload — for a bare <code>&amp;[u8]</code> field that is a 2-byte postcard varint length prefix</td></tr>
+</tbody>
+</table>
+</div>
+<p>postcard-rpc narrows the key width over the life of a connection.
+<code>HostClient</code> starts at <code>VarKeyKind::Key8</code> and adopts the server’s narrower key
+only after it has <strong>received a reply</strong>; this device’s server answers with
+<code>Key2</code>. So a process’s first request carries a 13-byte header and every request
+after the first reply carries 7, and the usable payload is six bytes smaller
+until then. A request that is itself dropped does not narrow anything, because
+no reply came back.</p>
+<p>For an endpoint whose request is a single byte slice, that works out to:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>State</th><th style="text-align: right">Header</th><th style="text-align: right">Largest payload</th></tr>
+</thead>
+<tbody>
+<tr><td>before the first reply</td><td style="text-align: right">13</td><td style="text-align: right">5104</td></tr>
+<tr><td>after the first reply</td><td style="text-align: right">7</td><td style="text-align: right">5110</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>No supported single-argument call can reach this.</strong> Since #158 every host
+surface caps a write argument at <code>MAX_TRANSFER_SIZE</code>, which puts the worst-case
+frame a little over 4110 bytes — a kilobyte clear of the ceiling. Batches are
+the exception: nothing bounds a batch’s aggregate <em>write</em> bytes, so <code>i2c/batch</code>
+and <code>spi/batch</code> can still build an over-ceiling frame and lose it silently. See
+<a href="#the-request-frame-ceiling">Transaction Batching</a>.</p>
+<p>Measured on board <code>49742081C885AC69</code> (hw-rev2, firmware
+<code>firmware-v0.11.0-79-gc3c6a3e07bec</code>) under Linux/nusb, and previously on
+<code>5256657D8A5D7F03</code> under Windows/WinUSB with identical edges — issue #180.</p>
 <h2 id="endpoints-and-topics"><a class="header" href="#endpoints-and-topics">Endpoints and topics</a></h2>
 <p>Endpoints are normal request/response RPCs declared with <code>endpoints!</code>. Topics
 are push-style messages declared with <code>topics!</code>.</p>
@@ -7890,6 +8002,30 @@ proof that detaching cancels the blocked handler. On Linux and macOS,
 reconnect the cable or use USB unbind/rebind, and power-cycle if
 re-enumeration is unavailable or ineffective. <code>system/reset-subscriptions</code>
 cannot run while dispatch is blocked, so it is not a way out.</p>
+<h3 id="a-large-request-times-out-instead-of-returning-buffertoolong"><a class="header" href="#a-large-request-times-out-instead-of-returning-buffertoolong">A large request times out instead of returning <code>BufferTooLong</code></a></h3>
+<p>There is a third ceiling, and crossing it produces silence rather than an
+error. The whole request <strong>frame</strong> — postcard-rpc header plus encoded body —
+must fit in the firmware’s 5120-byte receive buffer, and the usable maximum is
+5119 bytes. A longer frame is discarded by the server with no reply, so the
+call ends in <code>Timeout</code> (or, on firmware older than the #178 host-side bounds,
+hangs). The board stays fully responsive; this is not a wedge.</p>
+<p><code>MAX_TRANSFER_SIZE</code> keeps every single-argument call clear of it: 4096 bytes of
+payload plus a header and the request struct’s own encoding lands a little over
+4110 bytes. <strong>Batches are the exception</strong> — nothing bounds a batch’s aggregate
+outgoing bytes, so a batch of writes can build an over-ceiling frame and lose
+it. See
+<a href="#the-request-frame-ceiling">Transaction Batching</a>.</p>
+<p>Two details are worth knowing if you are measuring this yourself, because both
+have produced wrong answers before:</p>
+<ul>
+<li>The usable payload is <strong>six bytes smaller until the connection has received
+its first reply</strong>. postcard-rpc’s <code>HostClient</code> starts with an 8-byte key in
+the request header and narrows to the server’s 2-byte key only after a reply
+arrives. A request that is itself dropped narrows nothing.</li>
+<li>A probe that does not reproduce the real client’s header measures a
+different protocol. See
+<a href="#the-request-frame-ceiling-1">Wire Protocol</a>.</li>
+</ul>
 <h3 id="gpio-wrongdirection-28"><a class="header" href="#gpio-wrongdirection-28">GPIO <code>WrongDirection</code> (−28)</a></h3>
 <p>You read from a pin configured as output (or vice versa). Call
 <code>gpio_set_config</code> first with the matching direction.</p>

@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-698ea0ef.js";
+            window.path_to_searchindex_js = "../searchindex-72da9543.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3e975730.js"></script>
@@ -434,6 +434,7 @@ from the request, so no framing is needed in the response.</p>
 <tr><td>Maximum operations per batch</td><td>64 (<code>MAX_BATCH_OPS</code>)</td></tr>
 <tr><td>Maximum size of an individual operation</td><td>None — bounded only by the totals below</td></tr>
 <tr><td><strong>Total bytes a batch may return</strong></td><td><strong>1014 (<code>MAX_RESPONSE_PAYLOAD</code>)</strong></td></tr>
+<tr><td><strong>Total bytes a batch may send</strong></td><td><strong>Unenforced. The whole request frame must stay at or below 5119 bytes or it is dropped without an error — see <a href="#the-request-frame-ceiling">The request-frame ceiling</a></strong></td></tr>
 <tr><td>Protocol packet-buffer/argument bound</td><td>4096 bytes (<code>MAX_TRANSFER_SIZE</code>)</td></tr>
 <tr><td>Plain read/duplex endpoint bound</td><td>1014 bytes (<code>MAX_RESPONSE_PAYLOAD</code>)</td></tr>
 <tr><td>Plain write endpoint bound</td><td>4096 bytes (<code>MAX_TRANSFER_SIZE</code>)</td></tr>
@@ -479,6 +480,42 @@ fault and invites a retry that repeats every write.</p>
 <p>Refusing up front costs the 1015–4096 range, which never worked anyway, and
 buys the guarantee that a batch the device accepts is a batch whose result the
 caller can actually see. Split larger reads across several batches.</p>
+<h4 id="the-request-frame-ceiling"><a class="header" href="#the-request-frame-ceiling">The request-frame ceiling</a></h4>
+<p>The response ceiling has a mirror image that <strong>is not enforced anywhere</strong>.</p>
+<p>A batch’s <code>Write</code> (and SPI <code>Transfer</code>) bytes all travel out in one request
+frame, and that frame has to fit in the firmware’s 5120-byte receive buffer.
+The usable maximum is 5119 bytes, header included; a longer frame is discarded
+with no reply at all, so the call fails with <code>Timeout</code> rather than
+<code>BufferTooLong</code>. <a href="../internals/wire-protocol.html#the-request-frame-ceiling">Wire Protocol</a>
+derives the number term by term and explains why the last byte is unusable.</p>
+<p>Nothing checks this. <code>check_i2c_batch_ops</code> validates per-operation emptiness
+and the read aggregate; the firmware’s <code>i2c_batch_handler</code> does the same; and
+<code>encode_i2c_batch_ops</code> says so in its own documentation — <em>“Callers remain
+responsible for keeping the total request within the transport’s framing
+budget; this function does not police that.”</em> Batches are therefore the one
+remaining way to build an over-ceiling request from a supported host surface,
+because #158 capped every single-argument write at <code>MAX_TRANSFER_SIZE</code>.</p>
+<p>Measured through <code>pico-de-gallo-lib</code>’s <code>i2c_batch</code> on board
+<code>49742081C885AC69</code> (hw-rev2, firmware <code>firmware-v0.11.0-79-gc3c6a3e07bec</code>),
+one <code>Write</code> operation against a non-responding address:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th style="text-align: right">Payload</th><th style="text-align: right">Encoded ops</th><th style="text-align: right">Request frame</th><th>Result</th></tr>
+</thead>
+<tbody>
+<tr><td style="text-align: right">5099</td><td style="text-align: right">5102</td><td style="text-align: right">5119</td><td><code>NoAcknowledge</code> — the batch ran</td></tr>
+<tr><td style="text-align: right">5100</td><td style="text-align: right">5103</td><td style="text-align: right">5120</td><td><code>Timeout</code> after 5 s — the frame never arrived</td></tr>
+</tbody>
+</table>
+</div>
+<p>The same measurement after a <code>validate()</code> call shifts both rows up by six
+bytes, for the key-width reason described in
+<a href="../internals/wire-protocol.html#the-request-frame-ceiling">Wire Protocol</a>.
+Note also that the 5099-byte row is a single batch <code>Write</code> well past
+<code>MAX_TRANSFER_SIZE</code>, which a plain <code>i2c_write</code> would have refused.</p>
+<p>Until this is bounded, keep a batch’s total outgoing bytes comfortably below
+5000, or split it.</p>
 
                     </main>
 
