@@ -38,7 +38,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-27ff4fa5.js";
+            window.path_to_searchindex_js = "searchindex-698ea0ef.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-3e975730.js"></script>
@@ -1120,31 +1120,36 @@ Read data (2 bytes):
 </code></pre>
 <p>See <a href="#transaction-batching">Transaction Batching</a> for the full mechanism.</p>
 <h2 id="measured-transfer-limits"><a class="header" href="#measured-transfer-limits">Measured Transfer Limits</a></h2>
-<p>On the measured schema-0.7 setup, an I²C read of <strong>1014 bytes</strong> after a
-one-byte write returned exactly the requested length. The 1015-byte probe
-failed in about 99 ms; larger tested lengths returned the same host-side
-response decode error, <code>Postcard(DeserializeUnexpectedEnd)</code>, with increasing
-latency, reaching 391 ms at 4096. No truncation was found at the checked lengths
-of 1, 64, 256, 512, 1000, 1013 and 1014 bytes.</p>
-<p>No failing write request length was observed through <strong>4096 bytes</strong>. Every probe
+<p>I²C uses independent directional ceilings. <code>i2c_read</code> and the read half of
+<code>i2c_write_read</code> may return at most <code>MAX_RESPONSE_PAYLOAD</code> (1014 bytes).
+<code>i2c_write</code> and the write half of <code>i2c_write_read</code> may send at most
+<code>MAX_TRANSFER_SIZE</code> (4096 bytes). Every host surface refuses an over-ceiling
+argument with <code>BufferTooLong</code> before transmitting.</p>
+<p>The response ceiling is derived from the host transport, not fitted to the
+measurement: 1024 bytes of inbound USB transfer − 7 bytes of response header −
+1 postcard <code>Result</code> discriminant − 2 bytes of varint length prefix = 1014.</p>
+<p>Before issue #158 added those local guards, the schema-0.7 measurement behind
+issue #146 found that an I²C read of 1014 bytes after a one-byte write returned
+exactly the requested length. The 1015-byte probe failed in about 99 ms; larger
+tested lengths returned the same host-side response decode error,
+<code>Postcard(DeserializeUnexpectedEnd)</code>, with increasing latency, reaching 391 ms
+at 4096. No truncation was found at checked lengths of 1, 64, 256, 512, 1000,
+1013 and 1014 bytes.</p>
+<p>No failing write request length was observed through 4096 bytes. Every probe
 crossed USB intact, was decoded, initiated a bus transaction and returned the
 expected address NACK. The target address was unpopulated, so no payload byte
 was clocked: this verifies request framing at 4096, not successful bus-level
 clocking of a 4096-byte payload. The probe could go no higher because 4096 is
-the wire-representable <code>MAX_TRANSFER_SIZE</code>.</p>
+<code>MAX_TRANSFER_SIZE</code>.</p>
 <p>No hang was found at any tested I²C length, but that does not prove that no I²C
-hang window exists. The combined write/read frontier also remains unmeasured
-beyond a one-byte write, because the available TMP102 rejects longer writes.
-Treating the read and write bounds as independent is an <strong>inference from
-mechanism, not measurement</strong>: a shared roughly 1015-byte framing budget is hard
-to reconcile with a 4096-byte write request being delivered, decoded and
-initiating a bus transaction, while the observed failure occurs during response
-decoding and write data travels in the request.</p>
-<p>The Zephyr driver contains these observations locally by rejecting reads above
-1014 bytes and writes above 4096 bytes with <code>-EMSGSIZE</code>. This containment does
-not protect the <code>gallo</code> CLI, Rust library, C FFI, Python bindings, or MCP tools;
-those callers can still request larger reads and encounter the response decode
-error. See <a href="#buffertoolong-22">troubleshooting</a>.</p>
+hang window exists. The combined write/read frontier remains unmeasured beyond
+a one-byte write because the available TMP102 rejects longer writes. Issue #158
+superseded the earlier inference about independent bounds by deriving and
+enforcing them explicitly according to direction.</p>
+<p>The Zephyr driver and every direct host surface now enforce the same values
+locally. Zephyr returns <code>-EMSGSIZE</code>; the other surfaces report their
+<code>BufferTooLong</code> mapping. See
+<a href="#buffertoolong-22">troubleshooting</a>.</p>
 <h2 id="rust-library"><a class="header" href="#rust-library">Rust Library</a></h2>
 <p>All <code>PicoDeGallo</code> methods are <code>async</code>. <code>PicoDeGallo::new()</code> is
 <strong>not</strong> async.</p>
@@ -1231,7 +1236,7 @@ side; FFI returns negative <code>Status</code> values:</p>
 <tr><td><code>NoAcknowledge</code></td><td>Target did not acknowledge</td></tr>
 <tr><td><code>ArbitrationLoss</code></td><td>Lost arbitration to another master</td></tr>
 <tr><td><code>Overrun</code></td><td>Data overrun on read</td></tr>
-<tr><td><code>BufferTooLong</code></td><td>Request exceeds firmware buffer limit</td></tr>
+<tr><td><code>BufferTooLong</code></td><td>Argument exceeds its directional payload ceiling</td></tr>
 <tr><td><code>AddressOutOfRange</code></td><td>Address outside the 7-bit range</td></tr>
 <tr><td><code>Other</code></td><td>Unspecified firmware error</td></tr>
 <tr><td><code>ZeroLengthWrite</code></td><td>Write requested with an empty payload</td></tr>
@@ -1382,6 +1387,15 @@ $ gallo spi transfer --bytes 0x01 0x02 0x03 0x04
 </code></pre>
 <p><code>transfer</code> clocks out the given bytes on MOSI and simultaneously
 clocks in the same number of bytes on MISO — true full-duplex.</p>
+<p>Direction determines the limit. <code>spi_write</code> sends data only and accepts up to
+<code>MAX_TRANSFER_SIZE</code> (4096 bytes). <code>spi_read</code> returns data and accepts up to
+<code>MAX_RESPONSE_PAYLOAD</code> (1014 bytes). <code>spi_transfer</code> is full duplex, so every
+argument byte also has to return; the tighter <code>MAX_RESPONSE_PAYLOAD</code> ceiling
+therefore limits the whole transfer to 1014 bytes. Every host surface checks
+these limits before transmitting and reports <code>BufferTooLong</code> for an
+over-ceiling call.</p>
+<p>This asymmetry is intentional and measured: issue #158 observed <code>spi/write</code>
+succeeding with 1015 bytes at the same boundary where <code>spi/transfer</code> fails.</p>
 <h3 id="config-1"><a class="header" href="#config-1">Config</a></h3>
 <p>Mode is selected with a single <code>--mode</code> flag, defaulting to 0:</p>
 <pre><code class="language-console">$ gallo spi set-config -h
@@ -1474,13 +1488,17 @@ transceive is <strong>four</strong> USB round trips:</p>
 <pre><code class="language-text">spi/set-config -&gt; gpio/put(assert) -&gt; spi/transfer -&gt; gpio/put(deassert)
 </code></pre>
 <p>Any of them can fail independently, and host death after the assert can leave
-chip select asserted; a fresh session can deassert ordinary residue. Only RPCs that <em>return</em> have defined behaviour — an RPC that never
-returns leaves the call pending forever with no errno and no cleanup.</p>
-<p>A non-returning 1015-byte TX-only request reproduced a device-wide dispatcher
-wedge. In those tests the device resumed after USB re-enumeration (<code>usbipd detach</code>/attach on Windows/WSL). This is an observed procedure, not proof that
-detach cancels the handler. On Linux/macOS reconnect the cable or use USB
-unbind/rebind; power-cycle if re-enumeration is unavailable or ineffective.
-<code>system/reset-subscriptions</code> cannot run while the dispatcher is blocked.</p>
+chip select asserted; a fresh session can deassert ordinary residue. Issue #178
+now bounds every host RPC with a timeout, and issue #157 added a firmware
+dispatch-progress supervisor as a backstop. If a timed-out request asserted
+chip select, its device-side fate can still be unknown, so do not assume the
+timeout deasserted the line.</p>
+<p>Historical context still matters: an earlier 1015-byte TX-only request
+reproduced a device-wide dispatcher wedge, recoverable in that run by USB
+re-enumeration. Issue #158 could not reproduce that wedge on firmware
+<code>62dd64e710fd</code> after #157 and #178 landed: the call returned a clean error in
+12 ms and the board stayed responsive. That single-build non-reproduction does
+not prove the earlier wedge never existed.</p>
 <p>Zephyr also collapses a child’s <code>spi-cs-setup-delay-ns</code> and
 <code>spi-cs-hold-delay-ns</code> into a single
 <code>DIV_ROUND_UP(MAX(setup_ns, hold_ns), 1000)</code> microsecond value and applies that
@@ -1512,29 +1530,29 @@ commit RX: the peripheral may still be selected.</p>
 went inactive, so the controller <strong>latches</strong>. Every later transceive then
 returns <code>-EHOSTDOWN</code> before issuing any configuration, chip-select edge or
 clocking. Only a <code>spi_release()</code> whose checked deassert succeeds clears it.</p>
-<p>Other errors a caller can see: <code>-ENODEV</code>, <code>-EINVAL</code>, <code>-ENOTSUP</code>, <code>-EMSGSIZE</code>
-(over <strong>1013 bytes</strong>). This is a Zephyr containment limit, not a duplex-capacity
-guarantee: TX-only 1013 succeeded, TX-only 1015 wedges the firmware dispatcher,
-and 1014 was not tested. Full duplex succeeded at 512, failed at 3072, and was
-not tested from 513 through 1013. Applications needing a documented-safe duplex
-size must use 512 bytes or less. Do not infer 1013-byte duplex support from
-<code>PDG_SPI_MAX_BUFFER</code>; the protocol’s 4096-byte constant is a packet-buffer and
-argument bound, not a demonstrated end-to-end payload guarantee),
-<code>-ENOMEM</code>, <code>-EIO</code> / <code>-ECOMM</code> / <code>-EPROTO</code>, <code>-EACCES</code> (a
-chip-select pin the firmware records as an explicit input) and <code>-EBUSY</code> (a
-chip-select pin under a live firmware GPIO event subscription). Stacked drivers
-collapse these into a generic not-ready error — <code>jedec,spi-nor</code>, for instance,
-reports <code>-ENODEV</code> for any transfer failure — so the controller’s own log line
-is the only authoritative diagnosis.</p>
+<p>Other errors a caller can see include <code>-ENODEV</code>, <code>-EINVAL</code>, <code>-ENOTSUP</code>,
+<code>-ENOMEM</code>, <code>-EIO</code> / <code>-ECOMM</code> / <code>-EPROTO</code>, <code>-EACCES</code> (a chip-select pin the
+firmware records as an explicit input), <code>-EBUSY</code> (a chip-select pin under a live
+firmware GPIO event subscription), and <code>-EMSGSIZE</code> (over
+<code>PDG_SPI_MAX_BUFFER</code>, 1014 bytes). Issue #158 superseded the old 1013-byte
+containment and 512-byte documented-safe duplex limit by measuring
+<code>spi/transfer</code> at the exact boundary: 1014 works and 1015 fails cleanly.
+<code>PDG_SPI_MAX_BUFFER</code> now lives in <code>pdg_spi_bottom.h</code>, and a <code>_Static_assert</code>
+ties it to <code>GALLO_MAX_RESPONSE_PAYLOAD</code>; it is not the 4096-byte send-only
+<code>GALLO_MAX_TRANSFER_SIZE</code>. Stacked drivers collapse these errors into a generic
+not-ready error — <code>jedec,spi-nor</code>, for instance, reports <code>-ENODEV</code> for any
+transfer failure — so the controller’s own log line is the only authoritative
+diagnosis.</p>
 <p><code>gallo spi batch</code> and the host <code>spi_batch</code> APIs described above are unchanged
 and remain fully supported; only the Zephyr module stopped using them.
 <code>zephyr/README.md</code> in the repository remains the detailed module guide.</p>
-<blockquote class="blockquote-tag blockquote-tag-warning">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
-<p>The 1013-byte containment exists only in the Zephyr driver. CLI, Rust, C,
-Python, and MCP SPI calls can still reach the 1015-byte device-wide wedge.
-Keep individual SPI payloads at or below 512 bytes until an operation-specific
-host limit is derived; see <a href="#buffertoolong-22">troubleshooting</a>.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>The Zephyr driver and every direct host surface enforce the directional
+limits locally. Zephyr returns <code>-EMSGSIZE</code>; Rust, C, Python, CLI, and MCP use
+their <code>BufferTooLong</code> mapping. <code>spi_write</code> accepts 4096 bytes, but any SPI
+operation that returns bytes is limited to 1014; see
+<a href="#buffertoolong-22">troubleshooting</a>.</p>
 </blockquote>
 <h2 id="rust-library-1"><a class="header" href="#rust-library-1">Rust Library</a></h2>
 <pre class="playground"><code class="language-rust no_run">use pico_de_gallo_lib::{PicoDeGallo, SpiBatchOp, SpiPhase, SpiPolarity};
@@ -1856,6 +1874,10 @@ async fn drain_buffer(gallo: &amp;PicoDeGallo) -&gt; Vec&lt;u8&gt; {
 }
 <span class="boring">}</span></code></pre>
 <h2 id="error-handling-2"><a class="header" href="#error-handling-2">Error Handling</a></h2>
+<p>UART direction determines the payload ceiling. <code>uart_read</code> may return at most
+<code>MAX_RESPONSE_PAYLOAD</code> (1014 bytes), while <code>uart_write</code> may send at most
+<code>MAX_TRANSFER_SIZE</code> (4096 bytes). Every host surface checks this before
+transmitting and reports <code>BufferTooLong</code> for an over-ceiling call.</p>
 <p>UART operations return <code>PicoDeGalloError&lt;UartError&gt;</code> on failure. The
 <code>UartError</code> variants cover both protocol-level and configuration errors:</p>
 <div class="table-wrapper">
@@ -1864,7 +1886,7 @@ async fn drain_buffer(gallo: &amp;PicoDeGallo) -&gt; Vec&lt;u8&gt; {
 <tr><th>Variant</th><th>Description</th></tr>
 </thead>
 <tbody>
-<tr><td><code>BufferTooLong</code></td><td>Requested read/write exceeds the firmware buffer size</td></tr>
+<tr><td><code>BufferTooLong</code></td><td>Read exceeds the response ceiling or write exceeds the transfer ceiling</td></tr>
 <tr><td><code>Overrun</code></td><td>Receive buffer overflowed before host read the data</td></tr>
 <tr><td><code>Break</code></td><td>Break condition detected on the line</td></tr>
 <tr><td><code>Parity</code></td><td>Parity check failed</td></tr>
@@ -2942,6 +2964,11 @@ in open-drain mode.</p>
 </tbody>
 </table>
 </div>
+<p>Direction determines the payload ceiling. <code>onewire_read</code> may return at most
+<code>MAX_RESPONSE_PAYLOAD</code> (1014 bytes). <code>onewire_write</code> and
+<code>onewire_write_pullup</code> may send at most <code>MAX_TRANSFER_SIZE</code> (4096 bytes).
+Every host surface checks these limits before transmitting and reports
+<code>BufferTooLong</code> for an over-ceiling call.</p>
 <h2 id="ds18b20-temperature-sensor-example"><a class="header" href="#ds18b20-temperature-sensor-example">DS18B20 Temperature Sensor Example</a></h2>
 <p>The DS18B20 is the most popular 1-Wire device. Here’s how to read its
 temperature using each interface.</p>
@@ -3338,6 +3365,8 @@ from the request, so no framing is needed in the response.</p>
 <tr><td>Maximum size of an individual operation</td><td>None — bounded only by the totals below</td></tr>
 <tr><td><strong>Total bytes a batch may return</strong></td><td><strong>1014 (<code>MAX_RESPONSE_PAYLOAD</code>)</strong></td></tr>
 <tr><td>Protocol packet-buffer/argument bound</td><td>4096 bytes (<code>MAX_TRANSFER_SIZE</code>)</td></tr>
+<tr><td>Plain read/duplex endpoint bound</td><td>1014 bytes (<code>MAX_RESPONSE_PAYLOAD</code>)</td></tr>
+<tr><td>Plain write endpoint bound</td><td>4096 bytes (<code>MAX_TRANSFER_SIZE</code>)</td></tr>
 <tr><td>Direct I²C RPC measurements</td><td>Read: 1014 bytes after a 1-byte write; write: no failure through 4096 bytes</td></tr>
 <tr><td>Batch measurements</td><td>Reads totalling 1014 bytes return in full; 1015 is refused with <code>BufferTooLong</code>, on both <code>i2c/batch</code> and <code>spi/batch</code></td></tr>
 <tr><td>Demonstrated SPI payload (send direction)</td><td>Shape-dependent and below 4096; no general ceiling is published</td></tr>
@@ -3357,6 +3386,11 @@ shape and response size both matter. The direct-RPC I²C measurements used
 <code>i2c/write</code> and <code>i2c/write-read</code>; the batch row was measured separately,
 through <code>i2c/batch</code> and <code>spi/batch</code>. See the measured I²C and SPI evidence in
 <a href="#buffertoolong-22">Troubleshooting</a>.</p>
+<p>Issue #179 introduced the aggregate returned-data bound for batches. Issue
+#158 applies the same directional rule to the plain endpoints and every host
+surface: reads and full-duplex transfers use <code>MAX_RESPONSE_PAYLOAD</code>, while
+send-only writes use <code>MAX_TRANSFER_SIZE</code>. In both cases an over-ceiling call is
+refused before transmission.</p>
 <h4 id="the-response-ceiling"><a class="header" href="#the-response-ceiling">The response ceiling</a></h4>
 <p><code>MAX_RESPONSE_PAYLOAD</code> bounds what a batch may send <strong>back</strong>, not what the
 firmware can buffer. For I<sup>2</sup>C only <code>Read</code> counts towards it; for SPI,
@@ -3631,13 +3665,19 @@ exactly the situation <code>ping</code> exists to diagnose. See
 </tbody>
 </table>
 </div>
-<blockquote class="blockquote-tag blockquote-tag-warning">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
-<p>The CLI is not protected by the Zephyr driver’s 1013-byte containment. A
-1015-byte TX-only SPI request reproduced a device-wide firmware-dispatcher
-wedge. Keep individual SPI payloads at or below 512 bytes; see
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>The CLI refuses over-ceiling payloads locally, before transmitting. Data
+returned by the device is limited to <code>MAX_RESPONSE_PAYLOAD</code> (1014 bytes),
+while data sent to it is limited to <code>MAX_TRANSFER_SIZE</code> (4096 bytes).
+Full-duplex <code>spi transfer</code> is therefore limited to 1014 bytes even though
+<code>spi write</code> accepts 4096. The command reports <code>BufferTooLong</code>; see
 <a href="#buffertoolong-22">troubleshooting</a>.</p>
 </blockquote>
+<p>The read counts accepted by <code>i2c read -c</code>, <code>i2c write-read -c</code>, <code>spi read -c</code>,
+and <code>spi write-read -c</code> are <code>u16</code> values. Values above 65535 are rejected by
+argument parsing rather than wrapping during conversion; the lower
+<code>MAX_RESPONSE_PAYLOAD</code> limit is then enforced before transmission.</p>
 <p><code>batch --cs &lt;PIN&gt;</code> accepts any <code>u8</code>. The pin is checked at run time
 against the GPIO count the connected device reports — not against a fixed
 range — before the operations are parsed and before anything is
@@ -4081,12 +4121,15 @@ host already has a buffer waiting when the first edge arrives.</p>
 </tbody>
 </table>
 </div>
-<blockquote class="blockquote-tag blockquote-tag-warning">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
-<p>The Rust library is not protected by the Zephyr driver’s 1013-byte
-containment. A 1015-byte TX-only SPI request reproduced a device-wide
-firmware-dispatcher wedge. Keep individual SPI payloads at or below 512 bytes;
-see <a href="#buffertoolong-22">troubleshooting</a>.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>The library refuses over-ceiling payloads locally, before transmitting.
+Data returned by the device is limited to <code>MAX_RESPONSE_PAYLOAD</code> (1014
+bytes); data sent to it is limited to <code>MAX_TRANSFER_SIZE</code> (4096 bytes).
+Full-duplex <code>spi_transfer</code> is limited to 1014 bytes because the same length
+must fit in both directions. A refusal is
+<code>PicoDeGalloError::Endpoint(...::BufferTooLong)</code>; see
+<a href="#buffertoolong-22">troubleshooting</a>.</p>
 </blockquote>
 <p>For the full API surface, field docs, and current signatures, use the crate
 reference on <a href="https://docs.rs/pico-de-gallo-lib">docs.rs</a>.</p>
@@ -4375,23 +4418,25 @@ those integers compiled into <code>switch</code> statements.</p>
 callers can size buffers and validate indices from the same numbers the
 firmware enforces instead of hard-coding copies:</p>
 <pre><code class="language-c">#define GALLO_MAX_TRANSFER_SIZE 4096
+#define GALLO_MAX_RESPONSE_PAYLOAD 1014
 #define GALLO_MAX_BATCH_OPS 64
 #define GALLO_NUM_GPIOS 4
 </code></pre>
-<p><code>GALLO_MAX_TRANSFER_SIZE</code> mirrors the protocol’s 4096-byte packet-buffer and
-local argument bound. It is <strong>not</strong> a guarantee that 4096 bytes of application
-payload can traverse the framed transport; deliverable size depends on the
-operation’s request and response shape. Exceeding the local bound yields
-<code>Status::BufferTooLong</code>, while a smaller framed request can still fail in
-transport. See the measured <a href="#holding-chip-select-and-the-fault-latch">SPI limits</a>.
+<p>The direction of the bytes selects the limit. <code>GALLO_MAX_TRANSFER_SIZE</code> is the
+4096-byte limit for data sent from the host to the device.
+<code>GALLO_MAX_RESPONSE_PAYLOAD</code> is the 1014-byte limit for data the device must
+return, including the aggregate returned by a batch. A full-duplex
+<code>gallo_spi_transfer</code> uses the response limit for its entire length because each
+byte travels in both directions. Exceeding either limit yields
+<code>Status::BufferTooLong</code> locally, before transmission. See
+<a href="#buffertoolong-22">troubleshooting</a>.
 Exceeding <code>GALLO_MAX_BATCH_OPS</code> in <code>gallo_i2c_batch</code> or <code>gallo_spi_batch</code>
 yields <code>Status::InvalidArgument</code>.</p>
-<blockquote class="blockquote-tag blockquote-tag-warning">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
-<p>The Zephyr driver’s 1013-byte containment does not apply to C callers. A
-1015-byte TX-only SPI request reproduced a device-wide firmware-dispatcher
-wedge. Until an operation-specific host limit exists, keep individual SPI
-payloads at or below 512 bytes; see <a href="#buffertoolong-22">troubleshooting</a>.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p><code>gallo_spi_write</code> accepts 4096 bytes, but <code>gallo_spi_transfer</code> accepts only
+1014. Sizing both from <code>GALLO_MAX_TRANSFER_SIZE</code> is incorrect: the latter
+must also fit its returned bytes in <code>GALLO_MAX_RESPONSE_PAYLOAD</code>.</p>
 </blockquote>
 <p><code>GALLO_NUM_GPIOS</code> bounds the valid pin indices, <code>0..GALLO_NUM_GPIOS</code>, which
 map to physical GPIO8-GPIO11 on the Pico 2 header. Anything at or above it
@@ -4526,7 +4571,9 @@ each operation as a separate transaction. Zero-length writes are rejected.</p>
 <code>*out_len</code>. On failure, <code>*out_failed_op</code> (if non-NULL) receives the zero-based
 index of the operation that failed, and the status reflects the underlying
 I<sup>2</sup>C error (<code>I2cNack</code>, <code>I2cBusError</code>, etc.). <code>BufferTooLong</code> means
-<code>out_buf</code> was too small; <code>*out_len</code> still receives the required capacity.</p>
+either that the aggregate returned data exceeds
+<code>GALLO_MAX_RESPONSE_PAYLOAD</code> or that <code>out_buf</code> was too small. In the latter
+case, <code>*out_len</code> still receives the required capacity.</p>
 <h3 id="spi-2"><a class="header" href="#spi-2">SPI</a></h3>
 <pre><code class="language-c">Status gallo_spi_read(const PicoDeGallo *gallo, uint8_t *buf, size_t len);
 Status gallo_spi_write(const PicoDeGallo *gallo, const uint8_t *buf, size_t len);
@@ -4546,8 +4593,8 @@ Status gallo_spi_get_config(const PicoDeGallo *gallo,
 </code></pre>
 <p>Simultaneously sends <code>len</code> bytes from <code>write_buf</code> on MOSI and receives
 <code>len</code> bytes on MISO into <code>read_buf</code>. The two buffers may alias.
-Returns <code>BufferTooLong</code> if <code>len</code> exceeds the firmware transfer limit,
-or <code>SpiTransferFailed</code> on a generic SPI error.</p>
+Returns <code>BufferTooLong</code> locally if <code>len</code> exceeds
+<code>GALLO_MAX_RESPONSE_PAYLOAD</code>, or <code>SpiTransferFailed</code> on a generic SPI error.</p>
 <h4 id="spi-batch-1"><a class="header" href="#spi-batch-1">SPI batch</a></h4>
 <pre><code class="language-c">typedef struct GalloSpiBatchOp {
     uint8_t       tag;       // 0 = Read, 1 = Write, 2 = Transfer, 3 = DelayNs
@@ -4569,8 +4616,9 @@ deasserts it after the last (or on error), providing atomic
 <code>SpiDevice::transaction</code> semantics. Read data from <code>Read</code> and
 <code>Transfer</code> operations is concatenated into <code>out_buf</code> in order. On
 per-op failure, <code>*out_failed_op</code> (if non-NULL) receives the zero-based
-index. <code>BufferTooLong</code> means <code>out_buf</code> was too small; <code>*out_len</code> still
-receives the required capacity.</p>
+index. <code>BufferTooLong</code> means either that the aggregate returned data exceeds
+<code>GALLO_MAX_RESPONSE_PAYLOAD</code> or that <code>out_buf</code> was too small. In the latter
+case, <code>*out_len</code> still receives the required capacity.</p>
 <h4 id="chip-select-preflight"><a class="header" href="#chip-select-preflight">Chip-select preflight</a></h4>
 <p><code>cs_pin</code> is validated against the device-reported GPIO count before any
 operation payload is translated and before anything is transmitted:</p>
@@ -4926,11 +4974,14 @@ pg.spi_set_config(
 )
 </code></pre>
 <h2 id="example-i2c-register-read"><a class="header" href="#example-i2c-register-read">Example: I<sup>2</sup>C Register Read</a></h2>
-<blockquote class="blockquote-tag blockquote-tag-warning">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
-<p>Python SPI calls are not protected by the Zephyr driver’s 1013-byte
-containment. A 1015-byte TX-only request reproduced a device-wide firmware
-wedge. Keep individual SPI payloads at or below 512 bytes; see
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>Python refuses over-ceiling payloads locally, before transmitting. Data
+returned by the device is limited to <code>MAX_RESPONSE_PAYLOAD</code> (1014 bytes),
+while data sent to it is limited to <code>MAX_TRANSFER_SIZE</code> (4096 bytes).
+Full-duplex <code>spi_transfer</code> is therefore limited to 1014 bytes even though
+<code>spi_write</code> accepts 4096. An over-ceiling call raises <code>RuntimeError</code> with the
+<code>BufferTooLong</code> message; see
 <a href="#buffertoolong-22">troubleshooting</a>.</p>
 </blockquote>
 <pre><code class="language-python">import pyco_de_gallo as gallo
@@ -5281,12 +5332,21 @@ Every tool except <code>list_devices</code> accepts an optional <code>serial_num
 </tbody>
 </table>
 </div>
-<blockquote class="blockquote-tag blockquote-tag-warning">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
-<p>MCP SPI tools are not protected by the Zephyr driver’s 1013-byte containment.
-A 1015-byte TX-only request reproduced a device-wide firmware-dispatcher
-wedge. Keep individual SPI payloads at or below 512 bytes; see
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>MCP tools refuse over-ceiling payloads locally, before connecting to a
+board. Data returned by the device is limited to <code>MAX_RESPONSE_PAYLOAD</code>
+(1014 bytes), while data sent to it is limited to <code>MAX_TRANSFER_SIZE</code>
+(4096 bytes). Full-duplex <code>spi_transfer</code> is therefore limited to 1014
+bytes even though <code>spi_write</code> accepts 4096. The refusal is an
+<code>invalid_params</code> error naming the offending size, the limit and the
+remedy — not the bare <code>BufferTooLong</code> a device-side refusal would
+produce. See
 <a href="#buffertoolong-22">troubleshooting</a>.</p>
+<p>Refusing before connecting is deliberate: <code>connect</code> runs
+<code>system/reset-subscriptions</code>, which tears down GPIO subscriptions
+belonging to <em>other</em> host processes, so a mis-sized request must not
+reach it (issue #104).</p>
 </blockquote>
 <p><code>spi_batch</code> takes <code>cs</code> as a <code>u8</code> and runs its steps in a fixed order:
 parse every operation payload, connect exactly once, read the GPIO count
@@ -6804,7 +6864,8 @@ them.</p>
 <li>endpoint marker types,</li>
 <li>request and response structs,</li>
 <li>topic message types,</li>
-<li>protocol constants like <code>MAX_TRANSFER_SIZE</code>,</li>
+<li>directional payload constants <code>MAX_TRANSFER_SIZE</code> and
+<code>MAX_RESPONSE_PAYLOAD</code>,</li>
 <li>schema-version constants generated at build time.</li>
 </ul>
 <p>The crate also uses the <code>use-std</code> feature to switch certain response types
@@ -6815,6 +6876,27 @@ between owned host buffers and borrowed firmware buffers:</p>
 </ul>
 <p>That lets the host own received data while the firmware can answer from a shared
 scratch buffer without heap allocation.</p>
+<p>The two payload constants are independent and selected by byte direction:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Direction</th><th>Constant</th><th style="text-align: right">Value</th></tr>
+</thead>
+<tbody>
+<tr><td>host → device</td><td><code>MAX_TRANSFER_SIZE</code></td><td style="text-align: right">4096</td></tr>
+<tr><td>device → host</td><td><code>MAX_RESPONSE_PAYLOAD</code></td><td style="text-align: right">1014</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>MAX_RESPONSE_PAYLOAD</code> is derived from postcard-rpc’s 1024-byte host inbound
+USB buffer: 1024 − 7 bytes of response header (1 discriminant, 2 key, 4
+sequence) − 1 postcard <code>Result</code> discriminant − 2 bytes of varint length prefix
+= 1014. It is a host-transport property that firmware cannot observe.
+Full-duplex <code>spi/transfer</code> proves why both constants are needed: its one length
+travels in both directions, so the tighter response ceiling applies.</p>
+<p>Issue #158 added local validation and firmware bounds without changing an
+endpoint, request or response type. It is therefore not a wire change and did
+not require a schema change or version bump.</p>
 <h2 id="endpoints-and-topics"><a class="header" href="#endpoints-and-topics">Endpoints and topics</a></h2>
 <p>Endpoints are normal request/response RPCs declared with <code>endpoints!</code>. Topics
 are push-style messages declared with <code>topics!</code>.</p>
@@ -6878,7 +6960,7 @@ a whole and cannot be attributed to one operation, so it reports
 <tr><th>Index</th><th>Variant</th><th>Meaning</th></tr>
 </thead>
 <tbody>
-<tr><td>0</td><td><code>BufferTooLong</code></td><td>Request exceeds the firmware buffer limit</td></tr>
+<tr><td>0</td><td><code>BufferTooLong</code></td><td>Argument exceeds its directional payload ceiling</td></tr>
 <tr><td>1</td><td><code>Other</code></td><td>Unspecified firmware-reported SPI failure</td></tr>
 <tr><td>2</td><td><code>InvalidCsPin</code></td><td>Chip-select index outside <code>0..DeviceInfo::num_gpios</code></td></tr>
 <tr><td>3</td><td><code>CsPinUnavailable</code></td><td>Chip-select pin is explicitly configured as an input</td></tr>
@@ -7249,10 +7331,14 @@ GPIO mode.</p>
 <p>Changing an accepted pin to output does not alter its configured pull:
 firmware changes only the SIO output-enable state, while the pull-up and
 pull-down settings remain in the separate pad-control state.</p>
-<p>The shared transfer buffer is 4096 bytes (<code>MAX_TRANSFER_SIZE</code>), and handlers
-validate lengths before indexing into it. This is an internal buffer and
-argument bound, not a demonstrated end-to-end application-payload guarantee;
-framing and response shape reduce the deliverable size.</p>
+<p>The shared transfer buffer is 4096 bytes (<code>MAX_TRANSFER_SIZE</code>). Firmware
+<code>i2c/write</code> and <code>spi/write</code> reject larger payloads before bus access; before
+issue #158 those two handlers had no upper bound. Data returned to the host is
+separately bounded by <code>MAX_RESPONSE_PAYLOAD</code> (1014 bytes), including the
+aggregate returned by a batch. That tighter value is derived from the host
+transport and cannot be observed by firmware, but firmware enforces it where
+necessary to avoid executing bus side effects whose result cannot be
+delivered. Host surfaces enforce both directional bounds before transmitting.</p>
 <h2 id="dependency-pins-that-matter"><a class="header" href="#dependency-pins-that-matter">Dependency pins that matter</a></h2>
 <p>The firmware intentionally pins <code>embassy-usb-driver = "=0.2.0"</code>.
 That exact version is documented in
@@ -7441,7 +7527,7 @@ that doesn’t appear in your header means success.</p>
 <tr><td><code>I2cBusError</code></td><td style="text-align: right">−19</td><td>I²C bus error</td></tr>
 <tr><td><code>I2cArbitrationLoss</code></td><td style="text-align: right">−20</td><td>I²C arbitration loss</td></tr>
 <tr><td><code>I2cOverrun</code></td><td style="text-align: right">−21</td><td>I²C data overrun</td></tr>
-<tr><td><code>BufferTooLong</code></td><td style="text-align: right">−22</td><td>Buffer exceeds firmware transfer limit</td></tr>
+<tr><td><code>BufferTooLong</code></td><td style="text-align: right">−22</td><td>Argument exceeds its directional payload ceiling</td></tr>
 <tr><td><code>I2cAddressOutOfRange</code></td><td style="text-align: right">−23</td><td>I²C address out of valid range</td></tr>
 <tr><td><code>GpioInvalidPin</code></td><td style="text-align: right">−24</td><td>Invalid GPIO pin number</td></tr>
 <tr><td><code>CommsFailed</code></td><td style="text-align: right">−25</td><td>USB communication failure</td></tr>
@@ -7507,6 +7593,12 @@ validated metadata fetch and has a far longer bound. The handle stays
 usable, so the call may simply be retried — except after a batch, whose
 fate is unknown (it may have executed fully, partially, or not at all), so
 a blind retry there can repeat side effects.</p>
+<p><code>BufferTooLong</code> (−22) is also a host-side refusal. Data returned by the device
+is limited to <code>GALLO_MAX_RESPONSE_PAYLOAD</code> (1014 bytes), while data sent to it
+is limited to <code>GALLO_MAX_TRANSFER_SIZE</code> (4096 bytes). Full-duplex SPI transfer
+uses the tighter response ceiling. The same status still represents a
+device-side buffer refusal, but an over-ceiling argument is rejected locally
+before transmission. Issue #158 added no new <code>Status</code> value.</p>
 <p><code>SpiInvalidCsPin</code> (−71) and <code>SpiNoGpios</code> (−74) are host-side refusals: the
 chip-select was rejected before anything was transmitted, and no pin was
 driven. <code>DeviceInfoFailed</code> (−62), <code>SchemaMismatch</code> (−63),
@@ -7745,52 +7837,59 @@ at 3.3 V on the bus pads).</li>
 <p>Usually a wiring issue (long stub leads, no pull-ups, multi-master
 collisions). Try a slower clock with <code>gallo i2c set-config --frequency standard</code>.</p>
 <h3 id="buffertoolong-22"><a class="header" href="#buffertoolong-22"><code>BufferTooLong</code> (−22)</a></h3>
-<p>Two different limits are involved here, and conflating them is a common
-source of confusion:</p>
-<ul>
-<li><strong>The protocol constant, 4096 bytes</strong> (<code>MAX_TRANSFER_SIZE</code>). This is the
-firmware’s per-packet <strong>buffer budget</strong>, not a usable payload size — the
-same buffer must also hold the postcard-rpc header, the length varint and
-the COBS framing, and it covers the request frame <em>and</em> the response
-frame.</li>
-<li><strong>The usable payload, which is smaller and shape-dependent.</strong> In measured SPI
-tests, 4096-byte TX-only and 3072-byte full-duplex requests passed their local
-checks, reached the transport, and failed <code>-ECOMM</code>.</li>
-</ul>
-<p>I²C has separate measured results. A read of 1014 bytes after a one-byte write
-returned exactly 1014 bytes; the tested lengths at and above 1015 returned the
-host-side response decode error <code>Postcard(DeserializeUnexpectedEnd)</code> rather
-than wedging the dispatcher. No failing write request length was observed
-through 4096 bytes: each request crossed USB intact, was decoded, initiated a
-bus transaction and returned the expected address NACK. Because the address was
-unpopulated, no payload byte was clocked. This verifies request framing at 4096,
-not successful bus-level clocking of a 4096-byte payload. No I²C hang was found
-in the tested range, but that does not prove none exists.</p>
-<p>Only the one-byte-write row of the I²C write/read frontier was measured. The
-available target rejected longer writes. Reading the 1014-byte read edge and
-the 4096-byte request-framing result as independent per-direction limits is an
-<strong>inference from mechanism, not measurement</strong>: a shared roughly 1015-byte
-framing budget is hard to reconcile with a 4096-byte write request being
-delivered, decoded and initiating a bus transaction, while the read failure is
-in response decoding and write data travels in the request.</p>
-<p>Split larger transfers. Batch operations still occupy one framed request and
-response; batching does not make an otherwise undeliverable aggregate fit.</p>
-<p>The Zephyr SPI driver rejects clocked lengths above 1013 bytes. That is
-containment, not a duplex-capacity guarantee: TX-only 1013 succeeded, TX-only
-1015 wedges the dispatcher, and 1014 was not tested. Full duplex succeeded at
-512, failed at 3072, and was not tested from 513 through 1013. Applications
-needing a documented-safe duplex size must use 512 bytes or less. Do not infer
-1013-byte duplex support from <code>PDG_SPI_MAX_BUFFER</code>.</p>
-<p>The Zephyr I²C driver similarly rejects reads above 1014 bytes and writes above
-4096 bytes. Unlike SPI’s 1015-byte dispatcher wedge, exceeding the measured I²C
-read edge produced a clean error. The 4096-byte write limit is still only the
-largest representable request-framing value tested, not a demonstrated
-bus-payload length or a measured ceiling.</p>
-<p>These Zephyr limits do not protect CLI, Rust, C, Python, or MCP callers. In the
-reproduced SPI tests the device resumed after USB re-enumeration (<code>usbipd detach</code>/attach on Windows/WSL). This is an observation, not proof that detach
-cancels the handler. On Linux/macOS reconnect the cable or use USB
-unbind/rebind; power-cycle if unavailable or ineffective.
-<code>system/reset-subscriptions</code> cannot run while dispatch is blocked.</p>
+<p>The argument exceeds one of two independent ceilings. Choose the ceiling by
+the direction of the bytes, not by the endpoint:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Direction</th><th>Constant</th><th style="text-align: right">Value</th><th>Examples</th></tr>
+</thead>
+<tbody>
+<tr><td>device → host</td><td><code>MAX_RESPONSE_PAYLOAD</code></td><td style="text-align: right">1014</td><td>reads, the read half of I²C write-read, batch returning operations, all of full-duplex SPI transfer</td></tr>
+<tr><td>host → device</td><td><code>MAX_TRANSFER_SIZE</code></td><td style="text-align: right">4096</td><td>writes and the write half of I²C write-read</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>MAX_RESPONSE_PAYLOAD</code> is derived from postcard-rpc’s host inbound USB buffer:
+1024 − 7 bytes of response header (1 discriminant, 2 key, 4 sequence) − 1
+postcard <code>Result</code> discriminant − 2 bytes of varint length prefix = 1014. It is a
+host-transport property that firmware cannot observe. <code>spi_transfer</code> makes the
+distinction visible: it is full duplex, so its whole argument is limited to
+1014, while send-only <code>spi_write</code> accepts 4096. Issue #158 measured
+<code>spi/write</code> succeeding at 1015 bytes exactly where <code>spi/transfer</code> fails.</p>
+<p>Every host surface now rejects an over-ceiling argument locally before
+transmitting. Rust and MCP report <code>BufferTooLong</code>; C returns
+<code>Status::BufferTooLong</code>; Python raises <code>RuntimeError</code>; Zephyr returns
+<code>-EMSGSIZE</code>. No new C <code>Status</code> value was added. To fix the call, split or chunk
+the transfer. A batch’s returning operations count in aggregate, so dividing a
+large read into operations inside one batch does not evade the response limit.</p>
+<p>The historical measurements explain why these guards exist. Before issue #179,
+a batch returning 1015–4096 bytes executed its bus operations and only then lost
+the response with <code>Postcard(DeserializeUnexpectedEnd)</code>; #179 added the aggregate
+batch ceiling. Before #158, plain I²C reads showed the same 1014/1015 edge, while
+I²C write requests reached 4096 and initiated a transaction at an unpopulated
+address. That verifies request framing, not successful clocking of a 4096-byte
+payload, and no I²C hang found in that range proves none exists.</p>
+<p>These figures come from the issue #158 measurements on board
+<code>5256657D8A5D7F03</code> and the issue #179 measurements on board
+<code>49742081C885AC69</code>; this documentation update did not repeat them.</p>
+<p>The older Zephyr SPI guidance capped transfers at 1013 and documented full
+duplex only through 512 because 1014 and the 513–1013 range had not been tested.
+Issue #158 superseded it: <code>spi/transfer</code> was measured at 1014 successfully, and
+1015 now fails cleanly. <code>PDG_SPI_MAX_BUFFER</code> is therefore 1014 and is tied to
+<code>GALLO_MAX_RESPONSE_PAYLOAD</code> by a <code>_Static_assert</code>.</p>
+<p>An earlier 1015-byte TX-only request did reproduce a device-wide dispatcher
+wedge. Issue #158 could not reproduce it on firmware <code>62dd64e710fd</code>, after
+issue #157 added the watchdog supervisor and issue #178 bounded every host RPC:
+the call returned a clean error in 12 ms and the board stayed responsive. This
+is a non-reproduction on one firmware build, not proof the earlier observation
+never occurred.</p>
+<p>If you are running firmware older than the #157 watchdog supervisor and do hit
+a wedge, the recovery recorded at the time was USB re-enumeration: <code>usbipd detach</code> followed by attach on Windows/WSL. That is an observed procedure, not
+proof that detaching cancels the blocked handler. On Linux and macOS,
+reconnect the cable or use USB unbind/rebind, and power-cycle if
+re-enumeration is unavailable or ineffective. <code>system/reset-subscriptions</code>
+cannot run while dispatch is blocked, so it is not a way out.</p>
 <h3 id="gpio-wrongdirection-28"><a class="header" href="#gpio-wrongdirection-28">GPIO <code>WrongDirection</code> (−28)</a></h3>
 <p>You read from a pin configured as output (or vice versa). Call
 <code>gpio_set_config</code> first with the matching direction.</p>

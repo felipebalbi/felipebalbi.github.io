@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-27ff4fa5.js";
+            window.path_to_searchindex_js = "../searchindex-698ea0ef.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3e975730.js"></script>
@@ -435,10 +435,14 @@ GPIO mode.</p>
 <p>Changing an accepted pin to output does not alter its configured pull:
 firmware changes only the SIO output-enable state, while the pull-up and
 pull-down settings remain in the separate pad-control state.</p>
-<p>The shared transfer buffer is 4096 bytes (<code>MAX_TRANSFER_SIZE</code>), and handlers
-validate lengths before indexing into it. This is an internal buffer and
-argument bound, not a demonstrated end-to-end application-payload guarantee;
-framing and response shape reduce the deliverable size.</p>
+<p>The shared transfer buffer is 4096 bytes (<code>MAX_TRANSFER_SIZE</code>). Firmware
+<code>i2c/write</code> and <code>spi/write</code> reject larger payloads before bus access; before
+issue #158 those two handlers had no upper bound. Data returned to the host is
+separately bounded by <code>MAX_RESPONSE_PAYLOAD</code> (1014 bytes), including the
+aggregate returned by a batch. That tighter value is derived from the host
+transport and cannot be observed by firmware, but firmware enforces it where
+necessary to avoid executing bus side effects whose result cannot be
+delivered. Host surfaces enforce both directional bounds before transmitting.</p>
 <h2 id="dependency-pins-that-matter"><a class="header" href="#dependency-pins-that-matter">Dependency pins that matter</a></h2>
 <p>The firmware intentionally pins <code>embassy-usb-driver = "=0.2.0"</code>.
 That exact version is documented in

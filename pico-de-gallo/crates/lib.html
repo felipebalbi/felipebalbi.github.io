@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-27ff4fa5.js";
+            window.path_to_searchindex_js = "../searchindex-698ea0ef.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3e975730.js"></script>
@@ -516,12 +516,15 @@ host already has a buffer waiting when the first edge arrives.</p>
 </tbody>
 </table>
 </div>
-<blockquote class="blockquote-tag blockquote-tag-warning">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
-<p>The Rust library is not protected by the Zephyr driver’s 1013-byte
-containment. A 1015-byte TX-only SPI request reproduced a device-wide
-firmware-dispatcher wedge. Keep individual SPI payloads at or below 512 bytes;
-see <a href="../appendix/troubleshooting.html#buffertoolong-22">troubleshooting</a>.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>The library refuses over-ceiling payloads locally, before transmitting.
+Data returned by the device is limited to <code>MAX_RESPONSE_PAYLOAD</code> (1014
+bytes); data sent to it is limited to <code>MAX_TRANSFER_SIZE</code> (4096 bytes).
+Full-duplex <code>spi_transfer</code> is limited to 1014 bytes because the same length
+must fit in both directions. A refusal is
+<code>PicoDeGalloError::Endpoint(...::BufferTooLong)</code>; see
+<a href="../appendix/troubleshooting.html#buffertoolong-22">troubleshooting</a>.</p>
 </blockquote>
 <p>For the full API surface, field docs, and current signatures, use the crate
 reference on <a href="https://docs.rs/pico-de-gallo-lib">docs.rs</a>.</p>

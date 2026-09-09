@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-27ff4fa5.js";
+            window.path_to_searchindex_js = "../searchindex-698ea0ef.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3e975730.js"></script>
@@ -366,6 +366,10 @@ async fn drain_buffer(gallo: &amp;PicoDeGallo) -&gt; Vec&lt;u8&gt; {
 }
 <span class="boring">}</span></code></pre>
 <h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
+<p>UART direction determines the payload ceiling. <code>uart_read</code> may return at most
+<code>MAX_RESPONSE_PAYLOAD</code> (1014 bytes), while <code>uart_write</code> may send at most
+<code>MAX_TRANSFER_SIZE</code> (4096 bytes). Every host surface checks this before
+transmitting and reports <code>BufferTooLong</code> for an over-ceiling call.</p>
 <p>UART operations return <code>PicoDeGalloError&lt;UartError&gt;</code> on failure. The
 <code>UartError</code> variants cover both protocol-level and configuration errors:</p>
 <div class="table-wrapper">
@@ -374,7 +378,7 @@ async fn drain_buffer(gallo: &amp;PicoDeGallo) -&gt; Vec&lt;u8&gt; {
 <tr><th>Variant</th><th>Description</th></tr>
 </thead>
 <tbody>
-<tr><td><code>BufferTooLong</code></td><td>Requested read/write exceeds the firmware buffer size</td></tr>
+<tr><td><code>BufferTooLong</code></td><td>Read exceeds the response ceiling or write exceeds the transfer ceiling</td></tr>
 <tr><td><code>Overrun</code></td><td>Receive buffer overflowed before host read the data</td></tr>
 <tr><td><code>Break</code></td><td>Break condition detected on the line</td></tr>
 <tr><td><code>Parity</code></td><td>Parity check failed</td></tr>

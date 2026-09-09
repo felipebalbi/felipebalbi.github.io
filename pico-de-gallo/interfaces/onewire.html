@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-27ff4fa5.js";
+            window.path_to_searchindex_js = "../searchindex-698ea0ef.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3e975730.js"></script>
@@ -200,6 +200,11 @@ in open-drain mode.</p>
 </tbody>
 </table>
 </div>
+<p>Direction determines the payload ceiling. <code>onewire_read</code> may return at most
+<code>MAX_RESPONSE_PAYLOAD</code> (1014 bytes). <code>onewire_write</code> and
+<code>onewire_write_pullup</code> may send at most <code>MAX_TRANSFER_SIZE</code> (4096 bytes).
+Every host surface checks these limits before transmitting and reports
+<code>BufferTooLong</code> for an over-ceiling call.</p>
 <h2 id="ds18b20-temperature-sensor-example"><a class="header" href="#ds18b20-temperature-sensor-example">DS18B20 Temperature Sensor Example</a></h2>
 <p>The DS18B20 is the most popular 1-Wire device. Here’s how to read its
 temperature using each interface.</p>

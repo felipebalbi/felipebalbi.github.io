@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-27ff4fa5.js";
+            window.path_to_searchindex_js = "../searchindex-698ea0ef.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3e975730.js"></script>
@@ -244,23 +244,25 @@ those integers compiled into <code>switch</code> statements.</p>
 callers can size buffers and validate indices from the same numbers the
 firmware enforces instead of hard-coding copies:</p>
 <pre><code class="language-c">#define GALLO_MAX_TRANSFER_SIZE 4096
+#define GALLO_MAX_RESPONSE_PAYLOAD 1014
 #define GALLO_MAX_BATCH_OPS 64
 #define GALLO_NUM_GPIOS 4
 </code></pre>
-<p><code>GALLO_MAX_TRANSFER_SIZE</code> mirrors the protocol’s 4096-byte packet-buffer and
-local argument bound. It is <strong>not</strong> a guarantee that 4096 bytes of application
-payload can traverse the framed transport; deliverable size depends on the
-operation’s request and response shape. Exceeding the local bound yields
-<code>Status::BufferTooLong</code>, while a smaller framed request can still fail in
-transport. See the measured <a href="../interfaces/spi.html#holding-chip-select-and-the-fault-latch">SPI limits</a>.
+<p>The direction of the bytes selects the limit. <code>GALLO_MAX_TRANSFER_SIZE</code> is the
+4096-byte limit for data sent from the host to the device.
+<code>GALLO_MAX_RESPONSE_PAYLOAD</code> is the 1014-byte limit for data the device must
+return, including the aggregate returned by a batch. A full-duplex
+<code>gallo_spi_transfer</code> uses the response limit for its entire length because each
+byte travels in both directions. Exceeding either limit yields
+<code>Status::BufferTooLong</code> locally, before transmission. See
+<a href="../appendix/troubleshooting.html#buffertoolong-22">troubleshooting</a>.
 Exceeding <code>GALLO_MAX_BATCH_OPS</code> in <code>gallo_i2c_batch</code> or <code>gallo_spi_batch</code>
 yields <code>Status::InvalidArgument</code>.</p>
-<blockquote class="blockquote-tag blockquote-tag-warning">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
-<p>The Zephyr driver’s 1013-byte containment does not apply to C callers. A
-1015-byte TX-only SPI request reproduced a device-wide firmware-dispatcher
-wedge. Until an operation-specific host limit exists, keep individual SPI
-payloads at or below 512 bytes; see <a href="../appendix/troubleshooting.html#buffertoolong-22">troubleshooting</a>.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p><code>gallo_spi_write</code> accepts 4096 bytes, but <code>gallo_spi_transfer</code> accepts only
+1014. Sizing both from <code>GALLO_MAX_TRANSFER_SIZE</code> is incorrect: the latter
+must also fit its returned bytes in <code>GALLO_MAX_RESPONSE_PAYLOAD</code>.</p>
 </blockquote>
 <p><code>GALLO_NUM_GPIOS</code> bounds the valid pin indices, <code>0..GALLO_NUM_GPIOS</code>, which
 map to physical GPIO8-GPIO11 on the Pico 2 header. Anything at or above it
@@ -395,7 +397,9 @@ each operation as a separate transaction. Zero-length writes are rejected.</p>
 <code>*out_len</code>. On failure, <code>*out_failed_op</code> (if non-NULL) receives the zero-based
 index of the operation that failed, and the status reflects the underlying
 I<sup>2</sup>C error (<code>I2cNack</code>, <code>I2cBusError</code>, etc.). <code>BufferTooLong</code> means
-<code>out_buf</code> was too small; <code>*out_len</code> still receives the required capacity.</p>
+either that the aggregate returned data exceeds
+<code>GALLO_MAX_RESPONSE_PAYLOAD</code> or that <code>out_buf</code> was too small. In the latter
+case, <code>*out_len</code> still receives the required capacity.</p>
 <h3 id="spi"><a class="header" href="#spi">SPI</a></h3>
 <pre><code class="language-c">Status gallo_spi_read(const PicoDeGallo *gallo, uint8_t *buf, size_t len);
 Status gallo_spi_write(const PicoDeGallo *gallo, const uint8_t *buf, size_t len);
@@ -415,8 +419,8 @@ Status gallo_spi_get_config(const PicoDeGallo *gallo,
 </code></pre>
 <p>Simultaneously sends <code>len</code> bytes from <code>write_buf</code> on MOSI and receives
 <code>len</code> bytes on MISO into <code>read_buf</code>. The two buffers may alias.
-Returns <code>BufferTooLong</code> if <code>len</code> exceeds the firmware transfer limit,
-or <code>SpiTransferFailed</code> on a generic SPI error.</p>
+Returns <code>BufferTooLong</code> locally if <code>len</code> exceeds
+<code>GALLO_MAX_RESPONSE_PAYLOAD</code>, or <code>SpiTransferFailed</code> on a generic SPI error.</p>
 <h4 id="spi-batch"><a class="header" href="#spi-batch">SPI batch</a></h4>
 <pre><code class="language-c">typedef struct GalloSpiBatchOp {
     uint8_t       tag;       // 0 = Read, 1 = Write, 2 = Transfer, 3 = DelayNs
@@ -438,8 +442,9 @@ deasserts it after the last (or on error), providing atomic
 <code>SpiDevice::transaction</code> semantics. Read data from <code>Read</code> and
 <code>Transfer</code> operations is concatenated into <code>out_buf</code> in order. On
 per-op failure, <code>*out_failed_op</code> (if non-NULL) receives the zero-based
-index. <code>BufferTooLong</code> means <code>out_buf</code> was too small; <code>*out_len</code> still
-receives the required capacity.</p>
+index. <code>BufferTooLong</code> means either that the aggregate returned data exceeds
+<code>GALLO_MAX_RESPONSE_PAYLOAD</code> or that <code>out_buf</code> was too small. In the latter
+case, <code>*out_len</code> still receives the required capacity.</p>
 <h4 id="chip-select-preflight"><a class="header" href="#chip-select-preflight">Chip-select preflight</a></h4>
 <p><code>cs_pin</code> is validated against the device-reported GPIO count before any
 operation payload is translated and before anything is transmitted:</p>

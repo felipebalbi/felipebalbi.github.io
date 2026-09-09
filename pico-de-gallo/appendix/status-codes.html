@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-27ff4fa5.js";
+            window.path_to_searchindex_js = "../searchindex-698ea0ef.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3e975730.js"></script>
@@ -229,7 +229,7 @@ that doesn’t appear in your header means success.</p>
 <tr><td><code>I2cBusError</code></td><td style="text-align: right">−19</td><td>I²C bus error</td></tr>
 <tr><td><code>I2cArbitrationLoss</code></td><td style="text-align: right">−20</td><td>I²C arbitration loss</td></tr>
 <tr><td><code>I2cOverrun</code></td><td style="text-align: right">−21</td><td>I²C data overrun</td></tr>
-<tr><td><code>BufferTooLong</code></td><td style="text-align: right">−22</td><td>Buffer exceeds firmware transfer limit</td></tr>
+<tr><td><code>BufferTooLong</code></td><td style="text-align: right">−22</td><td>Argument exceeds its directional payload ceiling</td></tr>
 <tr><td><code>I2cAddressOutOfRange</code></td><td style="text-align: right">−23</td><td>I²C address out of valid range</td></tr>
 <tr><td><code>GpioInvalidPin</code></td><td style="text-align: right">−24</td><td>Invalid GPIO pin number</td></tr>
 <tr><td><code>CommsFailed</code></td><td style="text-align: right">−25</td><td>USB communication failure</td></tr>
@@ -295,6 +295,12 @@ validated metadata fetch and has a far longer bound. The handle stays
 usable, so the call may simply be retried — except after a batch, whose
 fate is unknown (it may have executed fully, partially, or not at all), so
 a blind retry there can repeat side effects.</p>
+<p><code>BufferTooLong</code> (−22) is also a host-side refusal. Data returned by the device
+is limited to <code>GALLO_MAX_RESPONSE_PAYLOAD</code> (1014 bytes), while data sent to it
+is limited to <code>GALLO_MAX_TRANSFER_SIZE</code> (4096 bytes). Full-duplex SPI transfer
+uses the tighter response ceiling. The same status still represents a
+device-side buffer refusal, but an over-ceiling argument is rejected locally
+before transmission. Issue #158 added no new <code>Status</code> value.</p>
 <p><code>SpiInvalidCsPin</code> (−71) and <code>SpiNoGpios</code> (−74) are host-side refusals: the
 chip-select was rejected before anything was transmitted, and no pin was
 driven. <code>DeviceInfoFailed</code> (−62), <code>SchemaMismatch</code> (−63),

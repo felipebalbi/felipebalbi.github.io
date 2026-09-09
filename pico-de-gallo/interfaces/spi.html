@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-27ff4fa5.js";
+            window.path_to_searchindex_js = "../searchindex-698ea0ef.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3e975730.js"></script>
@@ -270,6 +270,15 @@ $ gallo spi transfer --bytes 0x01 0x02 0x03 0x04
 </code></pre>
 <p><code>transfer</code> clocks out the given bytes on MOSI and simultaneously
 clocks in the same number of bytes on MISO — true full-duplex.</p>
+<p>Direction determines the limit. <code>spi_write</code> sends data only and accepts up to
+<code>MAX_TRANSFER_SIZE</code> (4096 bytes). <code>spi_read</code> returns data and accepts up to
+<code>MAX_RESPONSE_PAYLOAD</code> (1014 bytes). <code>spi_transfer</code> is full duplex, so every
+argument byte also has to return; the tighter <code>MAX_RESPONSE_PAYLOAD</code> ceiling
+therefore limits the whole transfer to 1014 bytes. Every host surface checks
+these limits before transmitting and reports <code>BufferTooLong</code> for an
+over-ceiling call.</p>
+<p>This asymmetry is intentional and measured: issue #158 observed <code>spi/write</code>
+succeeding with 1015 bytes at the same boundary where <code>spi/transfer</code> fails.</p>
 <h3 id="config"><a class="header" href="#config">Config</a></h3>
 <p>Mode is selected with a single <code>--mode</code> flag, defaulting to 0:</p>
 <pre><code class="language-console">$ gallo spi set-config -h
@@ -362,13 +371,17 @@ transceive is <strong>four</strong> USB round trips:</p>
 <pre><code class="language-text">spi/set-config -&gt; gpio/put(assert) -&gt; spi/transfer -&gt; gpio/put(deassert)
 </code></pre>
 <p>Any of them can fail independently, and host death after the assert can leave
-chip select asserted; a fresh session can deassert ordinary residue. Only RPCs that <em>return</em> have defined behaviour — an RPC that never
-returns leaves the call pending forever with no errno and no cleanup.</p>
-<p>A non-returning 1015-byte TX-only request reproduced a device-wide dispatcher
-wedge. In those tests the device resumed after USB re-enumeration (<code>usbipd detach</code>/attach on Windows/WSL). This is an observed procedure, not proof that
-detach cancels the handler. On Linux/macOS reconnect the cable or use USB
-unbind/rebind; power-cycle if re-enumeration is unavailable or ineffective.
-<code>system/reset-subscriptions</code> cannot run while the dispatcher is blocked.</p>
+chip select asserted; a fresh session can deassert ordinary residue. Issue #178
+now bounds every host RPC with a timeout, and issue #157 added a firmware
+dispatch-progress supervisor as a backstop. If a timed-out request asserted
+chip select, its device-side fate can still be unknown, so do not assume the
+timeout deasserted the line.</p>
+<p>Historical context still matters: an earlier 1015-byte TX-only request
+reproduced a device-wide dispatcher wedge, recoverable in that run by USB
+re-enumeration. Issue #158 could not reproduce that wedge on firmware
+<code>62dd64e710fd</code> after #157 and #178 landed: the call returned a clean error in
+12 ms and the board stayed responsive. That single-build non-reproduction does
+not prove the earlier wedge never existed.</p>
 <p>Zephyr also collapses a child’s <code>spi-cs-setup-delay-ns</code> and
 <code>spi-cs-hold-delay-ns</code> into a single
 <code>DIV_ROUND_UP(MAX(setup_ns, hold_ns), 1000)</code> microsecond value and applies that
@@ -400,29 +413,29 @@ commit RX: the peripheral may still be selected.</p>
 went inactive, so the controller <strong>latches</strong>. Every later transceive then
 returns <code>-EHOSTDOWN</code> before issuing any configuration, chip-select edge or
 clocking. Only a <code>spi_release()</code> whose checked deassert succeeds clears it.</p>
-<p>Other errors a caller can see: <code>-ENODEV</code>, <code>-EINVAL</code>, <code>-ENOTSUP</code>, <code>-EMSGSIZE</code>
-(over <strong>1013 bytes</strong>). This is a Zephyr containment limit, not a duplex-capacity
-guarantee: TX-only 1013 succeeded, TX-only 1015 wedges the firmware dispatcher,
-and 1014 was not tested. Full duplex succeeded at 512, failed at 3072, and was
-not tested from 513 through 1013. Applications needing a documented-safe duplex
-size must use 512 bytes or less. Do not infer 1013-byte duplex support from
-<code>PDG_SPI_MAX_BUFFER</code>; the protocol’s 4096-byte constant is a packet-buffer and
-argument bound, not a demonstrated end-to-end payload guarantee),
-<code>-ENOMEM</code>, <code>-EIO</code> / <code>-ECOMM</code> / <code>-EPROTO</code>, <code>-EACCES</code> (a
-chip-select pin the firmware records as an explicit input) and <code>-EBUSY</code> (a
-chip-select pin under a live firmware GPIO event subscription). Stacked drivers
-collapse these into a generic not-ready error — <code>jedec,spi-nor</code>, for instance,
-reports <code>-ENODEV</code> for any transfer failure — so the controller’s own log line
-is the only authoritative diagnosis.</p>
+<p>Other errors a caller can see include <code>-ENODEV</code>, <code>-EINVAL</code>, <code>-ENOTSUP</code>,
+<code>-ENOMEM</code>, <code>-EIO</code> / <code>-ECOMM</code> / <code>-EPROTO</code>, <code>-EACCES</code> (a chip-select pin the
+firmware records as an explicit input), <code>-EBUSY</code> (a chip-select pin under a live
+firmware GPIO event subscription), and <code>-EMSGSIZE</code> (over
+<code>PDG_SPI_MAX_BUFFER</code>, 1014 bytes). Issue #158 superseded the old 1013-byte
+containment and 512-byte documented-safe duplex limit by measuring
+<code>spi/transfer</code> at the exact boundary: 1014 works and 1015 fails cleanly.
+<code>PDG_SPI_MAX_BUFFER</code> now lives in <code>pdg_spi_bottom.h</code>, and a <code>_Static_assert</code>
+ties it to <code>GALLO_MAX_RESPONSE_PAYLOAD</code>; it is not the 4096-byte send-only
+<code>GALLO_MAX_TRANSFER_SIZE</code>. Stacked drivers collapse these errors into a generic
+not-ready error — <code>jedec,spi-nor</code>, for instance, reports <code>-ENODEV</code> for any
+transfer failure — so the controller’s own log line is the only authoritative
+diagnosis.</p>
 <p><code>gallo spi batch</code> and the host <code>spi_batch</code> APIs described above are unchanged
 and remain fully supported; only the Zephyr module stopped using them.
 <code>zephyr/README.md</code> in the repository remains the detailed module guide.</p>
-<blockquote class="blockquote-tag blockquote-tag-warning">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
-<p>The 1013-byte containment exists only in the Zephyr driver. CLI, Rust, C,
-Python, and MCP SPI calls can still reach the 1015-byte device-wide wedge.
-Keep individual SPI payloads at or below 512 bytes until an operation-specific
-host limit is derived; see <a href="../appendix/troubleshooting.html#buffertoolong-22">troubleshooting</a>.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>The Zephyr driver and every direct host surface enforce the directional
+limits locally. Zephyr returns <code>-EMSGSIZE</code>; Rust, C, Python, CLI, and MCP use
+their <code>BufferTooLong</code> mapping. <code>spi_write</code> accepts 4096 bytes, but any SPI
+operation that returns bytes is limited to 1014; see
+<a href="../appendix/troubleshooting.html#buffertoolong-22">troubleshooting</a>.</p>
 </blockquote>
 <h2 id="rust-library"><a class="header" href="#rust-library">Rust Library</a></h2>
 <pre class="playground"><code class="language-rust no_run">use pico_de_gallo_lib::{PicoDeGallo, SpiBatchOp, SpiPhase, SpiPolarity};

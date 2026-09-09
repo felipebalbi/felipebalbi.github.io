@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-27ff4fa5.js";
+            window.path_to_searchindex_js = "../searchindex-698ea0ef.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3e975730.js"></script>
@@ -207,7 +207,8 @@ them.</p>
 <li>endpoint marker types,</li>
 <li>request and response structs,</li>
 <li>topic message types,</li>
-<li>protocol constants like <code>MAX_TRANSFER_SIZE</code>,</li>
+<li>directional payload constants <code>MAX_TRANSFER_SIZE</code> and
+<code>MAX_RESPONSE_PAYLOAD</code>,</li>
 <li>schema-version constants generated at build time.</li>
 </ul>
 <p>The crate also uses the <code>use-std</code> feature to switch certain response types
@@ -218,6 +219,27 @@ between owned host buffers and borrowed firmware buffers:</p>
 </ul>
 <p>That lets the host own received data while the firmware can answer from a shared
 scratch buffer without heap allocation.</p>
+<p>The two payload constants are independent and selected by byte direction:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Direction</th><th>Constant</th><th style="text-align: right">Value</th></tr>
+</thead>
+<tbody>
+<tr><td>host → device</td><td><code>MAX_TRANSFER_SIZE</code></td><td style="text-align: right">4096</td></tr>
+<tr><td>device → host</td><td><code>MAX_RESPONSE_PAYLOAD</code></td><td style="text-align: right">1014</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>MAX_RESPONSE_PAYLOAD</code> is derived from postcard-rpc’s 1024-byte host inbound
+USB buffer: 1024 − 7 bytes of response header (1 discriminant, 2 key, 4
+sequence) − 1 postcard <code>Result</code> discriminant − 2 bytes of varint length prefix
+= 1014. It is a host-transport property that firmware cannot observe.
+Full-duplex <code>spi/transfer</code> proves why both constants are needed: its one length
+travels in both directions, so the tighter response ceiling applies.</p>
+<p>Issue #158 added local validation and firmware bounds without changing an
+endpoint, request or response type. It is therefore not a wire change and did
+not require a schema change or version bump.</p>
 <h2 id="endpoints-and-topics"><a class="header" href="#endpoints-and-topics">Endpoints and topics</a></h2>
 <p>Endpoints are normal request/response RPCs declared with <code>endpoints!</code>. Topics
 are push-style messages declared with <code>topics!</code>.</p>
@@ -281,7 +303,7 @@ a whole and cannot be attributed to one operation, so it reports
 <tr><th>Index</th><th>Variant</th><th>Meaning</th></tr>
 </thead>
 <tbody>
-<tr><td>0</td><td><code>BufferTooLong</code></td><td>Request exceeds the firmware buffer limit</td></tr>
+<tr><td>0</td><td><code>BufferTooLong</code></td><td>Argument exceeds its directional payload ceiling</td></tr>
 <tr><td>1</td><td><code>Other</code></td><td>Unspecified firmware-reported SPI failure</td></tr>
 <tr><td>2</td><td><code>InvalidCsPin</code></td><td>Chip-select index outside <code>0..DeviceInfo::num_gpios</code></td></tr>
 <tr><td>3</td><td><code>CsPinUnavailable</code></td><td>Chip-select pin is explicitly configured as an input</td></tr>
