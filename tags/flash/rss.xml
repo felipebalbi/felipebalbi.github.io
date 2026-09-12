@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"
+     xmlns:atom="http://www.w3.org/2005/Atom"
+     xmlns:content="http://purl.org/rss/1.0/modules/content/"
+     xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Felipe Balbi</title>
+    <link>https://balbi.sh</link>
+    <description>Notes on embedded systems, Rust, and the craft of writing software.</description>
+    <generator>Zola</generator>
+    <language>en</language>
+    <lastBuildDate>Mon, 27 Jul 2026 12:00:00 +0000</lastBuildDate>
+    <atom:link href="https://balbi.sh/tags/flash/rss.xml" rel="self" type="application/rss+xml"/>
+    
+    <item>
+      <title>Hi, I&#39;m Norbert</title>
+      <link>https://balbi.sh/posts/norbert-introducing/</link>
+      <guid isPermaLink="true">https://balbi.sh/posts/norbert-introducing/</guid>
+      <pubDate>Mon, 27 Jul 2026 12:00:00 +0000</pubDate>
+      <dc:creator>Felipe Balbi</dc:creator>
+      <description>&lt;p&gt;Meet &lt;strong&gt;Norbert&lt;/strong&gt; — a small command-line tool I wrote to program SPI
+NOR flash chips. Its defining trait is patience: it reads and parses
+the SFDP tables, verifies its work, and would rather wait a second
+than guess.&lt;/p&gt;</description>
+      
+      <content:encoded>&lt;p&gt;Meet &lt;strong&gt;Norbert&lt;/strong&gt; — a small command-line tool I wrote to program SPI
+NOR flash chips. Its defining trait is patience: it reads and parses
+the SFDP tables, verifies its work, and would rather wait a second
+than guess.&lt;/p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;/span&gt;
+&lt;p&gt;Hand Norbert a chip and it works out what the part is — reads the
+JEDEC ID, parses the SFDP tables, or falls back to a table of chips it
+already knows. From there it can erase the device, program an image,
+verify every byte it wrote, and read the flash back. It drives a bare
+flash chip over a &lt;a href=&quot;/pico-de-gallo/&quot;&gt;Pico de Gallo&lt;/a&gt; bridge, so there’s no adapter
+board to wire up.&lt;/p&gt;
+&lt;p&gt;A normal session looks like this:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;shellsession&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;$&lt;/span&gt;&lt;span&gt; norbert detect&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;Hmm... let&amp;#39;s see what we&amp;#39;ve got here.&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;Found Winbond W25Q128JV.&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;$&lt;/span&gt;&lt;span&gt; norbert program firmware.bin&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;Programming firmware.bin — 512 KiB at 0x000000.&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  erase    [██████████████████████████]  8/8 blocks&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  program  [██████████████████████████]  512 KiB/512 KiB&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  verify   [██████████████████████████]  512 KiB/512 KiB&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;Done. Have a nice boot.&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;That chattiness is the point of the name: Norbert has a personality,
+but only in its output. Underneath, the engineering is deliberately
+dull — programming flash should be predictable, transparent, reliable,
+and, above all, boring. It won’t skip verification because a write is
+&lt;em&gt;probably fine&lt;/em&gt;, and it won’t assume every chip behaves the same.&lt;/p&gt;
+&lt;p&gt;It’s early — version 0.1 — but it already recognizes a fair number of
+chips — anything supporting SFDP should just work —, and &lt;code&gt;--quiet&lt;/code&gt;
+gives scripts machine-friendly output when you don’t want the
+commentary. The source is &lt;a rel=&quot;external&quot; href=&quot;https://github.com/felipebalbi/norbert&quot;&gt;on GitHub&lt;/a&gt;; if Norbert doesn’t know
+your chip yet, teaching it one is the easiest contribution to make.&lt;/p&gt;
+</content:encoded>
+    </item>
+    
+  </channel>
+</rss>

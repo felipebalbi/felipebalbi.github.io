@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+  <title>Felipe Balbi</title>
+  <subtitle>Notes on embedded systems, Rust, and the craft of writing software.</subtitle>
+  <link href="https://balbi.sh/tags/ci/atom.xml" rel="self" type="application/atom+xml"/>
+  <link href="https://balbi.sh"/>
+  <generator uri="https://www.getzola.org/">Zola</generator>
+  <updated>2026-08-07T09:00:00+00:00</updated>
+  <id>https://balbi.sh/tags/ci/atom.xml</id>
+  
+  <entry xml:lang="en">
+    <title>rambo v0.1.2: the boring release is the point</title>
+    <published>2026-08-07T09:00:00+00:00</published>
+    <updated>2026-08-07T09:00:00+00:00</updated>
+    <author><name>Felipe Balbi</name></author>
+    <link rel="alternate" href="https://balbi.sh/posts/rambo-hands-off-releases/" type="text/html"/>
+    <id>https://balbi.sh/posts/rambo-hands-off-releases/</id>
+    <summary type="html">&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https://github.com/felipebalbi/rambo&quot;&gt;rambo&lt;/a&gt; — the CLI that maps which of a Cortex-M’s SRAM a boot ROM
+clobbers before your firmware’s first instruction runs — is at v0.1.2.
+If you’re looking for a new feature, there isn’t one:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;plain&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;### Other&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;- (deps) bump dependencies&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;- add dependabot configuration&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;- chain release binaries from release-plz workflow&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;- allow manual dispatch of release workflow&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Every flag you might reach for — the &lt;code&gt;--json&lt;/code&gt; reports, the
+&lt;code&gt;--expectations&lt;/code&gt; RAM contracts, custom chip descriptions — shipped
+back in v0.1.1, which I &lt;a href=&quot;/posts/rambo-rom-collateral-damage/&quot;&gt;already wrote up&lt;/a&gt;. v0.1.2 is pure
+plumbing, and that’s the point.&lt;/p&gt;</summary>
+    
+    <content type="html">&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https://github.com/felipebalbi/rambo&quot;&gt;rambo&lt;/a&gt; — the CLI that maps which of a Cortex-M’s SRAM a boot ROM
+clobbers before your firmware’s first instruction runs — is at v0.1.2.
+If you’re looking for a new feature, there isn’t one:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;plain&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;### Other&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;- (deps) bump dependencies&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;- add dependabot configuration&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;- chain release binaries from release-plz workflow&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;- allow manual dispatch of release workflow&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Every flag you might reach for — the &lt;code&gt;--json&lt;/code&gt; reports, the
+&lt;code&gt;--expectations&lt;/code&gt; RAM contracts, custom chip descriptions — shipped
+back in v0.1.1, which I &lt;a href=&quot;/posts/rambo-rom-collateral-damage/&quot;&gt;already wrote up&lt;/a&gt;. v0.1.2 is pure
+plumbing, and that’s the point.&lt;/p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;/span&gt;
+&lt;p&gt;The one change you’ll actually notice: &lt;strong&gt;every tagged release now ships
+pre-built binaries&lt;/strong&gt; for Linux, macOS (Intel and Apple Silicon), and
+Windows, built and attached automatically. No Rust toolchain required to
+run rambo — download, unzip, go.&lt;/p&gt;
+&lt;p&gt;Under the hood that’s the whole release pipeline earning its keep. I
+write &lt;a rel=&quot;external&quot; href=&quot;https://www.conventionalcommits.org/&quot;&gt;conventional commits&lt;/a&gt;; &lt;a rel=&quot;external&quot; href=&quot;https://release-plz.dev&quot;&gt;release-plz&lt;/a&gt; keeps a “Release X.Y.Z”
+pull request open with the version bump and changelog already written for
+me. Merging it publishes to crates.io, tags the release, and — new in
+v0.1.2 — kicks off the per-OS binary build and uploads the archives to
+that release. A manual trigger lets me rebuild those binaries for an
+existing tag if a run ever fails, without cutting a new version.&lt;/p&gt;
+&lt;p&gt;The other half of “boring” is a dependabot config that files one
+grouped, conventional-commit pull request a week for Rust and Actions
+updates, so it folds into a clean patch bump instead of a pile of noise.
+Most of what changed between v0.1.1 and v0.1.2 is exactly that:
+&lt;code&gt;actions/checkout&lt;/code&gt; and &lt;code&gt;action-gh-release&lt;/code&gt; bumped themselves and I just
+merged.&lt;/p&gt;
+&lt;p&gt;None of this is novel. It matters because a one-person tool doesn’t die
+from bad code — it dies when every release costs twenty minutes of
+bookkeeping and one day you don’t have twenty minutes. v0.1.2 drops that
+cost to roughly zero, so the next release, the one with actual features
+in it, is one I’ll actually ship.&lt;/p&gt;
+&lt;p&gt;rambo is on &lt;a rel=&quot;external&quot; href=&quot;https://crates.io/crates/rambo&quot;&gt;crates.io&lt;/a&gt; (&lt;code&gt;cargo install rambo&lt;/code&gt;) and
+&lt;a rel=&quot;external&quot; href=&quot;https://github.com/felipebalbi/rambo&quot;&gt;GitHub&lt;/a&gt;; grab a binary from &lt;a rel=&quot;external&quot; href=&quot;https://github.com/felipebalbi/rambo/releases&quot;&gt;the releases page&lt;/a&gt;,
+including this boring one.&lt;/p&gt;
+</content>
+  </entry>
+  
+</feed>

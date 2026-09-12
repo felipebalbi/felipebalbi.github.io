@@ -1,0 +1,56 @@
+<!doctype html><html lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><script>(function () {
+      var stored;
+      try { stored = sessionStorage.getItem('theme'); } catch (_) {}
+      var theme;
+      if (stored === 'light' || stored === 'dark') {
+        theme = stored;
+      } else {
+        theme = (window.matchMedia &&
+                 window.matchMedia('(prefers-color-scheme: dark)').matches)
+                 ? 'dark' : 'light';
+      }
+      document.documentElement.setAttribute('data-theme', theme);
+    })();</script><title>Hi, I'm Norbert · Felipe Balbi</title><meta content="Introducing Norbert — a small, patient CLI that programs SPI NOR flash chips over a Pico de Gallo bridge. It reads the datasheet, verifies its work, and refuses to guess." name=description><meta content="Felipe Balbi" name=author><link as=font crossorigin href=/fonts/aporetic-serif-regular.woff2 rel=preload type=font/woff2><link as=font crossorigin href=/fonts/aporetic-sans-regular.woff2 rel=preload type=font/woff2><link href="https://balbi.sh/style.css?h=f816e3a3a219740f5a95" rel=stylesheet><link title="Felipe Balbi (Atom)" href=https://balbi.sh/atom.xml rel=alternate type=application/atom+xml><link title="Felipe Balbi (RSS)" href=https://balbi.sh/rss.xml rel=alternate type=application/rss+xml><link href=https://balbi.sh/posts/norbert-introducing/ rel=canonical><link href=https://balbi.sh/favicon.svg rel=icon type=image/svg+xml><meta content="Hi, I'm Norbert" property=og:title><meta content="Introducing Norbert — a small, patient CLI that programs SPI NOR flash chips over a Pico de Gallo bridge. It reads the datasheet, verifies its work, and refuses to guess." property=og:description><meta content=article property=og:type><meta content=https://balbi.sh/posts/norbert-introducing/ property=og:url><meta content=summary name=twitter:card><body><div class=wrap><header class=site-header><a class=site-name href=https://balbi.sh>Felipe Balbi</a><nav aria-label=Primary class=site-nav><a class=active href=/posts/>Posts</a><a href=/pico-de-gallo/>Pico de Gallo Book</a><button aria-label="Toggle color theme" title="Toggle color theme" class=theme-toggle id=theme-toggle type=button><svg viewbox="0 0 24 24" aria-hidden=true class=icon-sun fill=none stroke=currentColor stroke-linecap=round stroke-linejoin=round stroke-width=2><circle cx=12 cy=12 r=4 /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg> <svg viewbox="0 0 24 24" aria-hidden=true class=icon-moon fill=none stroke=currentColor stroke-linecap=round stroke-linejoin=round stroke-width=2><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button></nav></header><main><article><h1>Hi, I'm Norbert</h1><div class=post-meta><time datetime=2026-07-27T12:00:00>July 27, 2026</time><span class=post-tags> <a href=https://balbi.sh/tags/rust/>rust</a> <a href=https://balbi.sh/tags/embedded/>embedded</a> <a href=https://balbi.sh/tags/flash/>flash</a> <a href=https://balbi.sh/tags/pico-de-gallo/>pico-de-gallo</a> <a href=https://balbi.sh/tags/norbert/>norbert</a> </span><span>1 min read</span></div><p>Meet <strong>Norbert</strong> — a small command-line tool I wrote to program SPI NOR flash chips. Its defining trait is patience: it reads and parses the SFDP tables, verifies its work, and would rather wait a second than guess.</p><span id=continue-reading></span><p>Hand Norbert a chip and it works out what the part is — reads the JEDEC ID, parses the SFDP tables, or falls back to a table of chips it already knows. From there it can erase the device, program an image, verify every byte it wrote, and read the flash back. It drives a bare flash chip over a <a href=/pico-de-gallo/>Pico de Gallo</a> bridge, so there’s no adapter board to wire up.<p>A normal session looks like this:<pre class="giallo z-l-code z-d-code"><code data-lang=shellsession><span class=giallo-l><span>$</span><span> norbert detect</span></span>
+<span class=giallo-l><span>Hmm... let's see what we've got here.</span></span>
+<span class=giallo-l><span>Found Winbond W25Q128JV.</span></span>
+<span class=giallo-l></span>
+<span class=giallo-l><span>$</span><span> norbert program firmware.bin</span></span>
+<span class=giallo-l><span>Programming firmware.bin — 512 KiB at 0x000000.</span></span>
+<span class=giallo-l></span>
+<span class=giallo-l><span>  erase    [██████████████████████████]  8/8 blocks</span></span>
+<span class=giallo-l><span>  program  [██████████████████████████]  512 KiB/512 KiB</span></span>
+<span class=giallo-l><span>  verify   [██████████████████████████]  512 KiB/512 KiB</span></span>
+<span class=giallo-l></span>
+<span class=giallo-l><span>Done. Have a nice boot.</span></span></code></pre><p>That chattiness is the point of the name: Norbert has a personality, but only in its output. Underneath, the engineering is deliberately dull — programming flash should be predictable, transparent, reliable, and, above all, boring. It won’t skip verification because a write is <em>probably fine</em>, and it won’t assume every chip behaves the same.<p>It’s early — version 0.1 — but it already recognizes a fair number of chips — anything supporting SFDP should just work —, and <code>--quiet</code> gives scripts machine-friendly output when you don’t want the commentary. The source is <a href=https://github.com/felipebalbi/norbert rel=external>on GitHub</a>; if Norbert doesn’t know your chip yet, teaching it one is the easiest contribution to make.<nav class=post-nav><a href=/posts/>← All posts</a></nav></article></main><footer class=site-footer><div>© 2026 Felipe Balbi</div><div><a href=https://github.com/felipebalbi rel=me>GitHub</a> · <a href=/atom.xml>Atom</a> · <a href=/rss.xml>RSS</a></div></footer></div><script>(function () {
+      var root = document.documentElement;
+      var btn  = document.getElementById('theme-toggle');
+      var mql  = window.matchMedia('(prefers-color-scheme: dark)');
+
+      function userChose() {
+        try {
+          var v = sessionStorage.getItem('theme');
+          return v === 'light' || v === 'dark';
+        } catch (_) { return false; }
+      }
+
+      function setTheme(t, persist) {
+        root.setAttribute('data-theme', t);
+        if (persist) {
+          try { sessionStorage.setItem('theme', t); } catch (_) {}
+        }
+      }
+
+      if (btn) {
+        btn.addEventListener('click', function () {
+          var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+          setTheme(next, true);
+        });
+      }
+
+      // Follow OS until the user makes a manual choice.
+      if (mql.addEventListener) {
+        mql.addEventListener('change', function (e) {
+          if (!userChose()) setTheme(e.matches ? 'dark' : 'light', false);
+        });
+      }
+    })();</script>
