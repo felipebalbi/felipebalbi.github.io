@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-23fb8a90.js";
+            window.path_to_searchindex_js = "../searchindex-021ab968.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3e975730.js"></script>
@@ -398,6 +398,34 @@ cargo build --release --locked --target thumbv8m.main-none-eabihf \
 <li>ADC reads are single-shot samples on GPIO 26-29 in firmware, with board
 routing exposing ADC0-2 on current hardware.</li>
 </ul>
+<h3 id="uart-reads-framing-and-supervision"><a class="header" href="#uart-reads-framing-and-supervision">UART reads, framing, and supervision</a></h3>
+<p><code>uart/read</code> treats <code>timeout_ms == 0</code> as a true single poll. The handler uses
+<code>embassy_futures::poll_once</code> on <code>AsyncRead::read()</code> and returns an empty result
+when that one poll is pending; it does not wait through a nominal one-millisecond
+timer. This matters to polling clients such as Zephyr’s <code>uart_poll_in()</code>, which
+otherwise pay a timeout on every idle check. It also deliberately reaches
+Embassy’s read path rather than consulting only <code>ReadReady</code>: polling the read is
+what consumes a latched receive error and re-enables RX interrupts.</p>
+<p>Runtime framing is applied directly to UART0’s <code>UARTLCR_H</code> register because
+embassy-rp exposes no runtime framing setter. <code>apply_framing()</code> maps word length
+to <code>WLEN</code>, enables parity with <code>PEN</code>, selects even or space parity with <code>EPS</code>,
+selects mark/space stick parity with <code>SPS</code>, and selects two stop bits with
+<code>STP2</code>. The function follows embassy-rp’s disable, delay, register-write, and
+restore sequence.</p>
+<p>Baud and framing are not applied atomically. <code>uart/set-config</code> calls
+<code>set_baudrate()</code> first, and that function restores an enabled <code>UARTCR</code> before
+<code>apply_framing()</code> runs. The pins therefore have a brief window with the new
+divisor and the old framing. The handler drains neither direction; callers must
+quiesce transmit and receive traffic before reconfiguration.</p>
+<p><code>uart/get-config</code> returns <code>Context::uart_config</code>, a software shadow updated
+after the two configuration steps. It is not a register read-back and therefore
+is never evidence of what the hardware is actually doing. In particular, it
+reports the requested baud rate rather than the line rate achieved after divisor
+rounding.</p>
+<p>Both <code>uart/write</code> and <code>uart/flush</code> declare the fixed 60-second
+<code>UART_TX_BUDGET</code>. The ordinary dispatch budget is too short for the 1024-byte TX
+ring to drain at low baud rates; the explicit budget keeps a legitimate slow
+transmit from being mistaken for a wedged handler.</p>
 <h3 id="i²c-batch-transaction-handling"><a class="header" href="#i²c-batch-transaction-handling">I²C batch transaction handling</a></h3>
 <p><code>i2c/batch</code> uses two decode passes. The first validates the operation count,
 encoding, declared count, total read size, and every write payload before the

@@ -38,7 +38,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-23fb8a90.js";
+            window.path_to_searchindex_js = "searchindex-021ab968.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-3e975730.js"></script>
@@ -1703,11 +1703,60 @@ firmware’s main loop.</p>
 <tr><td><strong>Read</strong></td><td>Reads up to N bytes from the receive buffer with an optional timeout</td></tr>
 <tr><td><strong>Write</strong></td><td>Writes raw bytes to the transmit buffer</td></tr>
 <tr><td><strong>Flush</strong></td><td>Flushes the transmit buffer, blocking until all bytes are sent</td></tr>
-<tr><td><strong>Set Config</strong></td><td>Updates the baud rate (and future line parameters)</td></tr>
+<tr><td><strong>Set Config</strong></td><td>Replaces the baud rate and framing configuration</td></tr>
 <tr><td><strong>Get Config</strong></td><td>Returns the current UART configuration</td></tr>
 </tbody>
 </table>
 </div>
+<h2 id="framing-configuration"><a class="header" href="#framing-configuration">Framing Configuration</a></h2>
+<p>The firmware initializes UART0 to <strong>115200 8N1</strong>: 115200 bits per second,
+eight data bits, no parity, and one stop bit. At runtime, <code>set-config</code> can
+change the baud rate and every supported framing parameter.</p>
+<p>The RP2350 UART0 capability envelope is:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Parameter</th><th>Values</th><th>Result</th></tr>
+</thead>
+<tbody>
+<tr><td>Data bits</td><td>5, 6, 7, 8</td><td>Supported</td></tr>
+<tr><td>Data bits</td><td>9</td><td>Not available</td></tr>
+<tr><td>Parity</td><td>None, odd, even</td><td>Supported</td></tr>
+<tr><td>Parity</td><td>Mark, space</td><td>Supported as stick parity</td></tr>
+<tr><td>Stop bits</td><td>1, 2</td><td>Supported</td></tr>
+<tr><td>Stop bits</td><td>0.5, 1.5</td><td>Not available</td></tr>
+<tr><td>Flow control</td><td>None</td><td>Supported</td></tr>
+<tr><td>Flow control</td><td>RTS/CTS</td><td>Not available</td></tr>
+<tr><td>Flow control</td><td>DTR/DSR</td><td>Not available</td></tr>
+<tr><td>Flow control</td><td>RS-485</td><td>Not available</td></tr>
+</tbody>
+</table>
+</div>
+<p>The mark parity setting always means a parity bit of 1; the space parity
+setting always means 0. These modes are not exposed by embassy’s <code>Parity</code>
+enum, so the firmware configures the PL011 framing register directly.</p>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p><strong>Reconfiguration is not atomic at the UART pins.</strong> The device applies the
+baud divisor first and the framing second, and drains neither direction.
+There is a window in which the new divisor is active with the old framing.
+Quiesce transmit and receive traffic while changing the configuration.</p>
+</blockquote>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p><strong><code>set-config</code> replaces the complete configuration.</strong> In the CLI, omitting
+a framing flag selects its 8N1 power-on value and overwrites the previous
+setting. A baud-only change must therefore repeat all framing flags.</p>
+</blockquote>
+<p>For example, configure 9600 baud with seven data bits, even parity, and two
+stop bits:</p>
+<pre><code class="language-bash">gallo uart set-config --baud-rate 9600 \
+    --data-bits 7 --parity even --stop-bits 2
+gallo uart get-config
+</code></pre>
+<p><code>get-config</code> reports the last successfully requested configuration. This is
+a software shadow, not a UART register read-back, so the reported baud rate
+does not reflect divisor rounding.</p>
 <h2 id="loopback-example"><a class="header" href="#loopback-example">Loopback Example</a></h2>
 <p>The simplest way to verify UART operation is a loopback test: connect
 <strong>GPIO 0 (TX)</strong> directly to <strong>GPIO 1 (RX)</strong> with a jumper wire. Everything
@@ -1716,8 +1765,9 @@ you write will be received back.</p>
 <pre><code class="language-bash"># 1. Check the current configuration
 gallo uart get-config
 
-# 2. Set baud rate to 115200 (default)
-gallo uart set-config --baud-rate 115200
+# 2. Set the complete configuration to 115200 8N1 (default)
+gallo uart set-config --baud-rate 115200 \
+    --data-bits 8 --parity none --stop-bits 1
 
 # 3. Write "Hello" (ASCII bytes)
 gallo uart write --bytes 0x48 0x65 0x6C 0x6C 0x6F
@@ -1731,11 +1781,21 @@ gallo uart flush
 <h3 id="rust-library-2"><a class="header" href="#rust-library-2">Rust Library</a></h3>
 <pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use pico_de_gallo_lib::PicoDeGallo;
+</span>use pico_de_gallo_lib::{
+    PicoDeGallo, UartDataBits, UartParity, UartStopBits,
+};
 
 async fn uart_loopback(gallo: &amp;PicoDeGallo) {
-    // Configure baud rate
-    gallo.uart_set_config(115_200).await.unwrap();
+    // Configure 115200 8N1
+    gallo
+        .uart_set_config(
+            115_200,
+            UartDataBits::Eight,
+            UartParity::None,
+            UartStopBits::One,
+        )
+        .await
+        .unwrap();
 
     // Verify configuration
     let config = gallo.uart_get_config().await.unwrap();
@@ -1758,27 +1818,36 @@ async fn uart_loopback(gallo: &amp;PicoDeGallo) {
 #include &lt;stdio.h&gt;
 #include &lt;string.h&gt;
 
-void uart_loopback(PicoDeGallo *gallo) {
-    /* Configure baud rate */
-    GalloStatus rc = gallo_uart_set_config(gallo, 115200);
-    if (rc != GALLO_STATUS_OK) {
+void uart_loopback(const PicoDeGallo *gallo) {
+    /* Configure 115200 8N1 */
+    Status rc = gallo_uart_set_config(
+        gallo,
+        115200,
+        GalloUartDataBits_Eight,
+        GalloUartParity_None,
+        GalloUartStopBits_One);
+    if (rc != Ok) {
         fprintf(stderr, "set-config failed: %d\n", rc);
         return;
     }
 
     /* Read back current config */
-    GalloUartConfigurationInfo info;
-    rc = gallo_uart_get_config(gallo, &amp;info);
-    if (rc != GALLO_STATUS_OK) {
+    uint32_t baud_rate;
+    uint8_t data_bits;
+    uint8_t parity;
+    uint8_t stop_bits;
+    rc = gallo_uart_get_config(
+        gallo, &amp;baud_rate, &amp;data_bits, &amp;parity, &amp;stop_bits);
+    if (rc != Ok) {
         fprintf(stderr, "get-config failed: %d\n", rc);
         return;
     }
-    printf("Baud rate: %u\n", info.baud_rate);
+    printf("Baud rate: %u\n", baud_rate);
 
     /* Write "Hello" */
     uint8_t tx[] = {0x48, 0x65, 0x6C, 0x6C, 0x6F};
     rc = gallo_uart_write(gallo, tx, sizeof(tx));
-    if (rc != GALLO_STATUS_OK) {
+    if (rc != Ok) {
         fprintf(stderr, "write failed: %d\n", rc);
         return;
     }
@@ -1790,7 +1859,7 @@ void uart_loopback(PicoDeGallo *gallo) {
     uint8_t rx[5];
     uint16_t out_read;
     rc = gallo_uart_read(gallo, rx, sizeof(rx), 100, &amp;out_read);
-    if (rc != GALLO_STATUS_OK) {
+    if (rc != Ok) {
         fprintf(stderr, "read failed: %d\n", rc);
         return;
     }
@@ -1845,7 +1914,7 @@ async fn uart_loopback_async(hal: &amp;Hal) {
 <h2 id="connecting-an-external-device"><a class="header" href="#connecting-an-external-device">Connecting an External Device</a></h2>
 <p>To communicate with an external UART device (e.g., a GPS module or
 microcontroller), connect:</p>
-<pre><code>Pico de Gallo          External Device
+<pre><code class="language-text">Pico de Gallo          External Device
 ──────────────         ───────────────
 GPIO 0 (TX) ────────── RX
 GPIO 1 (RX) ────────── TX
@@ -1857,10 +1926,10 @@ GND ────────────────── GND
 receive pin of the other.</p>
 </blockquote>
 <h2 id="non-blocking-read"><a class="header" href="#non-blocking-read">Non-blocking Read</a></h2>
-<p>A timeout of <strong>0</strong> performs a non-blocking read — it returns after a 1 ms poll
-with whatever bytes are already in the receive buffer (possibly none). This is
-a deliberate exception to GPIO wait semantics. Non-zero values above the
-firmware’s 30-minute ceiling are clamped to that ceiling:</p>
+<p>A timeout of <strong>0</strong> performs a single non-blocking poll and returns whatever
+bytes are already in the receive buffer (possibly none). This is a deliberate
+exception to GPIO wait semantics. Non-zero values above the firmware’s
+30-minute ceiling are clamped to that ceiling:</p>
 <pre><code class="language-bash"># Non-blocking: return whatever is buffered right now
 gallo uart read --count 64 --timeout 0
 </code></pre>
@@ -1869,7 +1938,7 @@ gallo uart read --count 64 --timeout 0
 </span>use pico_de_gallo_lib::PicoDeGallo;
 
 async fn drain_buffer(gallo: &amp;PicoDeGallo) -&gt; Vec&lt;u8&gt; {
-    // timeout_ms = 0 → 1 ms non-blocking poll
+    // timeout_ms = 0 → one non-blocking poll
     gallo.uart_read(64, 0).await.unwrap()
 }
 <span class="boring">}</span></code></pre>
@@ -1909,7 +1978,7 @@ transmitting and reports <code>BufferTooLong</code> for an over-ceiling call.</p
 <tr><td><code>uart_read</code></td><td><code>uart_read(count: u16, timeout_ms: u32) -&gt; Result&lt;Vec&lt;u8&gt;, PicoDeGalloError&lt;UartError&gt;&gt;</code></td></tr>
 <tr><td><code>uart_write</code></td><td><code>uart_write(contents: &amp;[u8]) -&gt; Result&lt;(), PicoDeGalloError&lt;UartError&gt;&gt;</code></td></tr>
 <tr><td><code>uart_flush</code></td><td><code>uart_flush() -&gt; Result&lt;(), PicoDeGalloError&lt;UartError&gt;&gt;</code></td></tr>
-<tr><td><code>uart_set_config</code></td><td><code>uart_set_config(baud_rate: u32) -&gt; Result&lt;(), PicoDeGalloError&lt;UartError&gt;&gt;</code></td></tr>
+<tr><td><code>uart_set_config</code></td><td><code>uart_set_config(baud_rate: u32, data_bits: UartDataBits, parity: UartParity, stop_bits: UartStopBits) -&gt; Result&lt;(), PicoDeGalloError&lt;UartError&gt;&gt;</code></td></tr>
 <tr><td><code>uart_get_config</code></td><td><code>uart_get_config() -&gt; Result&lt;UartConfigurationInfo, PicoDeGalloError&lt;UartError&gt;&gt;</code></td></tr>
 </tbody>
 </table>
@@ -1920,27 +1989,37 @@ transmitting and reports <code>BufferTooLong</code> for an over-ceiling call.</p
 listed above are async.</p>
 </blockquote>
 <h3 id="ffi-functions"><a class="header" href="#ffi-functions">FFI Functions</a></h3>
-<p>All FFI functions return a <code>GalloStatus</code> code:</p>
-<pre><code class="language-c">GalloStatus gallo_uart_read(PicoDeGallo *gallo,
-                            uint8_t *buf, uint16_t buf_len,
-                            uint32_t timeout_ms, uint16_t *out_read);
+<p>All FFI functions return a <code>Status</code> code:</p>
+<pre><code class="language-c">Status gallo_uart_read(const PicoDeGallo *gallo,
+                       uint8_t *buf, uint16_t buf_len,
+                       uint32_t timeout_ms, uint16_t *out_read);
 
-GalloStatus gallo_uart_write(PicoDeGallo *gallo,
-                             const uint8_t *buf, uint16_t len);
+Status gallo_uart_write(const PicoDeGallo *gallo,
+                        const uint8_t *buf, uint16_t len);
 
-GalloStatus gallo_uart_flush(PicoDeGallo *gallo);
+Status gallo_uart_flush(const PicoDeGallo *gallo);
 
-GalloStatus gallo_uart_set_config(PicoDeGallo *gallo, uint32_t baud_rate);
+Status gallo_uart_set_config(const PicoDeGallo *gallo,
+                             uint32_t baud_rate,
+                             uint8_t data_bits,
+                             uint8_t parity,
+                             uint8_t stop_bits);
 
-GalloStatus gallo_uart_get_config(PicoDeGallo *gallo,
-                                  GalloUartConfigurationInfo *out_info);
+Status gallo_uart_get_config(const PicoDeGallo *gallo,
+                             uint32_t *out_baud_rate,
+                             uint8_t *out_data_bits,
+                             uint8_t *out_parity,
+                             uint8_t *out_stop_bits);
 </code></pre>
 <h3 id="cli-commands"><a class="header" href="#cli-commands">CLI Commands</a></h3>
-<pre><code>gallo uart read       --count &lt;N&gt; --timeout &lt;MS&gt;
+<pre><code class="language-text">gallo uart read       --count &lt;N&gt; --timeout &lt;MS&gt;
 gallo uart write      --bytes &lt;BYTE&gt;...
 gallo uart flush
-gallo uart set-config --baud-rate &lt;RATE&gt;
+gallo uart set-config --baud-rate &lt;BAUD_RATE&gt; [--data-bits &lt;5|6|7|8&gt;] \
+                      [--parity &lt;none|odd|even|mark|space&gt;] \
+                      [--stop-bits &lt;1|2&gt;]
 gallo uart get-config
+gallo uart help
 </code></pre>
 <h2 id="pin-mapping"><a class="header" href="#pin-mapping">Pin Mapping</a></h2>
 <div class="table-wrapper">
@@ -3792,11 +3871,28 @@ chip-select.</p>
 <tr><td><code>read</code></td><td>Read bytes with a timeout</td></tr>
 <tr><td><code>write</code></td><td>Write raw bytes</td></tr>
 <tr><td><code>flush</code></td><td>Wait for the transmit buffer to drain</td></tr>
-<tr><td><code>set-config</code></td><td>Set baud rate</td></tr>
+<tr><td><code>set-config</code></td><td>Set baud rate, data bits, parity, and stop bits</td></tr>
 <tr><td><code>get-config</code></td><td>Show the active UART configuration</td></tr>
 </tbody>
 </table>
 </div>
+<pre><code class="language-console">Usage: gallo uart set-config [OPTIONS] --baud-rate &lt;BAUD_RATE&gt;
+
+Options:
+      --baud-rate &lt;BAUD_RATE&gt;   Baud rate in bits per second (e.g. 9600, 115200)
+      --data-bits &lt;DATA_BITS&gt;   Data bits per character [default: 8]
+                                [possible values: 5, 6, 7, 8]
+      --parity &lt;PARITY&gt;         Parity mode [default: none]
+                                [possible values: none, odd, even, mark, space]
+      --stop-bits &lt;STOP_BITS&gt;   Stop bits [default: 1]
+                                [possible values: 1, 2]
+  -h, --help                    Print help
+</code></pre>
+<p>The framing options are long-only. <code>set-config</code> replaces the complete
+configuration, so omitting them selects 8N1 and overwrites the active framing;
+repeat all three when changing only the baud rate. Baud and framing are applied
+together but not atomically: the divisor changes first and neither direction is
+drained, so quiesce transmit and receive traffic while reconfiguring.</p>
 <p>See the <a href="#uart">UART chapter</a>.</p>
 <h3 id="pwm-1"><a class="header" href="#pwm-1"><code>pwm</code></a></h3>
 <div class="table-wrapper">
@@ -3848,7 +3944,8 @@ chip-select.</p>
 <pre><code class="language-console">$ gallo ping
 $ gallo i2c get-config
 $ gallo spi get-config
-$ gallo uart set-config --baud-rate 115200
+$ gallo uart set-config --baud-rate 115200 --data-bits 8 \
+    --parity none --stop-bits 1
 $ gallo gpio monitor --pin 0 --edge rising
 $ gallo adc read --channel 0
 $ gallo onewire search
@@ -4159,11 +4256,11 @@ host already has a buffer waiting when the first edge arrives.</p>
 <tr><td><code>spi_batch</code></td><td><code>cs_pin</code>, <code>ops</code></td><td>Execute atomic multi-step SPI traffic under chip-select (see below)</td></tr>
 <tr><td><code>spi_set_config</code></td><td><code>spi_frequency</code>, <code>spi_phase</code>, <code>spi_polarity</code></td><td>Set SPI timing and mode</td></tr>
 <tr><td><code>spi_get_config</code></td><td>—</td><td>Read back the active SPI configuration</td></tr>
-<tr><td><code>uart_read</code></td><td><code>count</code>, <code>timeout_ms</code></td><td>Read up to <code>count</code> bytes; <code>0</code> is a 1 ms poll, oversized non-zero timeouts clamp at 30 minutes</td></tr>
+<tr><td><code>uart_read</code></td><td><code>count</code>, <code>timeout_ms</code></td><td>Read up to <code>count</code> bytes; <code>0</code> performs a single non-blocking poll and returns whatever is already buffered (possibly nothing), while oversized non-zero timeouts clamp at 30 minutes</td></tr>
 <tr><td><code>uart_write</code></td><td><code>contents</code></td><td>Queue bytes for UART transmit</td></tr>
 <tr><td><code>uart_flush</code></td><td>—</td><td>Wait until UART TX has drained</td></tr>
-<tr><td><code>uart_set_config</code></td><td><code>baud_rate</code></td><td>Set UART baud rate</td></tr>
-<tr><td><code>uart_get_config</code></td><td>—</td><td>Read back the active UART configuration</td></tr>
+<tr><td><code>uart_set_config</code></td><td><code>baud_rate</code>, <code>data_bits</code>, <code>parity</code>, <code>stop_bits</code></td><td>Replace the complete UART configuration</td></tr>
+<tr><td><code>uart_get_config</code></td><td>—</td><td>Return <code>UartConfigurationInfo</code> with the last requested baud rate, data bits, parity, and stop bits</td></tr>
 <tr><td><code>gpio_get</code></td><td><code>pin</code></td><td>Read a GPIO level</td></tr>
 <tr><td><code>gpio_put</code></td><td><code>pin</code>, <code>state</code></td><td>Drive a GPIO high or low</td></tr>
 <tr><td><code>gpio_wait_for_high</code></td><td><code>pin</code></td><td>Wait until a pin reads high, bounded by the 30-minute firmware ceiling</td></tr>
@@ -4209,6 +4306,33 @@ way: their aggregate outgoing bytes must fit one <code>MAX_REQUEST_FRAME</code>
 <code>PicoDeGalloError::Endpoint(...::BufferTooLong)</code>; see
 <a href="#buffertoolong-22">troubleshooting</a>.</p>
 </blockquote>
+<p><code>uart_set_config</code> takes <code>UartDataBits</code>, <code>UartParity</code>, and <code>UartStopBits</code> alongside
+the baud rate. It has no partial-update form: read <code>uart_get_config()</code> and pass
+the framing fields back when changing only the baud rate. The firmware applies
+the divisor before the framing and drains neither direction, so serialize UART
+access and quiesce both directions across reconfiguration.</p>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use pico_de_gallo_lib::{PicoDeGallo, UartDataBits, UartParity, UartStopBits};
+
+<span class="boring">async fn configure(gallo: &amp;PicoDeGallo) -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+</span>gallo
+    .uart_set_config(
+        115_200,
+        UartDataBits::Eight,
+        UartParity::None,
+        UartStopBits::One,
+    )
+    .await?;
+
+let active = gallo.uart_get_config().await?;
+println!(
+    "{} {:?} {:?} {:?}",
+    active.baud_rate, active.data_bits, active.parity, active.stop_bits,
+);
+<span class="boring">Ok(())
+</span><span class="boring">}
+</span><span class="boring">}</span></code></pre>
 <p>For the full API surface, field docs, and current signatures, use the crate
 reference on <a href="https://docs.rs/pico-de-gallo-lib">docs.rs</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div>
@@ -4298,6 +4422,11 @@ the returned handles implement the relevant blocking and async traits directly.<
 </div>
 <p>The UART row is feature-gated by <code>embedded-io</code> major version — see
 <a href="#feature-flags">Feature Flags</a> below.</p>
+<p>The <code>Uart</code> handle uses the baud rate and framing currently configured on the
+device; the HAL cannot change either. If a driver requires a particular UART
+configuration, apply it before using <code>hal.uart()</code> through <code>gallo uart set-config</code>, <code>pico-de-gallo-lib</code>, the C FFI, or Python. Do not reconfigure the
+same device concurrently with HAL reads or writes: firmware applies the baud
+divisor before the framing and drains neither direction.</p>
 <p>And two project-specific surfaces sit alongside the trait-based ones:</p>
 <div class="table-wrapper">
 <table>
@@ -4545,6 +4674,9 @@ already accept and return as <code>uint8_t</code>:</p>
 <tr><td><code>GalloGpioDirection</code></td><td><code>_Input</code> 0, <code>_Output</code> 1</td><td><code>gallo_gpio_set_config</code></td></tr>
 <tr><td><code>GalloGpioPull</code></td><td><code>_None</code> 0, <code>_Up</code> 1, <code>_Down</code> 2</td><td><code>gallo_gpio_set_config</code></td></tr>
 <tr><td><code>GalloGpioEdge</code></td><td><code>_Rising</code> 0, <code>_Falling</code> 1, <code>_Any</code> 2</td><td><code>gallo_gpio_subscribe</code></td></tr>
+<tr><td><code>GalloUartDataBits</code></td><td><code>_Five</code> 0, <code>_Six</code> 1, <code>_Seven</code> 2, <code>_Eight</code> 3</td><td><code>gallo_uart_set_config</code>, <code>gallo_uart_get_config</code></td></tr>
+<tr><td><code>GalloUartParity</code></td><td><code>_None</code> 0, <code>_Odd</code> 1, <code>_Even</code> 2, <code>_Mark</code> 3, <code>_Space</code> 4</td><td><code>gallo_uart_set_config</code>, <code>gallo_uart_get_config</code></td></tr>
+<tr><td><code>GalloUartStopBits</code></td><td><code>_One</code> 0, <code>_Two</code> 1</td><td><code>gallo_uart_set_config</code>, <code>gallo_uart_get_config</code></td></tr>
 <tr><td><code>GalloI2cBatchOpTag</code></td><td><code>_Read</code> 0, <code>_Write</code> 1</td><td><code>GalloI2cBatchOp::tag</code></td></tr>
 <tr><td><code>GalloSpiBatchOpTag</code></td><td><code>_Read</code> 0, <code>_Write</code> 1, <code>_Transfer</code> 2, <code>_DelayNs</code> 3</td><td><code>GalloSpiBatchOp::tag</code></td></tr>
 </tbody>
@@ -4762,14 +4894,30 @@ ceiling, oversized values are clamped to it, and expiry returns
                        uint8_t *buf, uint16_t count,
                        uint32_t timeout_ms, uint16_t *out_len);
 Status gallo_uart_write(const PicoDeGallo *gallo,
-                        const uint8_t *buf, uint16_t len);
+                         const uint8_t *buf, uint16_t len);
 Status gallo_uart_flush(const PicoDeGallo *gallo);
-Status gallo_uart_set_config(const PicoDeGallo *gallo, uint32_t baud_rate);
-Status gallo_uart_get_config(const PicoDeGallo *gallo, uint32_t *out_baud_rate);
+Status gallo_uart_set_config(const PicoDeGallo *gallo,
+                             uint32_t baud_rate,
+                             uint8_t data_bits,
+                             uint8_t parity,
+                             uint8_t stop_bits);
+Status gallo_uart_get_config(const PicoDeGallo *gallo,
+                             uint32_t *out_baud_rate,
+                             uint8_t *out_data_bits,
+                             uint8_t *out_parity,
+                             uint8_t *out_stop_bits);
 </code></pre>
-<p>For <code>gallo_uart_read</code>, <code>timeout_ms == 0</code> is a deliberate exception: it selects
-a 1 ms non-blocking poll. Non-zero values above the firmware’s 30-minute
-ceiling are clamped to it; expiry returns success with <code>*out_len == 0</code>.</p>
+<p>For <code>gallo_uart_read</code>, <code>timeout_ms == 0</code> is a deliberate exception: it performs
+a single non-blocking poll and returns whatever is already buffered (possibly
+nothing). Non-zero values above the firmware’s 30-minute ceiling are clamped to
+it; expiry returns success with <code>*out_len == 0</code>.</p>
+<p>The three framing arguments and outputs use <code>GalloUartDataBits</code>,
+<code>GalloUartParity</code>, and <code>GalloUartStopBits</code>; values outside those enums return
+<code>InvalidArgument</code>. The C API has no defaults: <code>gallo_uart_set_config</code> replaces
+the complete configuration, so a baud-only change must first read and then
+repeat the active framing. The firmware applies the divisor before the framing
+and drains neither direction, making the transition non-atomic; quiesce UART
+traffic across the call.</p>
 <h3 id="pwm-2"><a class="header" href="#pwm-2">PWM</a></h3>
 <pre><code class="language-c">Status gallo_pwm_set_duty_cycle(const PicoDeGallo *gallo,
                                 uint8_t channel, uint16_t duty);
@@ -5037,6 +5185,9 @@ plain Python-facing names like:</p>
 <li><code>GpioDirection</code></li>
 <li><code>GpioPull</code></li>
 <li><code>GpioEdge</code></li>
+<li><code>UartDataBits</code></li>
+<li><code>UartParity</code></li>
+<li><code>UartStopBits</code></li>
 <li><code>VersionInfo</code></li>
 <li><code>DeviceInfo</code></li>
 <li><code>UartConfigurationInfo</code></li>
@@ -5055,6 +5206,25 @@ pg.spi_set_config(
     gallo.SpiPhase.CaptureOnFirstTransition,
     gallo.SpiPolarity.IdleLow,
 )
+</code></pre>
+<p>UART parity has one Python-specific spelling: use <code>UartParity.NoParity</code>, not
+<code>UartParity.None</code>. The latter is a Python <code>SyntaxError</code> because <code>None</code> is a
+keyword. Only the binding name changes—the member is never renumbered and still
+maps to wire index 0; the wire enum, FFI enum, and generated C header all retain
+the name <code>None</code>.</p>
+<p><code>uart_set_config(baud_rate, data_bits, parity, stop_bits)</code> defaults its framing
+arguments to 8N1, but it replaces the complete configuration rather than
+performing a partial update. A baud-only change must repeat the current framing.
+Baud and framing are applied together but not atomically: the divisor changes
+first and neither direction is drained, so pause UART traffic across the call.</p>
+<pre><code class="language-python">pg.uart_set_config(
+    115_200,
+    gallo.UartDataBits.Eight,
+    gallo.UartParity.NoParity,
+    gallo.UartStopBits.One,
+)
+active = pg.uart_get_config()
+print(active.baud_rate, active.data_bits, active.parity, active.stop_bits)
 </code></pre>
 <h2 id="example-i2c-register-read"><a class="header" href="#example-i2c-register-read">Example: I<sup>2</sup>C Register Read</a></h2>
 <blockquote class="blockquote-tag blockquote-tag-note">
@@ -5125,7 +5295,12 @@ sub.close()
 pg = gallo.open()
 
 try:
-    pg.uart_set_config(0)
+    pg.uart_set_config(
+        0,
+        gallo.UartDataBits.Eight,
+        gallo.UartParity.NoParity,
+        gallo.UartStopBits.One,
+    )
 except RuntimeError as exc:
     print(f"operation failed: {exc}")
 </code></pre>
@@ -5460,10 +5635,25 @@ firmware, or schema mismatch — is <code>-32603</code> (internal error), never
 <tr><td><code>uart_get_config</code></td><td>Show the active UART configuration</td><td>read-only</td></tr>
 <tr><td><code>uart_write</code></td><td>Write raw bytes</td><td>destructive</td></tr>
 <tr><td><code>uart_flush</code></td><td>Drain the transmit buffer</td><td>destructive</td></tr>
-<tr><td><code>uart_set_config</code></td><td>Set baud rate</td><td>destructive</td></tr>
+<tr><td><code>uart_set_config</code></td><td>Set baud rate, data bits, parity, and stop bits</td><td>destructive</td></tr>
 </tbody>
 </table>
 </div>
+<p><code>uart_set_config</code> requires <code>baud_rate</code> and accepts optional string fields
+<code>data_bits</code> (<code>"5"</code>–<code>"8"</code>), <code>parity</code> (<code>"none"</code>, <code>"odd"</code>, <code>"even"</code>, <code>"mark"</code>,
+or <code>"space"</code>), <code>stop_bits</code> (<code>"1"</code> or <code>"2"</code>), and <code>serial_number</code>. Omitting a
+framing field selects its 8N1 power-on value and overwrites the previous value,
+because the tool replaces the complete configuration. Repeat the framing fields
+for a baud-only change.</p>
+<pre><code class="language-json">// uart_set_config
+{"baud_rate":9600,"data_bits":"7","parity":"even","stop_bits":"2"}
+</code></pre>
+<p>Unlike write and flush, the result is not a bare <code>"ok"</code>: it returns the applied
+<code>baud_rate</code>, <code>data_bits</code>, <code>parity</code>, and <code>stop_bits</code> inside the usual
+<code>{ "serial_number", "result" }</code> envelope. These spellings can be passed directly
+to a later <code>uart_set_config</code> call. Reconfiguration is not atomic—the divisor is
+applied before framing and neither direction is drained—so quiesce transmit and
+receive traffic during the call.</p>
 <h3 id="gpio-3"><a class="header" href="#gpio-3">gpio</a></h3>
 <div class="table-wrapper">
 <table>
@@ -5532,9 +5722,9 @@ ceiling is undesirable, and event streaming is out of scope for v1.
 Oversized non-zero values are clamped to the same ceiling; expiry returns
 the GPIO endpoint’s <code>Timeout</code> error.</p>
 <p><code>uart_read</code>’s <code>timeout_ms</code> is <strong>not</strong> covered by that rule: there <code>0</code> is
-legal and means a non-blocking poll that returns whatever is already
-buffered after 1 ms. Its non-zero path is clamped to the 30-minute ceiling.
-The asymmetry is deliberate.</p>
+legal and performs a single non-blocking poll, returning whatever is already
+buffered (possibly nothing). Its non-zero path is clamped to the 30-minute
+ceiling. The asymmetry is deliberate.</p>
 <p><code>uart_read</code> is also one of the twelve tools that hard-fail on a
 <code>hw-rev1</code> board: that revision supports only I<sup>2</sup>C, SPI, GPIO,
 and PWM, so every <code>uart_*</code>, <code>adc_*</code>, and <code>onewire_*</code> call returns
@@ -7126,6 +7316,70 @@ SVD: the DesignWare <code>IC_CON</code> register resets to <code>0x00000065</cod
 <code>I2cBatchError.failed_op</code>. A bus failure applies to the atomic transaction as
 a whole and cannot be attributed to one operation, so it reports
 <code>failed_op = 0</code>.</p>
+<h2 id="uart-framing-contract"><a class="header" href="#uart-framing-contract">UART framing contract</a></h2>
+<p>The UART framing enums are wire-visible and serialized by variant index. Their
+deployed order in <code>crates/pico-de-gallo-internal/src/lib.rs</code> is:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Type</th><th style="text-align: right">Index</th><th>Variant</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>UartDataBits</code></td><td style="text-align: right">0</td><td><code>Five</code></td><td>Five data bits</td></tr>
+<tr><td><code>UartDataBits</code></td><td style="text-align: right">1</td><td><code>Six</code></td><td>Six data bits</td></tr>
+<tr><td><code>UartDataBits</code></td><td style="text-align: right">2</td><td><code>Seven</code></td><td>Seven data bits</td></tr>
+<tr><td><code>UartDataBits</code></td><td style="text-align: right">3</td><td><code>Eight</code></td><td>Eight data bits; power-on default</td></tr>
+<tr><td><code>UartParity</code></td><td style="text-align: right">0</td><td><code>None</code></td><td>No parity bit; firmware default</td></tr>
+<tr><td><code>UartParity</code></td><td style="text-align: right">1</td><td><code>Odd</code></td><td>Odd parity</td></tr>
+<tr><td><code>UartParity</code></td><td style="text-align: right">2</td><td><code>Even</code></td><td>Even parity</td></tr>
+<tr><td><code>UartParity</code></td><td style="text-align: right">3</td><td><code>Mark</code></td><td>Parity bit always 1</td></tr>
+<tr><td><code>UartParity</code></td><td style="text-align: right">4</td><td><code>Space</code></td><td>Parity bit always 0</td></tr>
+<tr><td><code>UartStopBits</code></td><td style="text-align: right">0</td><td><code>One</code></td><td>One stop bit; firmware default</td></tr>
+<tr><td><code>UartStopBits</code></td><td style="text-align: right">1</td><td><code>Two</code></td><td>Two stop bits</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>UartStopBits</code> deliberately does <strong>not</strong> use Zephyr’s numbering. Zephyr assigns
+<code>UART_CFG_STOP_BITS_0_5 = 0</code>, <code>_1 = 1</code>, <code>_1_5 = 2</code>, and <code>_2 = 3</code>. The RP2350
+PL011 exposes only the <code>STP2</code> bit, so 0.5 and 1.5 stop bits are unreachable.
+The wire enum therefore uses the dense <code>One = 0</code>, <code>Two = 1</code> encoding instead
+of preserving two permanently unrepresentable holes. Consumers must map these
+values explicitly; changing their order to match Zephyr would be a wire break.</p>
+<p>The configuration endpoints carry the complete framing tuple:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Path</th><th>Request type</th><th>Response type</th></tr>
+</thead>
+<tbody>
+<tr><td><code>uart/set-config</code></td><td><code>UartSetConfigurationRequest</code></td><td><code>Result&lt;(), UartError&gt;</code></td></tr>
+<tr><td><code>uart/get-config</code></td><td><code>()</code></td><td><code>Result&lt;UartConfigurationInfo, UartError&gt;</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Both configuration structs contain the same fields, in the same order:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Field</th><th>Type</th></tr>
+</thead>
+<tbody>
+<tr><td><code>baud_rate</code></td><td><code>u32</code></td></tr>
+<tr><td><code>data_bits</code></td><td><code>UartDataBits</code></td></tr>
+<tr><td><code>parity</code></td><td><code>UartParity</code></td></tr>
+<tr><td><code>stop_bits</code></td><td><code>UartStopBits</code></td></tr>
+</tbody>
+</table>
+</div>
+<p><code>uart/get-config</code> reports the last successfully requested values from the
+firmware’s software shadow, not a register read-back. In particular,
+<code>baud_rate</code> is the requested rate rather than the divisor-rounded rate.</p>
+<p>This wire-shape change did not move a package version. It rides the already
+pending, unreleased schema 0.8 change:
+<code>crates/pico-de-gallo-internal/Cargo.toml</code> currently declares version <code>0.8.0</code>,
+and that crate’s <code>build.rs</code> derives
+<code>SCHEMA_VERSION_MAJOR</code>, <code>SCHEMA_VERSION_MINOR</code>, and <code>SCHEMA_VERSION_PATCH</code> as
+0, 8, and 0. Firmware built from this tree therefore reports schema v0.8.0.</p>
 <h2 id="spi-chip-select-contract"><a class="header" href="#spi-chip-select-contract">SPI chip-select contract</a></h2>
 <p><code>SpiError</code> is serialized by variant index. The deployed indices are:</p>
 <div class="table-wrapper">
@@ -7468,6 +7722,34 @@ cargo build --release --locked --target thumbv8m.main-none-eabihf \
 <li>ADC reads are single-shot samples on GPIO 26-29 in firmware, with board
 routing exposing ADC0-2 on current hardware.</li>
 </ul>
+<h3 id="uart-reads-framing-and-supervision"><a class="header" href="#uart-reads-framing-and-supervision">UART reads, framing, and supervision</a></h3>
+<p><code>uart/read</code> treats <code>timeout_ms == 0</code> as a true single poll. The handler uses
+<code>embassy_futures::poll_once</code> on <code>AsyncRead::read()</code> and returns an empty result
+when that one poll is pending; it does not wait through a nominal one-millisecond
+timer. This matters to polling clients such as Zephyr’s <code>uart_poll_in()</code>, which
+otherwise pay a timeout on every idle check. It also deliberately reaches
+Embassy’s read path rather than consulting only <code>ReadReady</code>: polling the read is
+what consumes a latched receive error and re-enables RX interrupts.</p>
+<p>Runtime framing is applied directly to UART0’s <code>UARTLCR_H</code> register because
+embassy-rp exposes no runtime framing setter. <code>apply_framing()</code> maps word length
+to <code>WLEN</code>, enables parity with <code>PEN</code>, selects even or space parity with <code>EPS</code>,
+selects mark/space stick parity with <code>SPS</code>, and selects two stop bits with
+<code>STP2</code>. The function follows embassy-rp’s disable, delay, register-write, and
+restore sequence.</p>
+<p>Baud and framing are not applied atomically. <code>uart/set-config</code> calls
+<code>set_baudrate()</code> first, and that function restores an enabled <code>UARTCR</code> before
+<code>apply_framing()</code> runs. The pins therefore have a brief window with the new
+divisor and the old framing. The handler drains neither direction; callers must
+quiesce transmit and receive traffic before reconfiguration.</p>
+<p><code>uart/get-config</code> returns <code>Context::uart_config</code>, a software shadow updated
+after the two configuration steps. It is not a register read-back and therefore
+is never evidence of what the hardware is actually doing. In particular, it
+reports the requested baud rate rather than the line rate achieved after divisor
+rounding.</p>
+<p>Both <code>uart/write</code> and <code>uart/flush</code> declare the fixed 60-second
+<code>UART_TX_BUDGET</code>. The ordinary dispatch budget is too short for the 1024-byte TX
+ring to drain at low baud rates; the explicit budget keeps a legitimate slow
+transmit from being mistaken for a wedged handler.</p>
 <h3 id="i²c-batch-transaction-handling"><a class="header" href="#i²c-batch-transaction-handling">I²C batch transaction handling</a></h3>
 <p><code>i2c/batch</code> uses two decode passes. The first validates the operation count,
 encoding, declared count, total read size, and every write payload before the
@@ -7592,7 +7874,11 @@ release cycle.</p>
 <p>Nothing enforces wire coupling for you. If a protocol change lands without its
 matching host and firmware version bumps, users will feel it.</p>
 </blockquote>
-<h3 id="schema-08-changed-deviceinfo-so-07-pairs-fail-opaquely"><a class="header" href="#schema-08-changed-deviceinfo-so-07-pairs-fail-opaquely">Schema 0.8 changed <code>DeviceInfo</code>, so 0.7 pairs fail opaquely</a></h3>
+<h3 id="unreleased-schema-08-changes"><a class="header" href="#unreleased-schema-08-changes">Unreleased schema 0.8 changes</a></h3>
+<p>Schema 0.8 is still in flight: <code>internal-v0.7.0</code> is the latest published
+protocol tag. Until 0.8 is released, build the host and firmware from the same
+tree rather than treating two builds that both report 0.8.0 as interchangeable.</p>
+<h4 id="deviceinfo-changed-so-07-pairs-fail-opaquely"><a class="header" href="#deviceinfo-changed-so-07-pairs-fail-opaquely"><code>DeviceInfo</code> changed, so 0.7 pairs fail opaquely</a></h4>
 <p>Schema <strong>0.8</strong> appended <code>build_id</code> to <code>DeviceInfo</code>. That is an append in the
 encoding, but <code>DeviceInfo</code> is not an ordinary wire type: postcard-rpc derives
 each endpoint’s key from its response type’s schema, so changing it re-keyed
@@ -7612,6 +7898,24 @@ reads the <code>version</code> endpoint, whose <code>VersionInfo</code> schema i
 stable precisely so one diagnostic survives a <code>device/info</code> re-key.</p>
 <p>The fix is the usual one — build both sides from the same release. Schema 0.7
 and 0.8 firmware and host components must not be mixed.</p>
+<h4 id="uart-configuration-gained-framing"><a class="header" href="#uart-configuration-gained-framing">UART configuration gained framing</a></h4>
+<p>The same unreleased schema 0.8 development cycle expanded both
+<code>UartSetConfigurationRequest</code> and <code>UartConfigurationInfo</code> from a baud rate alone
+to four fields: baud rate, data bits, parity, and stop bits. It also added three
+wire enums, in this exact source order:</p>
+<ul>
+<li><code>UartDataBits</code>: <code>Five</code>, <code>Six</code>, <code>Seven</code>, <code>Eight</code>;</li>
+<li><code>UartParity</code>: <code>None</code>, <code>Odd</code>, <code>Even</code>, <code>Mark</code>, <code>Space</code>;</li>
+<li><code>UartStopBits</code>: <code>One</code>, <code>Two</code>.</li>
+</ul>
+<p>That order is ABI. Postcard serializes enum variants by index, so reordering an
+existing variant silently changes the wire protocol even though the Rust enum
+still compiles.</p>
+<p>Because these request and response shapes changed while 0.8.0 remains
+unreleased, a host and firmware built from different commits of this in-flight
+schema can disagree while both report version 0.8.0. Build both sides from the
+same tree until schema 0.8.0 is released. The shared version number alone cannot
+distinguish an earlier baud-only 0.8 build from a later framing-aware one.</p>
 <h2 id="how-users-check-compatibility"><a class="header" href="#how-users-check-compatibility">How users check compatibility</a></h2>
 <p>There are two main compatibility checks:</p>
 <ul>
@@ -7760,7 +8064,7 @@ that doesn’t appear in your header means success.</p>
 </table>
 </div>
 <p><code>CallTimeout</code> (−76) means the request was transmitted but no reply arrived.
-It is deliberately distinct from <code>CommsFailed</code> (−20): the transport is
+It is deliberately distinct from <code>CommsFailed</code> (−25): the transport is
 healthy and the device very likely is too, so it is not a link failure. It
 is also distinct from <code>DeviceInfoTimeout</code> (−75), which covers only the
 validated metadata fetch and has a far longer bound. The handle stays
@@ -7833,8 +8137,8 @@ from.</p>
 <tr><td><code>uart/read</code></td><td>Read with timeout.</td></tr>
 <tr><td><code>uart/write</code></td><td>Write bytes.</td></tr>
 <tr><td><code>uart/flush</code></td><td>Drain the TX FIFO.</td></tr>
-<tr><td><code>uart/set-config</code></td><td>Set baud rate.</td></tr>
-<tr><td><code>uart/get-config</code></td><td>Query current UART configuration.</td></tr>
+<tr><td><code>uart/set-config</code></td><td>Set baud rate and framing (data bits, parity, stop bits).</td></tr>
+<tr><td><code>uart/get-config</code></td><td>Query current UART baud rate and framing.</td></tr>
 <tr><td><code>gpio/get</code></td><td>Read a pin.</td></tr>
 <tr><td><code>gpio/put</code></td><td>Write a pin.</td></tr>
 <tr><td><code>gpio/wait-high</code></td><td>Block until pin is high.</td></tr>

@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-23fb8a90.js";
+            window.path_to_searchindex_js = "../searchindex-021ab968.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3e975730.js"></script>
@@ -382,6 +382,70 @@ SVD: the DesignWare <code>IC_CON</code> register resets to <code>0x00000065</cod
 <code>I2cBatchError.failed_op</code>. A bus failure applies to the atomic transaction as
 a whole and cannot be attributed to one operation, so it reports
 <code>failed_op = 0</code>.</p>
+<h2 id="uart-framing-contract"><a class="header" href="#uart-framing-contract">UART framing contract</a></h2>
+<p>The UART framing enums are wire-visible and serialized by variant index. Their
+deployed order in <code>crates/pico-de-gallo-internal/src/lib.rs</code> is:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Type</th><th style="text-align: right">Index</th><th>Variant</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>UartDataBits</code></td><td style="text-align: right">0</td><td><code>Five</code></td><td>Five data bits</td></tr>
+<tr><td><code>UartDataBits</code></td><td style="text-align: right">1</td><td><code>Six</code></td><td>Six data bits</td></tr>
+<tr><td><code>UartDataBits</code></td><td style="text-align: right">2</td><td><code>Seven</code></td><td>Seven data bits</td></tr>
+<tr><td><code>UartDataBits</code></td><td style="text-align: right">3</td><td><code>Eight</code></td><td>Eight data bits; power-on default</td></tr>
+<tr><td><code>UartParity</code></td><td style="text-align: right">0</td><td><code>None</code></td><td>No parity bit; firmware default</td></tr>
+<tr><td><code>UartParity</code></td><td style="text-align: right">1</td><td><code>Odd</code></td><td>Odd parity</td></tr>
+<tr><td><code>UartParity</code></td><td style="text-align: right">2</td><td><code>Even</code></td><td>Even parity</td></tr>
+<tr><td><code>UartParity</code></td><td style="text-align: right">3</td><td><code>Mark</code></td><td>Parity bit always 1</td></tr>
+<tr><td><code>UartParity</code></td><td style="text-align: right">4</td><td><code>Space</code></td><td>Parity bit always 0</td></tr>
+<tr><td><code>UartStopBits</code></td><td style="text-align: right">0</td><td><code>One</code></td><td>One stop bit; firmware default</td></tr>
+<tr><td><code>UartStopBits</code></td><td style="text-align: right">1</td><td><code>Two</code></td><td>Two stop bits</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>UartStopBits</code> deliberately does <strong>not</strong> use Zephyr’s numbering. Zephyr assigns
+<code>UART_CFG_STOP_BITS_0_5 = 0</code>, <code>_1 = 1</code>, <code>_1_5 = 2</code>, and <code>_2 = 3</code>. The RP2350
+PL011 exposes only the <code>STP2</code> bit, so 0.5 and 1.5 stop bits are unreachable.
+The wire enum therefore uses the dense <code>One = 0</code>, <code>Two = 1</code> encoding instead
+of preserving two permanently unrepresentable holes. Consumers must map these
+values explicitly; changing their order to match Zephyr would be a wire break.</p>
+<p>The configuration endpoints carry the complete framing tuple:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Path</th><th>Request type</th><th>Response type</th></tr>
+</thead>
+<tbody>
+<tr><td><code>uart/set-config</code></td><td><code>UartSetConfigurationRequest</code></td><td><code>Result&lt;(), UartError&gt;</code></td></tr>
+<tr><td><code>uart/get-config</code></td><td><code>()</code></td><td><code>Result&lt;UartConfigurationInfo, UartError&gt;</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Both configuration structs contain the same fields, in the same order:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Field</th><th>Type</th></tr>
+</thead>
+<tbody>
+<tr><td><code>baud_rate</code></td><td><code>u32</code></td></tr>
+<tr><td><code>data_bits</code></td><td><code>UartDataBits</code></td></tr>
+<tr><td><code>parity</code></td><td><code>UartParity</code></td></tr>
+<tr><td><code>stop_bits</code></td><td><code>UartStopBits</code></td></tr>
+</tbody>
+</table>
+</div>
+<p><code>uart/get-config</code> reports the last successfully requested values from the
+firmware’s software shadow, not a register read-back. In particular,
+<code>baud_rate</code> is the requested rate rather than the divisor-rounded rate.</p>
+<p>This wire-shape change did not move a package version. It rides the already
+pending, unreleased schema 0.8 change:
+<code>crates/pico-de-gallo-internal/Cargo.toml</code> currently declares version <code>0.8.0</code>,
+and that crate’s <code>build.rs</code> derives
+<code>SCHEMA_VERSION_MAJOR</code>, <code>SCHEMA_VERSION_MINOR</code>, and <code>SCHEMA_VERSION_PATCH</code> as
+0, 8, and 0. Firmware built from this tree therefore reports schema v0.8.0.</p>
 <h2 id="spi-chip-select-contract"><a class="header" href="#spi-chip-select-contract">SPI chip-select contract</a></h2>
 <p><code>SpiError</code> is serialized by variant index. The deployed indices are:</p>
 <div class="table-wrapper">

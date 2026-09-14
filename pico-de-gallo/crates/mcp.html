@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-23fb8a90.js";
+            window.path_to_searchindex_js = "../searchindex-021ab968.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3e975730.js"></script>
@@ -499,10 +499,25 @@ firmware, or schema mismatch — is <code>-32603</code> (internal error), never
 <tr><td><code>uart_get_config</code></td><td>Show the active UART configuration</td><td>read-only</td></tr>
 <tr><td><code>uart_write</code></td><td>Write raw bytes</td><td>destructive</td></tr>
 <tr><td><code>uart_flush</code></td><td>Drain the transmit buffer</td><td>destructive</td></tr>
-<tr><td><code>uart_set_config</code></td><td>Set baud rate</td><td>destructive</td></tr>
+<tr><td><code>uart_set_config</code></td><td>Set baud rate, data bits, parity, and stop bits</td><td>destructive</td></tr>
 </tbody>
 </table>
 </div>
+<p><code>uart_set_config</code> requires <code>baud_rate</code> and accepts optional string fields
+<code>data_bits</code> (<code>"5"</code>–<code>"8"</code>), <code>parity</code> (<code>"none"</code>, <code>"odd"</code>, <code>"even"</code>, <code>"mark"</code>,
+or <code>"space"</code>), <code>stop_bits</code> (<code>"1"</code> or <code>"2"</code>), and <code>serial_number</code>. Omitting a
+framing field selects its 8N1 power-on value and overwrites the previous value,
+because the tool replaces the complete configuration. Repeat the framing fields
+for a baud-only change.</p>
+<pre><code class="language-json">// uart_set_config
+{"baud_rate":9600,"data_bits":"7","parity":"even","stop_bits":"2"}
+</code></pre>
+<p>Unlike write and flush, the result is not a bare <code>"ok"</code>: it returns the applied
+<code>baud_rate</code>, <code>data_bits</code>, <code>parity</code>, and <code>stop_bits</code> inside the usual
+<code>{ "serial_number", "result" }</code> envelope. These spellings can be passed directly
+to a later <code>uart_set_config</code> call. Reconfiguration is not atomic—the divisor is
+applied before framing and neither direction is drained—so quiesce transmit and
+receive traffic during the call.</p>
 <h3 id="gpio"><a class="header" href="#gpio">gpio</a></h3>
 <div class="table-wrapper">
 <table>
@@ -571,9 +586,9 @@ ceiling is undesirable, and event streaming is out of scope for v1.
 Oversized non-zero values are clamped to the same ceiling; expiry returns
 the GPIO endpoint’s <code>Timeout</code> error.</p>
 <p><code>uart_read</code>’s <code>timeout_ms</code> is <strong>not</strong> covered by that rule: there <code>0</code> is
-legal and means a non-blocking poll that returns whatever is already
-buffered after 1 ms. Its non-zero path is clamped to the 30-minute ceiling.
-The asymmetry is deliberate.</p>
+legal and performs a single non-blocking poll, returning whatever is already
+buffered (possibly nothing). Its non-zero path is clamped to the 30-minute
+ceiling. The asymmetry is deliberate.</p>
 <p><code>uart_read</code> is also one of the twelve tools that hard-fail on a
 <code>hw-rev1</code> board: that revision supports only I<sup>2</sup>C, SPI, GPIO,
 and PWM, so every <code>uart_*</code>, <code>adc_*</code>, and <code>onewire_*</code> call returns

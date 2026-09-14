@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-23fb8a90.js";
+            window.path_to_searchindex_js = "../searchindex-021ab968.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3e975730.js"></script>
@@ -293,6 +293,9 @@ already accept and return as <code>uint8_t</code>:</p>
 <tr><td><code>GalloGpioDirection</code></td><td><code>_Input</code> 0, <code>_Output</code> 1</td><td><code>gallo_gpio_set_config</code></td></tr>
 <tr><td><code>GalloGpioPull</code></td><td><code>_None</code> 0, <code>_Up</code> 1, <code>_Down</code> 2</td><td><code>gallo_gpio_set_config</code></td></tr>
 <tr><td><code>GalloGpioEdge</code></td><td><code>_Rising</code> 0, <code>_Falling</code> 1, <code>_Any</code> 2</td><td><code>gallo_gpio_subscribe</code></td></tr>
+<tr><td><code>GalloUartDataBits</code></td><td><code>_Five</code> 0, <code>_Six</code> 1, <code>_Seven</code> 2, <code>_Eight</code> 3</td><td><code>gallo_uart_set_config</code>, <code>gallo_uart_get_config</code></td></tr>
+<tr><td><code>GalloUartParity</code></td><td><code>_None</code> 0, <code>_Odd</code> 1, <code>_Even</code> 2, <code>_Mark</code> 3, <code>_Space</code> 4</td><td><code>gallo_uart_set_config</code>, <code>gallo_uart_get_config</code></td></tr>
+<tr><td><code>GalloUartStopBits</code></td><td><code>_One</code> 0, <code>_Two</code> 1</td><td><code>gallo_uart_set_config</code>, <code>gallo_uart_get_config</code></td></tr>
 <tr><td><code>GalloI2cBatchOpTag</code></td><td><code>_Read</code> 0, <code>_Write</code> 1</td><td><code>GalloI2cBatchOp::tag</code></td></tr>
 <tr><td><code>GalloSpiBatchOpTag</code></td><td><code>_Read</code> 0, <code>_Write</code> 1, <code>_Transfer</code> 2, <code>_DelayNs</code> 3</td><td><code>GalloSpiBatchOp::tag</code></td></tr>
 </tbody>
@@ -510,14 +513,30 @@ ceiling, oversized values are clamped to it, and expiry returns
                        uint8_t *buf, uint16_t count,
                        uint32_t timeout_ms, uint16_t *out_len);
 Status gallo_uart_write(const PicoDeGallo *gallo,
-                        const uint8_t *buf, uint16_t len);
+                         const uint8_t *buf, uint16_t len);
 Status gallo_uart_flush(const PicoDeGallo *gallo);
-Status gallo_uart_set_config(const PicoDeGallo *gallo, uint32_t baud_rate);
-Status gallo_uart_get_config(const PicoDeGallo *gallo, uint32_t *out_baud_rate);
+Status gallo_uart_set_config(const PicoDeGallo *gallo,
+                             uint32_t baud_rate,
+                             uint8_t data_bits,
+                             uint8_t parity,
+                             uint8_t stop_bits);
+Status gallo_uart_get_config(const PicoDeGallo *gallo,
+                             uint32_t *out_baud_rate,
+                             uint8_t *out_data_bits,
+                             uint8_t *out_parity,
+                             uint8_t *out_stop_bits);
 </code></pre>
-<p>For <code>gallo_uart_read</code>, <code>timeout_ms == 0</code> is a deliberate exception: it selects
-a 1 ms non-blocking poll. Non-zero values above the firmware’s 30-minute
-ceiling are clamped to it; expiry returns success with <code>*out_len == 0</code>.</p>
+<p>For <code>gallo_uart_read</code>, <code>timeout_ms == 0</code> is a deliberate exception: it performs
+a single non-blocking poll and returns whatever is already buffered (possibly
+nothing). Non-zero values above the firmware’s 30-minute ceiling are clamped to
+it; expiry returns success with <code>*out_len == 0</code>.</p>
+<p>The three framing arguments and outputs use <code>GalloUartDataBits</code>,
+<code>GalloUartParity</code>, and <code>GalloUartStopBits</code>; values outside those enums return
+<code>InvalidArgument</code>. The C API has no defaults: <code>gallo_uart_set_config</code> replaces
+the complete configuration, so a baud-only change must first read and then
+repeat the active framing. The firmware applies the divisor before the framing
+and drains neither direction, making the transition non-atomic; quiesce UART
+traffic across the call.</p>
 <h3 id="pwm"><a class="header" href="#pwm">PWM</a></h3>
 <pre><code class="language-c">Status gallo_pwm_set_duty_cycle(const PicoDeGallo *gallo,
                                 uint8_t channel, uint16_t duty);

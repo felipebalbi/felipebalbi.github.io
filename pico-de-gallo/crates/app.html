@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-23fb8a90.js";
+            window.path_to_searchindex_js = "../searchindex-021ab968.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3e975730.js"></script>
@@ -386,11 +386,28 @@ chip-select.</p>
 <tr><td><code>read</code></td><td>Read bytes with a timeout</td></tr>
 <tr><td><code>write</code></td><td>Write raw bytes</td></tr>
 <tr><td><code>flush</code></td><td>Wait for the transmit buffer to drain</td></tr>
-<tr><td><code>set-config</code></td><td>Set baud rate</td></tr>
+<tr><td><code>set-config</code></td><td>Set baud rate, data bits, parity, and stop bits</td></tr>
 <tr><td><code>get-config</code></td><td>Show the active UART configuration</td></tr>
 </tbody>
 </table>
 </div>
+<pre><code class="language-console">Usage: gallo uart set-config [OPTIONS] --baud-rate &lt;BAUD_RATE&gt;
+
+Options:
+      --baud-rate &lt;BAUD_RATE&gt;   Baud rate in bits per second (e.g. 9600, 115200)
+      --data-bits &lt;DATA_BITS&gt;   Data bits per character [default: 8]
+                                [possible values: 5, 6, 7, 8]
+      --parity &lt;PARITY&gt;         Parity mode [default: none]
+                                [possible values: none, odd, even, mark, space]
+      --stop-bits &lt;STOP_BITS&gt;   Stop bits [default: 1]
+                                [possible values: 1, 2]
+  -h, --help                    Print help
+</code></pre>
+<p>The framing options are long-only. <code>set-config</code> replaces the complete
+configuration, so omitting them selects 8N1 and overwrites the active framing;
+repeat all three when changing only the baud rate. Baud and framing are applied
+together but not atomically: the divisor changes first and neither direction is
+drained, so quiesce transmit and receive traffic while reconfiguring.</p>
 <p>See the <a href="../interfaces/uart.html">UART chapter</a>.</p>
 <h3 id="pwm"><a class="header" href="#pwm"><code>pwm</code></a></h3>
 <div class="table-wrapper">
@@ -442,7 +459,8 @@ chip-select.</p>
 <pre><code class="language-console">$ gallo ping
 $ gallo i2c get-config
 $ gallo spi get-config
-$ gallo uart set-config --baud-rate 115200
+$ gallo uart set-config --baud-rate 115200 --data-bits 8 \
+    --parity none --stop-bits 1
 $ gallo gpio monitor --pin 0 --edge rising
 $ gallo adc read --channel 0
 $ gallo onewire search

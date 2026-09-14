@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-23fb8a90.js";
+            window.path_to_searchindex_js = "../searchindex-021ab968.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3e975730.js"></script>
@@ -262,6 +262,11 @@ the returned handles implement the relevant blocking and async traits directly.<
 </div>
 <p>The UART row is feature-gated by <code>embedded-io</code> major version — see
 <a href="#feature-flags">Feature Flags</a> below.</p>
+<p>The <code>Uart</code> handle uses the baud rate and framing currently configured on the
+device; the HAL cannot change either. If a driver requires a particular UART
+configuration, apply it before using <code>hal.uart()</code> through <code>gallo uart set-config</code>, <code>pico-de-gallo-lib</code>, the C FFI, or Python. Do not reconfigure the
+same device concurrently with HAL reads or writes: firmware applies the baud
+divisor before the framing and drains neither direction.</p>
 <p>And two project-specific surfaces sit alongside the trait-based ones:</p>
 <div class="table-wrapper">
 <table>

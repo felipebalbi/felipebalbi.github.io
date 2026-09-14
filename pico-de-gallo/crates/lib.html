@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-23fb8a90.js";
+            window.path_to_searchindex_js = "../searchindex-021ab968.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3e975730.js"></script>
@@ -479,11 +479,11 @@ host already has a buffer waiting when the first edge arrives.</p>
 <tr><td><code>spi_batch</code></td><td><code>cs_pin</code>, <code>ops</code></td><td>Execute atomic multi-step SPI traffic under chip-select (see below)</td></tr>
 <tr><td><code>spi_set_config</code></td><td><code>spi_frequency</code>, <code>spi_phase</code>, <code>spi_polarity</code></td><td>Set SPI timing and mode</td></tr>
 <tr><td><code>spi_get_config</code></td><td>—</td><td>Read back the active SPI configuration</td></tr>
-<tr><td><code>uart_read</code></td><td><code>count</code>, <code>timeout_ms</code></td><td>Read up to <code>count</code> bytes; <code>0</code> is a 1 ms poll, oversized non-zero timeouts clamp at 30 minutes</td></tr>
+<tr><td><code>uart_read</code></td><td><code>count</code>, <code>timeout_ms</code></td><td>Read up to <code>count</code> bytes; <code>0</code> performs a single non-blocking poll and returns whatever is already buffered (possibly nothing), while oversized non-zero timeouts clamp at 30 minutes</td></tr>
 <tr><td><code>uart_write</code></td><td><code>contents</code></td><td>Queue bytes for UART transmit</td></tr>
 <tr><td><code>uart_flush</code></td><td>—</td><td>Wait until UART TX has drained</td></tr>
-<tr><td><code>uart_set_config</code></td><td><code>baud_rate</code></td><td>Set UART baud rate</td></tr>
-<tr><td><code>uart_get_config</code></td><td>—</td><td>Read back the active UART configuration</td></tr>
+<tr><td><code>uart_set_config</code></td><td><code>baud_rate</code>, <code>data_bits</code>, <code>parity</code>, <code>stop_bits</code></td><td>Replace the complete UART configuration</td></tr>
+<tr><td><code>uart_get_config</code></td><td>—</td><td>Return <code>UartConfigurationInfo</code> with the last requested baud rate, data bits, parity, and stop bits</td></tr>
 <tr><td><code>gpio_get</code></td><td><code>pin</code></td><td>Read a GPIO level</td></tr>
 <tr><td><code>gpio_put</code></td><td><code>pin</code>, <code>state</code></td><td>Drive a GPIO high or low</td></tr>
 <tr><td><code>gpio_wait_for_high</code></td><td><code>pin</code></td><td>Wait until a pin reads high, bounded by the 30-minute firmware ceiling</td></tr>
@@ -529,6 +529,33 @@ way: their aggregate outgoing bytes must fit one <code>MAX_REQUEST_FRAME</code>
 <code>PicoDeGalloError::Endpoint(...::BufferTooLong)</code>; see
 <a href="../appendix/troubleshooting.html#buffertoolong-22">troubleshooting</a>.</p>
 </blockquote>
+<p><code>uart_set_config</code> takes <code>UartDataBits</code>, <code>UartParity</code>, and <code>UartStopBits</code> alongside
+the baud rate. It has no partial-update form: read <code>uart_get_config()</code> and pass
+the framing fields back when changing only the baud rate. The firmware applies
+the divisor before the framing and drains neither direction, so serialize UART
+access and quiesce both directions across reconfiguration.</p>
+<pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use pico_de_gallo_lib::{PicoDeGallo, UartDataBits, UartParity, UartStopBits};
+
+<span class="boring">async fn configure(gallo: &amp;PicoDeGallo) -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+</span>gallo
+    .uart_set_config(
+        115_200,
+        UartDataBits::Eight,
+        UartParity::None,
+        UartStopBits::One,
+    )
+    .await?;
+
+let active = gallo.uart_get_config().await?;
+println!(
+    "{} {:?} {:?} {:?}",
+    active.baud_rate, active.data_bits, active.parity, active.stop_bits,
+);
+<span class="boring">Ok(())
+</span><span class="boring">}
+</span><span class="boring">}</span></code></pre>
 <p>For the full API surface, field docs, and current signatures, use the crate
 reference on <a href="https://docs.rs/pico-de-gallo-lib">docs.rs</a>.</p>
 

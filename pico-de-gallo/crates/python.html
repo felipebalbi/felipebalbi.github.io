@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-23fb8a90.js";
+            window.path_to_searchindex_js = "../searchindex-021ab968.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-3e975730.js"></script>
@@ -275,6 +275,9 @@ plain Python-facing names like:</p>
 <li><code>GpioDirection</code></li>
 <li><code>GpioPull</code></li>
 <li><code>GpioEdge</code></li>
+<li><code>UartDataBits</code></li>
+<li><code>UartParity</code></li>
+<li><code>UartStopBits</code></li>
 <li><code>VersionInfo</code></li>
 <li><code>DeviceInfo</code></li>
 <li><code>UartConfigurationInfo</code></li>
@@ -293,6 +296,25 @@ pg.spi_set_config(
     gallo.SpiPhase.CaptureOnFirstTransition,
     gallo.SpiPolarity.IdleLow,
 )
+</code></pre>
+<p>UART parity has one Python-specific spelling: use <code>UartParity.NoParity</code>, not
+<code>UartParity.None</code>. The latter is a Python <code>SyntaxError</code> because <code>None</code> is a
+keyword. Only the binding name changes—the member is never renumbered and still
+maps to wire index 0; the wire enum, FFI enum, and generated C header all retain
+the name <code>None</code>.</p>
+<p><code>uart_set_config(baud_rate, data_bits, parity, stop_bits)</code> defaults its framing
+arguments to 8N1, but it replaces the complete configuration rather than
+performing a partial update. A baud-only change must repeat the current framing.
+Baud and framing are applied together but not atomically: the divisor changes
+first and neither direction is drained, so pause UART traffic across the call.</p>
+<pre><code class="language-python">pg.uart_set_config(
+    115_200,
+    gallo.UartDataBits.Eight,
+    gallo.UartParity.NoParity,
+    gallo.UartStopBits.One,
+)
+active = pg.uart_get_config()
+print(active.baud_rate, active.data_bits, active.parity, active.stop_bits)
 </code></pre>
 <h2 id="example-i2c-register-read"><a class="header" href="#example-i2c-register-read">Example: I<sup>2</sup>C Register Read</a></h2>
 <blockquote class="blockquote-tag blockquote-tag-note">
@@ -363,7 +385,12 @@ sub.close()
 pg = gallo.open()
 
 try:
-    pg.uart_set_config(0)
+    pg.uart_set_config(
+        0,
+        gallo.UartDataBits.Eight,
+        gallo.UartParity.NoParity,
+        gallo.UartStopBits.One,
+    )
 except RuntimeError as exc:
     print(f"operation failed: {exc}")
 </code></pre>
