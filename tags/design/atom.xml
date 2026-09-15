@@ -1,0 +1,698 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+  <title>Felipe Balbi</title>
+  <subtitle>Notes on embedded systems, Rust, and the craft of writing software.</subtitle>
+  <link href="https://balbi.sh/tags/design/atom.xml" rel="self" type="application/atom+xml"/>
+  <link href="https://balbi.sh"/>
+  <generator uri="https://www.getzola.org/">Zola</generator>
+  <updated>2026-09-02T09:00:00+00:00</updated>
+  <id>https://balbi.sh/tags/design/atom.xml</id>
+  
+  <entry xml:lang="en">
+    <title>Making Smaller Things</title>
+    <published>2026-09-02T09:00:00+00:00</published>
+    <updated>2026-09-02T09:00:00+00:00</updated>
+    <author><name>Felipe Balbi</name></author>
+    <link rel="alternate" href="https://balbi.sh/posts/making-smaller-things/" type="text/html"/>
+    <id>https://balbi.sh/posts/making-smaller-things/</id>
+    <summary type="html">&lt;p&gt;Take a temperature sensor about as simple as a part can get. It hangs
+off an I²C bus and has exactly two registers. Register &lt;code&gt;0x00&lt;/code&gt; holds
+the temperature result — signed sixteen bits, one LSB equal to
+1/128 of a degree Celsius. Register &lt;code&gt;0x01&lt;/code&gt; holds the
+configuration, three fields packed into sixteen bits: &lt;strong&gt;averaging&lt;/strong&gt;,
+how many samples the part means together before it reports one;
+&lt;strong&gt;conversion cycle&lt;/strong&gt;, how long it waits between conversions; and
+&lt;strong&gt;mode&lt;/strong&gt;, which is continuous, one-shot, or shut down.&lt;/p&gt;
+&lt;p&gt;That is the entire device. No alert pin, no threshold registers, no
+calibration. For completeness, here’s a tabular view of the device’s
+register map.&lt;/p&gt;
+&lt;svg class=&quot;regmap&quot; viewBox=&quot;0 0 730 96&quot; role=&quot;img&quot; aria-labelledby=&quot;rm-t rm-d&quot; shape-rendering=&quot;crispEdges&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot;&gt;
+  &lt;title id=&quot;rm-t&quot;&gt;Register map of the temperature sensor&lt;/title&gt;
+  &lt;desc id=&quot;rm-d&quot;&gt;Two 16-bit registers. Register 0x00 is the temperature result and uses all sixteen bits as one signed value, one LSB equal to 1/128 degree Celsius. Register 0x01 is the configuration: bits 15 to 12 reserved, bits 11 to 10 MODE, bits 9 to 7 CONV, bits 6 to 5 AVG, bits 4 to 0 reserved.&lt;/desc&gt;
+  &lt;style&gt;
+    .regmap{width:100%;height:auto;max-width:44rem;display:block;margin:1.75rem 0;font-family:var(--sans)}
+    .regmap .f{fill:var(--bg-dim);stroke:var(--border)}
+    .regmap .r{fill:none;stroke:var(--border)}
+    .regmap text{shape-rendering:auto}
+    .regmap .b{fill:var(--fg-dim);font:11px var(--mono-code,ui-monospace,monospace)}
+    .regmap .a{fill:var(--fg-alt);font:700 13px var(--mono-code,ui-monospace,monospace)}
+    .regmap .n{fill:var(--fg-main);font-size:13px;font-weight:600}
+    .regmap .s{fill:var(--fg-dim);font-size:10.5px;font-family:var(--mono-code,ui-monospace,monospace)}
+    .regmap .d{fill:var(--fg-dim);font-size:12px;font-style:italic}
+  &lt;/style&gt;
+  &lt;text class=&quot;b&quot; x=&quot;79&quot; y=&quot;13&quot; text-anchor=&quot;middle&quot;&gt;15&lt;/text&gt;
+  &lt;text class=&quot;b&quot; x=&quot;121&quot; y=&quot;13&quot; text-anchor=&quot;middle&quot;&gt;14&lt;/text&gt;
+  &lt;text class=&quot;b&quot; x=&quot;163&quot; y=&quot;13&quot; text-anchor=&quot;middle&quot;&gt;13&lt;/text&gt;
+  &lt;text class=&quot;b&quot; x=&quot;205&quot; y=&quot;13&quot; text-anchor=&quot;middle&quot;&gt;12&lt;/text&gt;
+  &lt;text class=&quot;b&quot; x=&quot;247&quot; y=&quot;13&quot; text-anchor=&quot;middle&quot;&gt;11&lt;/text&gt;
+  &lt;text class=&quot;b&quot; x=&quot;289&quot; y=&quot;13&quot; text-anchor=&quot;middle&quot;&gt;10&lt;/text&gt;
+  &lt;text class=&quot;b&quot; x=&quot;331&quot; y=&quot;13&quot; text-anchor=&quot;middle&quot;&gt;9&lt;/text&gt;
+  &lt;text class=&quot;b&quot; x=&quot;373&quot; y=&quot;13&quot; text-anchor=&quot;middle&quot;&gt;8&lt;/text&gt;
+  &lt;text class=&quot;b&quot; x=&quot;415&quot; y=&quot;13&quot; text-anchor=&quot;middle&quot;&gt;7&lt;/text&gt;
+  &lt;text class=&quot;b&quot; x=&quot;457&quot; y=&quot;13&quot; text-anchor=&quot;middle&quot;&gt;6&lt;/text&gt;
+  &lt;text class=&quot;b&quot; x=&quot;499&quot; y=&quot;13&quot; text-anchor=&quot;middle&quot;&gt;5&lt;/text&gt;
+  &lt;text class=&quot;b&quot; x=&quot;541&quot; y=&quot;13&quot; text-anchor=&quot;middle&quot;&gt;4&lt;/text&gt;
+  &lt;text class=&quot;b&quot; x=&quot;583&quot; y=&quot;13&quot; text-anchor=&quot;middle&quot;&gt;3&lt;/text&gt;
+  &lt;text class=&quot;b&quot; x=&quot;625&quot; y=&quot;13&quot; text-anchor=&quot;middle&quot;&gt;2&lt;/text&gt;
+  &lt;text class=&quot;b&quot; x=&quot;667&quot; y=&quot;13&quot; text-anchor=&quot;middle&quot;&gt;1&lt;/text&gt;
+  &lt;text class=&quot;b&quot; x=&quot;709&quot; y=&quot;13&quot; text-anchor=&quot;middle&quot;&gt;0&lt;/text&gt;
+  &lt;text class=&quot;a&quot; x=&quot;50&quot; y=&quot;44&quot; text-anchor=&quot;end&quot;&gt;0x00&lt;/text&gt;
+  &lt;rect class=&quot;f&quot; x=&quot;58&quot; y=&quot;20&quot; width=&quot;672&quot; height=&quot;38&quot;/&gt;
+  &lt;text class=&quot;n&quot; x=&quot;394&quot; y=&quot;37&quot; text-anchor=&quot;middle&quot;&gt;TEMPERATURE RESULT&lt;/text&gt;
+  &lt;text class=&quot;s&quot; x=&quot;394&quot; y=&quot;51&quot; text-anchor=&quot;middle&quot;&gt;signed &amp;#183; 1 LSB = 1/128 &amp;#176;C&lt;/text&gt;
+  &lt;text class=&quot;a&quot; x=&quot;50&quot; y=&quot;82&quot; text-anchor=&quot;end&quot;&gt;0x01&lt;/text&gt;
+  &lt;rect class=&quot;r&quot; x=&quot;58&quot; y=&quot;58&quot; width=&quot;168&quot; height=&quot;38&quot;/&gt;
+  &lt;text class=&quot;d&quot; x=&quot;142&quot; y=&quot;82&quot; text-anchor=&quot;middle&quot;&gt;reserved&lt;/text&gt;
+  &lt;rect class=&quot;f&quot; x=&quot;226&quot; y=&quot;58&quot; width=&quot;84&quot; height=&quot;38&quot;/&gt;
+  &lt;text class=&quot;n&quot; x=&quot;268&quot; y=&quot;75&quot; text-anchor=&quot;middle&quot;&gt;MODE&lt;/text&gt;
+  &lt;text class=&quot;s&quot; x=&quot;268&quot; y=&quot;89&quot; text-anchor=&quot;middle&quot;&gt;11:10&lt;/text&gt;
+  &lt;rect class=&quot;f&quot; x=&quot;310&quot; y=&quot;58&quot; width=&quot;126&quot; height=&quot;38&quot;/&gt;
+  &lt;text class=&quot;n&quot; x=&quot;373&quot; y=&quot;75&quot; text-anchor=&quot;middle&quot;&gt;CONV&lt;/text&gt;
+  &lt;text class=&quot;s&quot; x=&quot;373&quot; y=&quot;89&quot; text-anchor=&quot;middle&quot;&gt;9:7&lt;/text&gt;
+  &lt;rect class=&quot;f&quot; x=&quot;436&quot; y=&quot;58&quot; width=&quot;84&quot; height=&quot;38&quot;/&gt;
+  &lt;text class=&quot;n&quot; x=&quot;478&quot; y=&quot;75&quot; text-anchor=&quot;middle&quot;&gt;AVG&lt;/text&gt;
+  &lt;text class=&quot;s&quot; x=&quot;478&quot; y=&quot;89&quot; text-anchor=&quot;middle&quot;&gt;6:5&lt;/text&gt;
+  &lt;rect class=&quot;r&quot; x=&quot;520&quot; y=&quot;58&quot; width=&quot;210&quot; height=&quot;38&quot;/&gt;
+  &lt;text class=&quot;d&quot; x=&quot;625&quot; y=&quot;82&quot; text-anchor=&quot;middle&quot;&gt;reserved&lt;/text&gt;
+&lt;/svg&gt;
+&lt;p&gt;The naive approach to configuring &lt;code&gt;MODE&lt;/code&gt;, &lt;code&gt;CONV&lt;/code&gt;, and &lt;code&gt;AVG&lt;/code&gt; — the
+one I reach for first, and the one you should reach for first too —
+is an &lt;code&gt;async set_config()&lt;/code&gt; taking those three fields as three &lt;code&gt;u8&lt;/code&gt;
+arguments. At the call site it reads like this:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;sensor&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;set_config&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;2&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;await&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;?&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;I cannot tell you whether that is correct. Neither can you, and you
+just finished reading the field list. Neither can the compiler, and
+neither can the reviewer. To find out you have to go back to the
+register map, count the bit fields, and check that the three
+arguments are in the order this particular function happens to
+expect. Swap any two of them and it still compiles. Swap any two of
+them and it still runs. The part just quietly averages over the
+wrong window for the rest of the product’s life.&lt;/p&gt;
+&lt;p&gt;There are $16{,}777{,}216$ distinct values — $256 \times 256 \times
+256$ — you could pass to that function. Ninety-six of them mean
+anything at all.&lt;/p&gt;</summary>
+    
+    <content type="html">&lt;p&gt;Take a temperature sensor about as simple as a part can get. It hangs
+off an I²C bus and has exactly two registers. Register &lt;code&gt;0x00&lt;/code&gt; holds
+the temperature result — signed sixteen bits, one LSB equal to
+1/128 of a degree Celsius. Register &lt;code&gt;0x01&lt;/code&gt; holds the
+configuration, three fields packed into sixteen bits: &lt;strong&gt;averaging&lt;/strong&gt;,
+how many samples the part means together before it reports one;
+&lt;strong&gt;conversion cycle&lt;/strong&gt;, how long it waits between conversions; and
+&lt;strong&gt;mode&lt;/strong&gt;, which is continuous, one-shot, or shut down.&lt;/p&gt;
+&lt;p&gt;That is the entire device. No alert pin, no threshold registers, no
+calibration. For completeness, here’s a tabular view of the device’s
+register map.&lt;/p&gt;
+&lt;svg class=&quot;regmap&quot; viewBox=&quot;0 0 730 96&quot; role=&quot;img&quot; aria-labelledby=&quot;rm-t rm-d&quot; shape-rendering=&quot;crispEdges&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot;&gt;
+  &lt;title id=&quot;rm-t&quot;&gt;Register map of the temperature sensor&lt;/title&gt;
+  &lt;desc id=&quot;rm-d&quot;&gt;Two 16-bit registers. Register 0x00 is the temperature result and uses all sixteen bits as one signed value, one LSB equal to 1/128 degree Celsius. Register 0x01 is the configuration: bits 15 to 12 reserved, bits 11 to 10 MODE, bits 9 to 7 CONV, bits 6 to 5 AVG, bits 4 to 0 reserved.&lt;/desc&gt;
+  &lt;style&gt;
+    .regmap{width:100%;height:auto;max-width:44rem;display:block;margin:1.75rem 0;font-family:var(--sans)}
+    .regmap .f{fill:var(--bg-dim);stroke:var(--border)}
+    .regmap .r{fill:none;stroke:var(--border)}
+    .regmap text{shape-rendering:auto}
+    .regmap .b{fill:var(--fg-dim);font:11px var(--mono-code,ui-monospace,monospace)}
+    .regmap .a{fill:var(--fg-alt);font:700 13px var(--mono-code,ui-monospace,monospace)}
+    .regmap .n{fill:var(--fg-main);font-size:13px;font-weight:600}
+    .regmap .s{fill:var(--fg-dim);font-size:10.5px;font-family:var(--mono-code,ui-monospace,monospace)}
+    .regmap .d{fill:var(--fg-dim);font-size:12px;font-style:italic}
+  &lt;/style&gt;
+  &lt;text class=&quot;b&quot; x=&quot;79&quot; y=&quot;13&quot; text-anchor=&quot;middle&quot;&gt;15&lt;/text&gt;
+  &lt;text class=&quot;b&quot; x=&quot;121&quot; y=&quot;13&quot; text-anchor=&quot;middle&quot;&gt;14&lt;/text&gt;
+  &lt;text class=&quot;b&quot; x=&quot;163&quot; y=&quot;13&quot; text-anchor=&quot;middle&quot;&gt;13&lt;/text&gt;
+  &lt;text class=&quot;b&quot; x=&quot;205&quot; y=&quot;13&quot; text-anchor=&quot;middle&quot;&gt;12&lt;/text&gt;
+  &lt;text class=&quot;b&quot; x=&quot;247&quot; y=&quot;13&quot; text-anchor=&quot;middle&quot;&gt;11&lt;/text&gt;
+  &lt;text class=&quot;b&quot; x=&quot;289&quot; y=&quot;13&quot; text-anchor=&quot;middle&quot;&gt;10&lt;/text&gt;
+  &lt;text class=&quot;b&quot; x=&quot;331&quot; y=&quot;13&quot; text-anchor=&quot;middle&quot;&gt;9&lt;/text&gt;
+  &lt;text class=&quot;b&quot; x=&quot;373&quot; y=&quot;13&quot; text-anchor=&quot;middle&quot;&gt;8&lt;/text&gt;
+  &lt;text class=&quot;b&quot; x=&quot;415&quot; y=&quot;13&quot; text-anchor=&quot;middle&quot;&gt;7&lt;/text&gt;
+  &lt;text class=&quot;b&quot; x=&quot;457&quot; y=&quot;13&quot; text-anchor=&quot;middle&quot;&gt;6&lt;/text&gt;
+  &lt;text class=&quot;b&quot; x=&quot;499&quot; y=&quot;13&quot; text-anchor=&quot;middle&quot;&gt;5&lt;/text&gt;
+  &lt;text class=&quot;b&quot; x=&quot;541&quot; y=&quot;13&quot; text-anchor=&quot;middle&quot;&gt;4&lt;/text&gt;
+  &lt;text class=&quot;b&quot; x=&quot;583&quot; y=&quot;13&quot; text-anchor=&quot;middle&quot;&gt;3&lt;/text&gt;
+  &lt;text class=&quot;b&quot; x=&quot;625&quot; y=&quot;13&quot; text-anchor=&quot;middle&quot;&gt;2&lt;/text&gt;
+  &lt;text class=&quot;b&quot; x=&quot;667&quot; y=&quot;13&quot; text-anchor=&quot;middle&quot;&gt;1&lt;/text&gt;
+  &lt;text class=&quot;b&quot; x=&quot;709&quot; y=&quot;13&quot; text-anchor=&quot;middle&quot;&gt;0&lt;/text&gt;
+  &lt;text class=&quot;a&quot; x=&quot;50&quot; y=&quot;44&quot; text-anchor=&quot;end&quot;&gt;0x00&lt;/text&gt;
+  &lt;rect class=&quot;f&quot; x=&quot;58&quot; y=&quot;20&quot; width=&quot;672&quot; height=&quot;38&quot;/&gt;
+  &lt;text class=&quot;n&quot; x=&quot;394&quot; y=&quot;37&quot; text-anchor=&quot;middle&quot;&gt;TEMPERATURE RESULT&lt;/text&gt;
+  &lt;text class=&quot;s&quot; x=&quot;394&quot; y=&quot;51&quot; text-anchor=&quot;middle&quot;&gt;signed &amp;#183; 1 LSB = 1/128 &amp;#176;C&lt;/text&gt;
+  &lt;text class=&quot;a&quot; x=&quot;50&quot; y=&quot;82&quot; text-anchor=&quot;end&quot;&gt;0x01&lt;/text&gt;
+  &lt;rect class=&quot;r&quot; x=&quot;58&quot; y=&quot;58&quot; width=&quot;168&quot; height=&quot;38&quot;/&gt;
+  &lt;text class=&quot;d&quot; x=&quot;142&quot; y=&quot;82&quot; text-anchor=&quot;middle&quot;&gt;reserved&lt;/text&gt;
+  &lt;rect class=&quot;f&quot; x=&quot;226&quot; y=&quot;58&quot; width=&quot;84&quot; height=&quot;38&quot;/&gt;
+  &lt;text class=&quot;n&quot; x=&quot;268&quot; y=&quot;75&quot; text-anchor=&quot;middle&quot;&gt;MODE&lt;/text&gt;
+  &lt;text class=&quot;s&quot; x=&quot;268&quot; y=&quot;89&quot; text-anchor=&quot;middle&quot;&gt;11:10&lt;/text&gt;
+  &lt;rect class=&quot;f&quot; x=&quot;310&quot; y=&quot;58&quot; width=&quot;126&quot; height=&quot;38&quot;/&gt;
+  &lt;text class=&quot;n&quot; x=&quot;373&quot; y=&quot;75&quot; text-anchor=&quot;middle&quot;&gt;CONV&lt;/text&gt;
+  &lt;text class=&quot;s&quot; x=&quot;373&quot; y=&quot;89&quot; text-anchor=&quot;middle&quot;&gt;9:7&lt;/text&gt;
+  &lt;rect class=&quot;f&quot; x=&quot;436&quot; y=&quot;58&quot; width=&quot;84&quot; height=&quot;38&quot;/&gt;
+  &lt;text class=&quot;n&quot; x=&quot;478&quot; y=&quot;75&quot; text-anchor=&quot;middle&quot;&gt;AVG&lt;/text&gt;
+  &lt;text class=&quot;s&quot; x=&quot;478&quot; y=&quot;89&quot; text-anchor=&quot;middle&quot;&gt;6:5&lt;/text&gt;
+  &lt;rect class=&quot;r&quot; x=&quot;520&quot; y=&quot;58&quot; width=&quot;210&quot; height=&quot;38&quot;/&gt;
+  &lt;text class=&quot;d&quot; x=&quot;625&quot; y=&quot;82&quot; text-anchor=&quot;middle&quot;&gt;reserved&lt;/text&gt;
+&lt;/svg&gt;
+&lt;p&gt;The naive approach to configuring &lt;code&gt;MODE&lt;/code&gt;, &lt;code&gt;CONV&lt;/code&gt;, and &lt;code&gt;AVG&lt;/code&gt; — the
+one I reach for first, and the one you should reach for first too —
+is an &lt;code&gt;async set_config()&lt;/code&gt; taking those three fields as three &lt;code&gt;u8&lt;/code&gt;
+arguments. At the call site it reads like this:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;sensor&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;set_config&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;2&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;await&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;?&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;I cannot tell you whether that is correct. Neither can you, and you
+just finished reading the field list. Neither can the compiler, and
+neither can the reviewer. To find out you have to go back to the
+register map, count the bit fields, and check that the three
+arguments are in the order this particular function happens to
+expect. Swap any two of them and it still compiles. Swap any two of
+them and it still runs. The part just quietly averages over the
+wrong window for the rest of the product’s life.&lt;/p&gt;
+&lt;p&gt;There are $16{,}777{,}216$ distinct values — $256 \times 256 \times
+256$ — you could pass to that function. Ninety-six of them mean
+anything at all.&lt;/p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;/span&gt;&lt;h2 id=&quot;what-sandi-actually-said&quot;&gt;What Sandi actually said&lt;/h2&gt;
+&lt;p&gt;In 2014 Sandi Metz gave a RailsConf keynote called &lt;a rel=&quot;external&quot; href=&quot;https://www.youtube.com/watch?v=8bZh5LMaSmE&quot;&gt;All the Little
+Things&lt;/a&gt;. The advice in the title is the whole argument:
+&lt;strong&gt;make smaller things&lt;/strong&gt;. Small classes, small methods, each one
+doing a single job, each one nameable in a short phrase without the
+word “and” in it. She spends the talk taking a lump of branching
+procedural code and pulling small named objects out of it, one at a
+time, until the branches are gone and what is left is a handful of
+things you can hold in your head individually.&lt;/p&gt;
+&lt;p&gt;The talk is also where the line about duplication comes from —
+&lt;em&gt;duplication is far cheaper than the wrong abstraction&lt;/em&gt; — and I want
+to come back to that at the end, because it is the part that gets
+quoted least and matters most.&lt;/p&gt;
+&lt;p&gt;Here is what I noticed rereading it as a Rust programmer. In Ruby,
+“smaller” has exactly one meaning: fewer lines, fewer
+responsibilities, fewer reasons to change. The discipline is
+entirely social. Ruby will happily let you pass a &lt;code&gt;String&lt;/code&gt; where the
+method wanted a &lt;code&gt;Time&lt;/code&gt;, and the only thing standing between you and
+that mistake is a test you remembered to write.&lt;/p&gt;
+&lt;p&gt;Rust has a second axis. A thing in Rust can be smaller in lines,
+&lt;em&gt;or&lt;/em&gt; it can be smaller in &lt;strong&gt;inhabitants&lt;/strong&gt; — the count of distinct
+values its type can hold. And those two kinds of smaller behave
+very differently when you go to test them. Making a function shorter
+splits one test into two. Making a &lt;em&gt;type&lt;/em&gt; smaller deletes tests
+outright, because the states they were guarding against stop being
+expressible.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-nb-1&quot;&gt;&lt;a href=&quot;https://balbi.sh/posts/making-smaller-things/#fn-nb&quot;&gt;[1]&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;p&gt;That is the whole post. The rest is one driver.&lt;/p&gt;
+&lt;h2 id=&quot;the-other-half-where-to-put-the-small-things&quot;&gt;The other half: where to put the small things&lt;/h2&gt;
+&lt;p&gt;Gary Bernhardt’s &lt;a rel=&quot;external&quot; href=&quot;https://www.youtube.com/watch?v=yTkzNHF6rMs&quot;&gt;Boundaries&lt;/a&gt; answers the question Sandi’s
+talk leaves open, which is &lt;em&gt;where the small things go&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;His split: a &lt;strong&gt;functional core&lt;/strong&gt; of pure functions — values in,
+values out, no I/O, many code paths, no dependencies — wrapped in a
+thin &lt;strong&gt;imperative shell&lt;/strong&gt; that does all the talking to the outside
+world and has almost no branches in it. The core is where the
+thinking happens and is trivially testable. The shell is where the
+hardware happens and needs almost no tests, because there is nothing
+in it to be wrong.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-errata-1&quot;&gt;&lt;a href=&quot;https://balbi.sh/posts/making-smaller-things/#fn-errata&quot;&gt;[2]&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;p&gt;For embedded work this is not a stylistic preference. It is the
+difference between tests that run in microseconds on your laptop and
+tests that need a part on a bus.&lt;/p&gt;
+&lt;p&gt;There is a tension buried in that split, and it is better named here
+than stumbled over later. Half of this post is going to tell you to
+make the types smaller and sharper — newtype the temperature,
+enumerate the register field, push everything the datasheet knows
+into something the compiler can check. The other half insists the
+boundary stay dumb: bytes, plain integers, nothing clever. Those
+sound like opposite instructions, and plenty of otherwise good
+drivers have been wrecked by trying to satisfy both everywhere at
+once.&lt;/p&gt;
+&lt;p&gt;They are not opposites. They are answers to different questions.
+&lt;em&gt;What crosses the boundary&lt;/em&gt; is bytes, because a bus has never heard
+of &lt;code&gt;Celsius&lt;/code&gt; and never will. &lt;em&gt;What you think in&lt;/em&gt;, once you are past
+the boundary, is the narrowest type that can still express the idea.
+The edge is a translation, not a representation choice, and the
+whole job of the shell is to perform that translation exactly once
+in each direction. Everything the core knows, it knows because the
+shell parsed it at the door.&lt;/p&gt;
+&lt;p&gt;That is the shape of the rest of this post. Bytes in, meaning in the
+middle, bytes back out.&lt;/p&gt;
+&lt;h2 id=&quot;the-shameless-green-driver&quot;&gt;The shameless green driver&lt;/h2&gt;
+&lt;p&gt;The version everybody writes first, and should write first. Writing
+it is not wasted effort and it is not a strawman: it proves the part
+answers, and it proves you read the register map the way the vendor
+meant it. Both are worth knowing before you design anything on top
+of them.&lt;/p&gt;
+&lt;p&gt;What you should not do is &lt;em&gt;publish&lt;/em&gt; it. This is the one place I part
+company with Sandi, and the reason is context rather than principle.
+Her advice lands in code you own end to end, where a refactor is an
+edit and the only people you inconvenience are on your team. A
+driver crate is not that. The moment &lt;code&gt;0.1.0&lt;/code&gt; is on crates.io,
+&lt;code&gt;set_config(u8, u8, u8)&lt;/code&gt; stops being a sketch and becomes a
+contract, and everything else in this post turns into a breaking
+change — paid for by however many people took you at your word.&lt;/p&gt;
+&lt;p&gt;So write the shameless version to learn the part, then throw the API
+away before anyone can depend on it. How much of it survives is a
+judgement call that scales with the part: two registers do not need
+much design, while page-mode writes and a busy flag need rather
+more. But &lt;code&gt;0.1.0&lt;/code&gt; should already be the shape you are willing to
+maintain.&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;const&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; REG_TEMP&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; u8&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0x00&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;const&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; REG_CONFIG&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; u8&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0x01&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;pub&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; struct&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; TempSensor&lt;/span&gt;&lt;span&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;I2C&lt;/span&gt;&lt;span&gt;&amp;gt;&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;    i2c&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; I2C&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;    addr&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; u8&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;impl&lt;/span&gt;&lt;span&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;I2C&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; I2c&lt;/span&gt;&lt;span&gt;&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; TempSensor&lt;/span&gt;&lt;span&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;I2C&lt;/span&gt;&lt;span&gt;&amp;gt;&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    pub&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; async&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; fn&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; read_temperature&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;mut&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; self&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Result&lt;/span&gt;&lt;span&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;f32&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Error&lt;/span&gt;&lt;span&gt;&amp;gt;&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;        let&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; mut&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; buf&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;u8&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 2&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;        self&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span&gt;i2c&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;write_read&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span&gt;addr&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;amp;&lt;/span&gt;&lt;span&gt;[&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;REG_TEMP&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;amp;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;mut&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; buf&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;await&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;?&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;        let&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; raw&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; i16&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;from_be_bytes&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;buf&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;        Ok&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;raw&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; as&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; f32&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; *&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0078125&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    pub&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; async&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; fn&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; set_config&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;        &amp;amp;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;mut&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; self&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;        avg&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; u8&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;        conv&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; u8&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;        mode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; u8&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    )&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Result&lt;/span&gt;&lt;span&gt;&amp;lt;&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Error&lt;/span&gt;&lt;span&gt;&amp;gt;&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;        let&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; word&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;avg&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; as&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; u16&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;lt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 5&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;            |&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;conv&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; as&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; u16&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;lt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 7&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;            |&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;mode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; as&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; u16&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;lt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 10&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;        self&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span&gt;i2c&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;            .&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;write&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span&gt;addr&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;amp;&lt;/span&gt;&lt;span&gt;[&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;REG_CONFIG&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;word&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;gt;&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; as&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; u8&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; word&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; as&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; u8&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;            .&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;await&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Four things are wrong here, and none of them are bugs. The code
+works. That is what makes them worth naming:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;read_temperature&lt;/code&gt; welds a bus transaction to a fixed-point
+conversion, so you cannot exercise the arithmetic without a mock.&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;set_config&lt;/code&gt; takes three interchangeable &lt;code&gt;u8&lt;/code&gt;s — the call site
+carries no information at all.&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;f32&lt;/code&gt; out. Which unit? Can it be &lt;code&gt;NaN&lt;/code&gt;? Can it be -400 °C? The
+type says &lt;em&gt;any float&lt;/em&gt;. The part says something far narrower, and
+we can write down exactly what.&lt;/li&gt;
+&lt;li&gt;Every test of any of this needs a fake I²C bus.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id=&quot;the-first-cut-is-bernhardt-s&quot;&gt;The first cut is Bernhardt’s&lt;/h2&gt;
+&lt;p&gt;Split the arithmetic from the transaction and stop. Even if you do
+nothing else in this post, do this.&lt;/p&gt;
+&lt;p&gt;Start by writing the conversion down. The register is sixteen bits
+of two’s complement, one LSB is 1/128 of a degree, so the reported
+temperature is&lt;/p&gt;
+&lt;p&gt;$$T = \frac{\mathrm{raw}}{128} = \mathrm{raw} \times 2^{-7},
+\qquad \mathrm{raw} \in [-32768,\ 32767]$$&lt;/p&gt;
+&lt;p&gt;which gives a closed, and notably &lt;em&gt;lopsided&lt;/em&gt;, range:&lt;/p&gt;
+&lt;p&gt;$$-256.0 \le T \le 255.9921875
+\qquad \text{in steps of } 0.0078125$$&lt;/p&gt;
+&lt;p&gt;The top of the range is not 256. Two’s complement has one more
+negative code than positive, so the largest temperature the part can
+report is $32767/128$, one LSB short. That asymmetry is a real fact
+about the device. It is exactly the kind of thing a hand-written
+unit test forgets, and &lt;code&gt;-&amp;gt; f32&lt;/code&gt; does not carry one bit of it.&lt;/p&gt;
+&lt;p&gt;It is worth being precise about why &lt;code&gt;f32&lt;/code&gt; is the wrong return type,
+because the obvious reason is not the real one. The obvious reason
+would be rounding, and it does not apply: the scale factor is a
+power of two, so every value this part can report survives the trip
+through &lt;code&gt;f32&lt;/code&gt; exactly. Nothing is lost.&lt;/p&gt;
+&lt;p&gt;The real reason is that &lt;code&gt;f32&lt;/code&gt; is &lt;em&gt;enormous&lt;/em&gt;. It admits about four
+billion distinct values, including &lt;code&gt;NaN&lt;/code&gt;, both infinities, and
+$-400\ \text{°C}$. The sensor admits 65,536, all of them real
+temperatures, in a known range, at a known step. Returning &lt;code&gt;f32&lt;/code&gt;
+means choosing a type sixty-five thousand times larger than the
+thing being described, and then relying on prose to explain which
+values are impossible. That is the same mistake as
+&lt;code&gt;set_config(u8, u8, u8)&lt;/code&gt;, one register further down.&lt;/p&gt;
+&lt;p&gt;So the core keeps the raw units, and the scale stays in the type
+rather than in a comment:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;//&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; core - pure, no bus, no async, no HAL, no float&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;fn&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; decode_temperature&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;raw&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;u8&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 2&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Celsius&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;    Celsius&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;i16&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;from_be_bytes&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;raw&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;That is a small change with a disproportionate result. The
+conversion is now a total function from &lt;code&gt;[u8; 2]&lt;/code&gt; to &lt;code&gt;Celsius&lt;/code&gt;: no
+bus, no &lt;code&gt;async&lt;/code&gt;, no HAL, no error case, and 65,536 possible inputs
+that a &lt;code&gt;for&lt;/code&gt; loop can walk in its entirety in under a millisecond.
+There is no mock to write, because there is nothing to mock. And
+&lt;code&gt;read_temperature&lt;/code&gt; collapses into two lines that fetch bytes and
+hand them over.&lt;/p&gt;
+&lt;p&gt;Dividing by 128 has not gone away, it has moved. It is a &lt;em&gt;rendering&lt;/em&gt;
+concern, and it belongs wherever a human finally reads the number
+— a log line, a display, a JSON field at the far edge of the shell.
+That is also the honest place for &lt;code&gt;f32&lt;/code&gt;, once the value is on its
+way out of the system and nobody downstream will do arithmetic on
+it:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;impl&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Celsius&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;    ///&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; Exact: the scale is a power of two.&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    pub&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; fn&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; to_degrees&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;self&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; f32&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;        f32&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;from&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; /&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 128&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The point was never that floats are bad. It is that they are the
+wrong type to &lt;em&gt;think&lt;/em&gt; in, and a perfectly good type to &lt;em&gt;print&lt;/em&gt;.&lt;/p&gt;
+&lt;h2 id=&quot;making-the-types-smaller&quot;&gt;Making the types smaller&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;Celsius&lt;/code&gt; above was the first newtype. The three &lt;code&gt;u8&lt;/code&gt;s get the same
+treatment, and this is where the Rust half of the argument does work
+that Ruby cannot: each enum is not just a clearer name for a number,
+it is a smaller set of numbers.&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;pub&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; struct&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Celsius&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;i16&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; //&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; 1/128 °C, exactly as the part reports it&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;pub&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; enum&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Averaging&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;    X1&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;    X8&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;    X16&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;    X32&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;pub&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; enum&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; ConversionCycle&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;    Ms15&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;    Ms125&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;    Ms250&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;    Ms500&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;    Ms1000&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;    Ms4000&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;    Ms8000&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;    Ms16000&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;pub&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; enum&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Mode&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;    Shutdown&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;    OneShot&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;    Continuous&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;pub&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; struct&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Config&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    pub&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; averaging&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Averaging&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    pub&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; cycle&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; ConversionCycle&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    pub&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; mode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Mode&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;impl&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Config&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    fn&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; encode&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;self&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;u8&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 2&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;        let&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; word&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span&gt;averaging &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;as&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; u16&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;lt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 5&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;            |&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span&gt;cycle &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;as&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; u16&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;lt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 7&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;            |&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span&gt;mode &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;as&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; u16&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;lt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 10&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;        word&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;to_be_bytes&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The shifts survived, because the part still wants its bits where it
+wants them. What did not survive is the masking, the casting, and
+the range checking, and they did not survive because there is
+nothing left to check — &lt;code&gt;self.averaging as u16&lt;/code&gt; cannot exceed 3,
+and the compiler knows it even though no &lt;code&gt;if&lt;/code&gt; says so.&lt;/p&gt;
+&lt;p&gt;Then read the call site out loud:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;sensor&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;set_config&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Config&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;    averaging&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Averaging&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;X8&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;    cycle&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; ConversionCycle&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Ms1000&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;    mode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Mode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Continuous&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;await&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;?&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Compare that with &lt;code&gt;set_config(2, 1, 0)&lt;/code&gt; from the top of the post.
+The arguments cannot be swapped, because they are not positional any
+more. They cannot be out of range, because there is no range. And a
+reviewer can approve it without opening the datasheet, which is the
+first time in this post that has been true of anything.&lt;/p&gt;
+&lt;h2 id=&quot;counting-what-you-deleted&quot;&gt;Counting what you deleted&lt;/h2&gt;
+&lt;p&gt;Everything above is arguable as taste. This part is arithmetic.&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;(u8, u8, u8)&lt;/code&gt; is $2^{24} = 16{,}777{,}216$ reachable states, of which
+only 96 are legal. &lt;code&gt;(Averaging, ConversionCycle, Mode)&lt;/code&gt; is $4 \times 8
+\times 3 = 96$ reachable states, all of them legal. Same
+functionality; the illegal region is gone, not guarded.&lt;/p&gt;
+&lt;p&gt;It is worth sitting with the size of that number for a second,
+because the instinct is to say the guards handled it. They did not.
+Three &lt;code&gt;if&lt;/code&gt; statements do not test sixteen million states, they
+&lt;em&gt;reject&lt;/em&gt; them, and only if all three are written correctly and none
+is ever deleted by someone tidying up a merge conflict. Those states
+were never covered by tests. They were covered by &lt;em&gt;hope&lt;/em&gt;. Making the
+type smaller did not add safety — it deleted the obligation.&lt;/p&gt;
+&lt;p&gt;And it deletes more than you aim at. Count what actually left the
+codebase when the three &lt;code&gt;u8&lt;/code&gt;s became three enums:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Three range checks, and the branches through the function they
+created.&lt;/li&gt;
+&lt;li&gt;Three &lt;code&gt;Error&lt;/code&gt; variants, and every &lt;code&gt;match&lt;/code&gt; arm downstream that had
+to handle them.&lt;/li&gt;
+&lt;li&gt;The tests for those three variants, which someone had to write and
+everyone had to keep passing.&lt;/li&gt;
+&lt;li&gt;The documentation sentence explaining that &lt;code&gt;avg&lt;/code&gt; must be &lt;code&gt;0..=3&lt;/code&gt;,
+and the risk that it drifts out of date.&lt;/li&gt;
+&lt;li&gt;The question, at every call site, of whether the numbers are in
+the right order.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;None of those were removed by hand. They stopped existing because
+the thing they were protecting against stopped being expressible.
+That is the compounding effect and it is the whole argument: in
+Ruby, making things smaller adds objects you must then keep track
+of; in Rust, making a &lt;em&gt;type&lt;/em&gt; smaller subtracts work from places you
+were not looking.&lt;/p&gt;
+&lt;p&gt;The reverse is also true, which is the part worth being nervous
+about. Every &lt;code&gt;u8&lt;/code&gt; in a public signature is an invitation to write
+guards, error variants, tests, and prose that would not be needed if
+the type were honest. The cost of a loose type is never paid at the
+definition. It is paid everywhere the value goes afterwards.&lt;/p&gt;
+&lt;h2 id=&quot;primitives-at-the-edges-meaning-in-the-middle&quot;&gt;Primitives at the edges, meaning in the middle&lt;/h2&gt;
+&lt;p&gt;I named this tension near the top; now there is code to point at, so
+here is the resolution in full.&lt;/p&gt;
+&lt;p&gt;“Keep boundaries close to primitives” and “newtype everything” are
+the same instruction viewed from different sides. Bytes arrive from
+the bus as bytes. They are parsed &lt;strong&gt;once&lt;/strong&gt;, at the edge, into a type
+that cannot be wrong. The core then operates only on the parsed
+form, and the shell renders back to bytes on the way out. All the
+fallibility lives in that one parse — which is Alexis King’s &lt;a rel=&quot;external&quot; href=&quot;https://lexi-lambda.github.io/blog/2019/11/05/parse-don-t-validate/&quot;&gt;parse,
+don’t validate&lt;/a&gt;, arriving from a different direction.&lt;/p&gt;
+&lt;p&gt;The word doing the work is &lt;em&gt;once&lt;/em&gt;. A validating design checks a
+value and hands back the same loose type it was given, so the next
+function down has no way to know the check happened and defensively
+checks again. That is how you end up with the same range test in
+four places and a bug in the fifth, where somebody forgot. A parsing
+design checks a value and hands back a &lt;em&gt;different type&lt;/em&gt; — one whose
+existence is the evidence. &lt;code&gt;Config&lt;/code&gt; is not a &lt;code&gt;(u8, u8, u8)&lt;/code&gt; that has
+been inspected; it is a thing that could not have been built from
+bad numbers. Nothing downstream re-checks it because there is no
+check left to perform.&lt;/p&gt;
+&lt;p&gt;Notice this makes the boundary the only interesting place in the
+driver. Everything upstream of the parse is bytes, and bytes are the
+part’s problem. Everything downstream is &lt;code&gt;Config&lt;/code&gt; and &lt;code&gt;Celsius&lt;/code&gt;, and
+those are the compiler’s problem. The parse itself is fifteen lines,
+pure, and gets the property tests, because it is the one place where
+being wrong is possible.&lt;/p&gt;
+&lt;p&gt;For embedded work the payoff is concrete. The core has no HAL
+dependency, no &lt;code&gt;async&lt;/code&gt;, and no bus: it is a handful of pure
+functions over arrays and enums, so it builds for the host as
+readily as for the target. Tests run natively at full speed with a
+real harness, a real allocator, and a real panic message, and the
+&lt;code&gt;no_std&lt;/code&gt; constraint never touches the part of the code where the
+thinking is. The part on the bench is then needed only to answer the
+question it is actually qualified to answer — does the hardware do
+what the datasheet claims — rather than to re-litigate arithmetic
+you could have checked on a laptop.&lt;/p&gt;
+&lt;p&gt;There is one honest caveat about where you draw the edge, which is
+that it depends on where you are standing.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-scale-1&quot;&gt;&lt;a href=&quot;https://balbi.sh/posts/making-smaller-things/#fn-scale&quot;&gt;[3]&lt;/a&gt;&lt;/sup&gt; “The narrowest
+type that can express the idea” gives a different answer when the
+idea changes size. For this driver, the idea is &lt;em&gt;what this part
+reported&lt;/em&gt;, and &lt;code&gt;Celsius(i16)&lt;/code&gt; in the part’s own units is exactly
+that. For a system reading a dozen sensors of five different kinds,
+the idea is &lt;em&gt;a temperature&lt;/em&gt;, and no single part’s raw format
+expresses it. The rule has not changed; the scope has. Each layer
+parses into its own narrowest type, and each boundary between them
+translates exactly once.&lt;/p&gt;
+&lt;h2 id=&quot;what-the-tests-look-like-now&quot;&gt;What the tests look like now&lt;/h2&gt;
+&lt;p&gt;Everything the core does is now a pure function over small domains,
+which changes what a test is allowed to assert. None of what follows
+needs a bus.&lt;/p&gt;
+&lt;p&gt;Start with the shape of the two directions, because they are not
+symmetric and the asymmetry is the interesting part:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;impl&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Config&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    fn&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; encode&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;self&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;u8&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 2&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; /*&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; total &lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;*/&lt;/span&gt;&lt;span&gt; }&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    fn&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; decode&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;raw&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;u8&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 2&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Result&lt;/span&gt;&lt;span&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Config&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; ConfigError&lt;/span&gt;&lt;span&gt;&amp;gt;&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; /*&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; partial &lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;*/&lt;/span&gt;&lt;span&gt; }&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;encode&lt;/code&gt; is total. Every one of the 96 configurations you can
+construct is a legal register value, so there is no failure to
+report and no &lt;code&gt;Result&lt;/code&gt; to unwrap. &lt;code&gt;decode&lt;/code&gt; is not, and the reason is
+worth chasing down: &lt;code&gt;Averaging&lt;/code&gt; has four variants in a two-bit
+field, and &lt;code&gt;ConversionCycle&lt;/code&gt; has eight in a three-bit field, so both
+are exhaustive — every encoding a part could hand back names a
+variant. &lt;code&gt;Mode&lt;/code&gt; has three variants in a two-bit field. Encoding &lt;code&gt;3&lt;/code&gt;
+is reserved. It has no meaning, so &lt;code&gt;Mode&lt;/code&gt; cannot represent it, so
+&lt;code&gt;decode&lt;/code&gt; has to be allowed to fail.&lt;/p&gt;
+&lt;p&gt;That is not a wart, it is the type system doing exactly the job we
+hired it for. The reserved encoding is a fact about the silicon; the
+&lt;code&gt;Result&lt;/code&gt; is where that fact surfaces in the API, once, in the only
+function that could ever encounter it. Everything downstream of the
+parse gets a &lt;code&gt;Config&lt;/code&gt; that cannot be reserved.&lt;/p&gt;
+&lt;p&gt;Which means the roundtrip property holds in one direction
+unconditionally:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;#&lt;/span&gt;&lt;span&gt;[&lt;/span&gt;&lt;span&gt;test&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;fn&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; every_config_roundtrips&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    for&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; c&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; in&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Config&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;all&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;        assert_eq!&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Config&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;decode&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;c&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;encode&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Ok&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;c&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;With only 96 inhabitants you do not have to settle for sampling at
+all. &lt;code&gt;proptest&lt;/code&gt; on its default budget draws 256 cases, which sounds
+like plenty and is not — covering all 96 by random draw takes
+around 494 of them on average, so a green run proves less than it
+appears to. Walking the domain is both cheaper and stronger. That is
+what small types buy: not better sampling, but the option to stop
+sampling. Ninety-six cases is proof by exhaustion that runs in
+microseconds, and nobody has to say the word “proof”.&lt;/p&gt;
+&lt;p&gt;The other direction is where &lt;code&gt;proptest&lt;/code&gt; earns its place, because the
+input is arbitrary bytes off a bus and the space is genuinely too
+large to walk:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;proptest!&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    #&lt;/span&gt;&lt;span&gt;[&lt;/span&gt;&lt;span&gt;test&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    fn&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; decode_never_panics&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;raw&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;u8&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 2&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;        //&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; every one of 65,536 inputs is Ok or Err, never a panic&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;        let&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; _&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Config&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;decode&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;raw&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    #&lt;/span&gt;&lt;span&gt;[&lt;/span&gt;&lt;span&gt;test&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    fn&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; decode_rejects_reserved_mode&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;raw&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;u8&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 2&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;        let&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; mode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;u16&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;from_be_bytes&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;raw&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;gt;&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 10&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;amp;&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0b11&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;        prop_assert_eq!&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Config&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;decode&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;raw&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;is_err&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; mode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ==&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 3&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The second one is the property I would not have thought to write as
+a unit test. It says something stronger than “reserved mode fails”:
+it says reserved mode is the &lt;em&gt;only&lt;/em&gt; thing that fails. Any future
+edit that makes &lt;code&gt;decode&lt;/code&gt; reject something else — a stray range
+check, a mask applied to the wrong field — breaks it immediately.
+Write that assertion once and it guards the boundary forever.&lt;/p&gt;
+&lt;h2 id=&quot;what-is-left-in-the-shell&quot;&gt;What is left in the shell&lt;/h2&gt;
+&lt;p&gt;Put the two versions of &lt;code&gt;set_config&lt;/code&gt; next to each other. Not the
+sketch from earlier — the &lt;em&gt;honest&lt;/em&gt; naive version, the one that
+actually checks its arguments, because a published driver that
+silently truncates a bad &lt;code&gt;u8&lt;/code&gt; is not a driver anyone should use.&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;//&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; before: three u8s, and every guard they oblige you to write&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;pub&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; async&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; fn&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; set_config&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    &amp;amp;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;mut&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; self&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;    avg&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; u8&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;    conv&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; u8&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;    mode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; u8&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Result&lt;/span&gt;&lt;span&gt;&amp;lt;&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Error&lt;/span&gt;&lt;span&gt;&amp;gt;&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    if&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; avg&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 3&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;        return&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Err&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Error&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;InvalidAveraging&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;avg&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    if&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; conv&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 7&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;        return&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Err&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Error&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;InvalidConversionCycle&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;conv&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    if&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; mode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 2&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;        return&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Err&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Error&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;InvalidMode&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;mode&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;    let&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; word&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;avg&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; as&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; u16&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;amp;&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0x03&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;lt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 5&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;        |&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;conv&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; as&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; u16&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;amp;&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0x07&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;lt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 7&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;        |&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;mode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; as&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; u16&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;amp;&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0x03&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;lt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 10&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;    self&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span&gt;i2c&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;        .&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;write&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span&gt;addr&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;amp;&lt;/span&gt;&lt;span&gt;[&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;REG_CONFIG&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;word&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;gt;&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; as&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; u8&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; word&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; as&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; u8&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;        .&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;await&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;//&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; after&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;pub&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; async&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; fn&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; set_config&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;mut&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; self&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; config&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Config&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Result&lt;/span&gt;&lt;span&gt;&amp;lt;&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Error&lt;/span&gt;&lt;span&gt;&amp;gt;&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;    let&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;hi&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; lo&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; config&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;encode&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;    self&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span&gt;i2c&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;write&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span&gt;addr&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;amp;&lt;/span&gt;&lt;span&gt;[&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;REG_CONFIG&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; hi&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; lo&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;await&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Squint at those two and you do not need me to narrate it. But a few
+things are worth saying out loud, because they are not only about
+length.&lt;/p&gt;
+&lt;p&gt;The guards are the tests you were going to have to write, moved
+inside the function. Three &lt;code&gt;if&lt;/code&gt;s, three error variants, three
+branches through a method whose actual job is one bus write. And
+they are load-bearing: delete them and &lt;code&gt;mode = 3&lt;/code&gt; writes a reserved
+encoding to the part. The naive version is not shorter than the
+refactored one because it is simpler. It was only ever shorter
+because it was wrong.&lt;/p&gt;
+&lt;p&gt;Notice the masks, too. &lt;code&gt;&amp;amp; 0x03&lt;/code&gt; after &lt;code&gt;avg &amp;gt; 3&lt;/code&gt; has already been
+checked is redundant — and yet removing it makes the correctness of
+the shift depend on a guard fifteen lines up. Keep it and it is
+noise; drop it and it is a trap. That dilemma exists only because
+the value arrived as a &lt;code&gt;u8&lt;/code&gt; that could have been anything.&lt;/p&gt;
+&lt;p&gt;Both functions return &lt;code&gt;Result&amp;lt;(), Error&amp;gt;&lt;/code&gt;, and the signatures are
+lying about different things. On the &lt;em&gt;before&lt;/em&gt; version, &lt;code&gt;Err&lt;/code&gt; means
+&lt;em&gt;either&lt;/em&gt; you passed nonsense &lt;em&gt;or&lt;/em&gt; the bus failed, and the caller has
+to distinguish. On the &lt;em&gt;refactored&lt;/em&gt; version there is no nonsense to
+pass, so &lt;code&gt;Err&lt;/code&gt; means one kind of thing: the transaction did not
+complete. The type got smaller without the signature changing at
+all.&lt;/p&gt;
+&lt;p&gt;And the three variants the shell no longer needs —
+&lt;code&gt;InvalidAveraging&lt;/code&gt;, &lt;code&gt;InvalidConversionCycle&lt;/code&gt;, &lt;code&gt;InvalidMode&lt;/code&gt; — come
+out of the crate’s &lt;code&gt;Error&lt;/code&gt; enum entirely. Making the argument types
+smaller made the error type smaller. That is the thing about
+encoding knowledge in types that does not show up until you go
+looking: the deletions compound.&lt;/p&gt;
+&lt;p&gt;The shell has no logic; the core has no dependencies.&lt;/p&gt;
+&lt;h2 id=&quot;the-failure-mode&quot;&gt;The failure mode&lt;/h2&gt;
+&lt;p&gt;Everything so far has argued in one direction, so here is the
+correction, because this technique has a failure mode and it is not
+a rare one.&lt;/p&gt;
+&lt;p&gt;Rust makes over-encoding genuinely tempting: typestate on everything,
+const generics for register widths, a newtype per field, a sealed
+trait per axis. That code is not safer, it is just harder, and it is
+exactly the wrong abstraction Sandi warned about — only now the
+compiler enforces it, so it is more expensive to back out of than a
+bad Ruby class.&lt;/p&gt;
+&lt;p&gt;The heuristic I have landed on: encode the invariant a caller could
+plausibly get wrong &lt;em&gt;at a call site&lt;/em&gt;. Newtype the thing that crosses
+a boundary. Leave the loop counter alone.&lt;/p&gt;
+&lt;p&gt;Which is where the two halves of this post finally meet, because
+they have been pulling in opposite directions the whole way. Design
+before you publish, said the shameless green section. Do not
+over-design, says this one. Both are true, and the thing that
+reconciles them is not a balance point — it is publication. A wrong
+abstraction you have not released is a cheap experiment; you delete
+it and nobody finds out. The same abstraction behind a version
+number is a promise, and now removing it costs somebody else a
+migration. So tolerate duplication for as long as the shape is
+genuinely unclear, and spend the design budget on exactly those
+invariants you are willing to still be defending at &lt;code&gt;1.0&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;Make smaller things. In Rust, make sure some of them are types.&lt;/p&gt;
+&lt;section class=&quot;footnotes&quot;&gt;
+&lt;ol class=&quot;footnotes-list&quot;&gt;
+&lt;li id=&quot;fn-nb&quot;&gt;
+&lt;p&gt;No Boilerplate’s &lt;a rel=&quot;external&quot; href=&quot;https://www.youtube.com/watch?v=z-0-bbc80JM&quot;&gt;Rust Data Modelling Without
+Classes&lt;/a&gt; is the same
+observation aimed at a different target. Where Sandi decomposes
+behaviour into objects, that video decomposes &lt;em&gt;data&lt;/em&gt; into sum and
+product types, and lands on the phrase this section is circling —
+make illegal states unrepresentable. Worth watching immediately
+after the Metz talk, because the two together are the argument this
+post is making: the Ruby half tells you to cut things up, the Rust
+half tells you the type system will hold the pieces apart for you. &lt;a href=&quot;https://balbi.sh/posts/making-smaller-things/#fr-nb-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id=&quot;fn-errata&quot;&gt;
+&lt;p&gt;Nothing in the &lt;em&gt;software&lt;/em&gt; to be wrong, is what I mean.
+The hardware is another matter. Parts have errata: a register reads
+back a value it never accepted, a bus wedges on a zero-length write,
+a conversion is quietly wrong for one combination of settings that
+the datasheet says is legal. When that happens the workaround lands
+in the shell, because the shell is the only layer that knows a
+particular piece of silicon exists — and at that moment the shell
+does have logic in it, does need tests, and they are the expensive
+kind that need the part on the bench. Keeping those workarounds
+quarantined, attributed to a specific erratum, and deletable once
+the next die revision ships is a whole post of its own, and not this
+one. &lt;a href=&quot;https://balbi.sh/posts/making-smaller-things/#fr-errata-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id=&quot;fn-scale&quot;&gt;
+&lt;p&gt;Taking this into the real world complicates the tidy
+answer, and it is worth saying so. A thermal monitoring system that
+has to be generic over its sensors cannot speak in any one part’s
+raw units: a part reporting in 1/128 °C, another in 1/16 °C, a
+thermistor read through an ADC, and an RTD needing a resistance
+curve have nothing in common at the register level. At &lt;em&gt;that&lt;/em&gt;
+boundary &lt;code&gt;f32&lt;/code&gt; degrees is a defensible choice, and possibly the best
+one — it is the only representation all of them can reach without
+the aggregator knowing which part produced the reading, and it is
+the type a human thinks in when the question is “how hot is rack
+three.” A fixed-point millidegree &lt;code&gt;i32&lt;/code&gt; is the other serious
+candidate if you want to stay off floats and can accept a fixed
+resolution for every part. What does not change is the shape:
+&lt;code&gt;Celsius(i16)&lt;/code&gt; is right for this driver because it is what this part
+means, &lt;code&gt;f32&lt;/code&gt; or millidegrees may be right one layer up because that
+is what the &lt;em&gt;fleet&lt;/em&gt; means, and each of those is a boundary that
+parses once rather than a format smeared through the whole system.
+The mistake would be letting the aggregator’s convenient type reach
+back down and become the driver’s return type, so that every part
+converts to degrees before anyone has decided what precision the
+system needs. &lt;a href=&quot;https://balbi.sh/posts/making-smaller-things/#fr-scale-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/section&gt;
+</content>
+  </entry>
+  
+</feed>
