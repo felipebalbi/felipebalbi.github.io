@@ -1,7 +1,7 @@
 +++
 title = "Thirty-Six Registers, Described Twelve Times"
 date = 2026-09-16T09:00:00
-draft = true
+draft = false
 description = "A follow-up to Making Smaller Things, against a part that fights back. The first driver had two registers and one newtype. The second has four channels, four alert slots, sixteen address strappings, and a calibration equation — which means three different small integers that must never be transposed, a threshold whose meaning moves when you recalibrate, and a shell that had to grow a cache. What survived the scale-up, what bent, and why you stop being able to count the states."
 [taxonomies]
 tags = ["rust", "embedded", "design", "types", "testing", "drivers", "tmp108", "ina4230"]
