@@ -16,9 +16,9 @@ restructured, before anybody had asked for anything, because the
 restructuring involved reading the whole datasheet and it seemed
 dishonest to finish that and write down only the parts I had done.
 
-Three days later the list is one entry long, and it has gained a
-second heading underneath it for the item that turned out never to
-have been a gap in the first place.
+Three days later --- at the time of writing --- the list is one entry
+long, and it has gained a second heading underneath it for the item
+that turned out never to have been a gap in the first place.
 
 <!-- more -->
 
@@ -178,11 +178,11 @@ joules. For a rail that can pull 2 A at 48 V and has to run for a
 day, there are two independent floors --- one from the run time, one
 from the current range --- and you take the larger and round up:
 
-| Constraint | Floor |
-|---|---|
-| 24 h at 96 W | 60,350 nA/LSB |
-| 2 A full scale | 61,036 nA/LSB |
-| chosen | **62,500 nA/LSB** |
+| Constraint     | Floor             |
+|----------------|-------------------|
+| 24 h at 96 W   | 60,350 nA/LSB     |
+| 2 A full scale | 61,036 nA/LSB     |
+| chosen         | **62,500 nA/LSB** |
 
 which buys 24.8551 hours before the accumulator wraps, and a maximum
 current of 2.0479375 A. Both numbers are in the crate documentation,
@@ -223,24 +223,24 @@ The most interesting entry on a completeness ledger is the one you
 take off it without implementing anything.
 
 High-speed I²C is the third bus-level protocol in the datasheet, and
-the natural move --- having listed the other two --- is to list it as a
-third gap and feel thorough. That would have been wrong.
+the natural move --- having listed the other two --- is to list it as
+a third gap and feel thorough. That would have been wrong.
 
-The device enters high-speed mode when a controller sends the
-reserved master code `0b00001xxx`, and leaves it on the next stop
+The device enters high-speed mode when a controller sends the reserved
+master code `0b00001xxx`, and leaves it on the next stop
 condition. Nothing in that sequence is addressed to the INA4230. The
 part writes no register to participate. It switches its input filters
 and gets on with it.
 
 Which means participation is a property of whichever
-`embedded-hal-async` implementation gets handed to `Ina4230::new`,
-and not of this crate at all:
+`embedded-hal-async` implementation gets handed to `Ina4230::new`, and
+not of this crate at all:
 
 > It is a property of the bus, and therefore of whichever
-> `embedded-hal-async` I²C implementation is passed to
-> `Ina4230::new` --- not something this crate can offer or withhold.
-> If the controller supports 2.94 MHz operation, this driver already
-> works over it.
+> `embedded-hal-async` I²C implementation is passed to `Ina4230::new`
+> --- not something this crate can offer or withhold.  If the
+> controller supports 2.94 MHz operation, this driver already works
+> over it.
 
 So it went under a new heading, **Out of scope**, which is the
 accurate statement rather than a pending one.
@@ -277,12 +277,12 @@ three other things.
 closed starting from a paragraph explaining what the work was. The
 alert-limits entry had already identified the hard part --- the
 reinterpreting limit register --- which meant the design work started
-from a real problem statement rather than from re-reading Table 7-8
-to find out why I had skipped it.
+from a real problem statement rather than from re-reading Table 7-8 to
+find out why I had skipped it.
 
 **It turns "is this crate any good" into a diff.** Without the list,
-that question is answered by vibes: how does the README feel, how
-many downloads, is the author responsive. With it, the question is
+that question is answered by vibes: how does the README feel, how many
+downloads, is the author responsive. With it, the question is
 mechanical. Take the datasheet, take the list, and see whether they
 agree. That is checkable by someone who does not trust me, which is
 the only kind of checkable that counts.
@@ -295,12 +295,12 @@ grand sense but you are done *with that question*, and the question
 stops consuming attention.
 
 The honest limits, since this post has been fairly pleased with
-itself. The ledger is exactly as good as the reading that produced
-it, and it is a claim that I found everything --- checked against a
+itself. The ledger is exactly as good as the reading that produced it,
+and it is a claim that I found everything --- checked against a
 document that has its own errors, which is not a hypothetical
 concern.[^rev] An audit against one revision of a datasheet says
-nothing whatsoever about the next. And a list of gaps is not a list
-of bugs: everything on it was, by construction, something I knew
+nothing whatsoever about the next. And a list of gaps is not a list of
+bugs: everything on it was, by construction, something I knew
 about. The failures that hurt are the ones where the code and the
 datasheet disagree and I read straight past it.
 
@@ -309,8 +309,8 @@ worth taking the win.
 
 [^rev]: The driver before this one had been decoding the TMP108
 datasheet's own stated power-on value into a temperature the part
-cannot produce, for about a year, which is the subject of
-[the previous post](@/posts/thirty-six-registers/index.md). An audit
+cannot produce, for about a year, which is the subject of [the
+previous post](@/posts/thirty-six-registers/index.md). An audit
 against a document is not an audit against reality. It is just
 considerably cheaper than the alternative, and it is the one you can
 do on a Sunday.
