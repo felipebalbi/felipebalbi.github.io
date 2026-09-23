@@ -1,7 +1,7 @@
 +++
 title = "Six Entries, and the One I Argued Away"
 date = 2026-09-23T09:00:00
-draft = true
+draft = false
 description = "A driver crate with a 'Not yet implemented' heading in its README, and what happened to it over three days: six entries down to one, plus a new heading for the item that turned out never to have been a gap at all. On documentation gaps that are two true sentences filed in different places, a caveat written with its own activation condition attached, and why 'not implemented' and 'not ours' have to be told apart by argument rather than by feel."
 [taxonomies]
 tags = ["embedded", "rust", "drivers", "documentation", "datasheets", "ina4230"]
