@@ -1,0 +1,424 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+  <title>Felipe Balbi</title>
+  <subtitle>Notes on embedded systems, Rust, and the craft of writing software.</subtitle>
+  <link href="https://balbi.sh/tags/wire/atom.xml" rel="self" type="application/atom+xml"/>
+  <link href="https://balbi.sh"/>
+  <generator uri="https://www.getzola.org/">Zola</generator>
+  <updated>2026-08-11T09:00:00+00:00</updated>
+  <id>https://balbi.sh/tags/wire/atom.xml</id>
+  
+  <entry xml:lang="en">
+    <title>Tamal: Frames on the Wire</title>
+    <published>2026-08-11T09:00:00+00:00</published>
+    <updated>2026-08-11T09:00:00+00:00</updated>
+    <author><name>Felipe Balbi</name></author>
+    <link rel="alternate" href="https://balbi.sh/posts/tamal-wire/" type="text/html"/>
+    <id>https://balbi.sh/posts/tamal-wire/</id>
+    <summary type="html">&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-serdes/&quot;&gt;engine is open entire&lt;/a&gt;. The outside-in descent that began with
+the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;shape post’s&lt;/a&gt; map of eight boxes ended when the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-serdes/&quot;&gt;serdes
+finale&lt;/a&gt; opened the last of them, and everything the fabric does —
+fetch, decode, compute, drive the pins, record what happened — has now been
+read leaf by leaf. But a running engine on a board is only half a system. A
+host has to load a program &lt;em&gt;into&lt;/em&gt; it and read a trace back &lt;em&gt;out&lt;/em&gt; of it, and
+between the host and the fabric there is a wire. This post is about what
+travels on that wire: not the electrical layer, not the UART that carries the
+bytes, but the &lt;em&gt;format&lt;/em&gt; — the seams that turn a bare stream of bytes into
+messages a host and an FPGA can agree on.&lt;/p&gt;
+&lt;p&gt;We have been here before, from the other side. The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-loader/&quot;&gt;loader&lt;/a&gt; was “the
+streaming realization of the pure &lt;code&gt;Tamal.Wire&lt;/code&gt; model,” and the
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-loader-cobs/&quot;&gt;COBS-codec post&lt;/a&gt; realized the streaming byte-stuffing the loader
+clocks a byte at a time. Both of those posts implemented something. This post
+opens the thing they were implementing &lt;em&gt;against&lt;/em&gt; — the pure reference model
+they were proven equal to. It is two files, &lt;code&gt;Tamal.Wire.Cobs&lt;/code&gt; (68 lines) and
+&lt;code&gt;Tamal.Wire&lt;/code&gt; (158), and neither of them ever runs on the fabric. They are pure
+&lt;code&gt;[BitVector 8]&lt;/code&gt; functions over ordinary lists, the same “honest surplus” the
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-serdes/&quot;&gt;serdes post’s&lt;/a&gt; unused &lt;code&gt;deserializeX1&lt;/code&gt; was: a readable specification
+that exists so the hardware has something to be checked against.&lt;/p&gt;
+&lt;p&gt;Two files, three layers, read bottom-up: the byte-stuffing that removes every
+zero, the frame that wraps a payload in a CRC and a delimiter, and the messages
+the frames carry. We start at the bottom, with the leaf that owes nothing to
+anyone.&lt;/p&gt;</summary>
+    
+    <content type="html">&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-serdes/&quot;&gt;engine is open entire&lt;/a&gt;. The outside-in descent that began with
+the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;shape post’s&lt;/a&gt; map of eight boxes ended when the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-serdes/&quot;&gt;serdes
+finale&lt;/a&gt; opened the last of them, and everything the fabric does —
+fetch, decode, compute, drive the pins, record what happened — has now been
+read leaf by leaf. But a running engine on a board is only half a system. A
+host has to load a program &lt;em&gt;into&lt;/em&gt; it and read a trace back &lt;em&gt;out&lt;/em&gt; of it, and
+between the host and the fabric there is a wire. This post is about what
+travels on that wire: not the electrical layer, not the UART that carries the
+bytes, but the &lt;em&gt;format&lt;/em&gt; — the seams that turn a bare stream of bytes into
+messages a host and an FPGA can agree on.&lt;/p&gt;
+&lt;p&gt;We have been here before, from the other side. The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-loader/&quot;&gt;loader&lt;/a&gt; was “the
+streaming realization of the pure &lt;code&gt;Tamal.Wire&lt;/code&gt; model,” and the
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-loader-cobs/&quot;&gt;COBS-codec post&lt;/a&gt; realized the streaming byte-stuffing the loader
+clocks a byte at a time. Both of those posts implemented something. This post
+opens the thing they were implementing &lt;em&gt;against&lt;/em&gt; — the pure reference model
+they were proven equal to. It is two files, &lt;code&gt;Tamal.Wire.Cobs&lt;/code&gt; (68 lines) and
+&lt;code&gt;Tamal.Wire&lt;/code&gt; (158), and neither of them ever runs on the fabric. They are pure
+&lt;code&gt;[BitVector 8]&lt;/code&gt; functions over ordinary lists, the same “honest surplus” the
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-serdes/&quot;&gt;serdes post’s&lt;/a&gt; unused &lt;code&gt;deserializeX1&lt;/code&gt; was: a readable specification
+that exists so the hardware has something to be checked against.&lt;/p&gt;
+&lt;p&gt;Two files, three layers, read bottom-up: the byte-stuffing that removes every
+zero, the frame that wraps a payload in a CRC and a delimiter, and the messages
+the frames carry. We start at the bottom, with the leaf that owes nothing to
+anyone.&lt;/p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;/span&gt;&lt;h2 id=&quot;the-leaf-that-removes-every-zero&quot;&gt;The leaf that removes every zero&lt;/h2&gt;
+&lt;p&gt;A bare stream of bytes has no seams. Send two messages back to back and the
+receiver cannot tell where the first ends and the second begins — unless you
+reserve a byte to mean &lt;em&gt;stop here&lt;/em&gt;. The obvious candidate is &lt;code&gt;0x00&lt;/code&gt;, but it is
+only usable as a delimiter if it never appears inside a message, and real
+payloads are full of zeros. &lt;a rel=&quot;external&quot; href=&quot;https://en.wikipedia.org/wiki/Consistent_Overhead_Byte_Stuffing&quot;&gt;&lt;strong&gt;COBS&lt;/strong&gt; — Consistent Overhead Byte
+Stuffing&lt;/a&gt; — buys that guarantee cheaply: it removes &lt;em&gt;every&lt;/em&gt; &lt;code&gt;0x00&lt;/code&gt;
+from a payload, at a cost of at most one extra byte per 254, so a single &lt;code&gt;0x00&lt;/code&gt;
+can be reserved — unambiguously — to mean &lt;em&gt;end of frame&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;Tamal.Wire.Cobs&lt;/code&gt; is the pure model of that transform, and its door lists two
+functions:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;module&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Tamal.Wire.Cobs&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; cobsEncode&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; cobsDecode&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  )&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; where&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;import&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Clash.Prelude&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;import&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; qualified&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Data.List&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; as&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; L&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;It is a &lt;strong&gt;leaf&lt;/strong&gt;: it imports no other &lt;code&gt;Tamal.Wire.*&lt;/code&gt; module, only the prelude
+and &lt;code&gt;Data.List&lt;/code&gt;. That isolation is deliberate — COBS knows nothing about
+CRCs, opcodes, or frames; it is a pure list-to-list transform, and everything
+above it in the stack treats it as a black box that removes zeros and puts them
+back.&lt;/p&gt;
+&lt;p&gt;The encoder groups the input:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;cobsEncode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;cobsEncode &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; go &lt;/span&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt;]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; where&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  go grp &lt;/span&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt;]&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; emit grp&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  go grp &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;b &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span&gt; bs&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; L.&lt;/span&gt;&lt;span&gt;length grp &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 254&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; emit grp &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;&amp;gt;&lt;/span&gt;&lt;span&gt; go &lt;/span&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt;]&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;b &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span&gt; bs&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; group full: flush, reprocess b&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    |&lt;/span&gt;&lt;span&gt; b &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; emit grp &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;&amp;gt;&lt;/span&gt;&lt;span&gt; go &lt;/span&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt;]&lt;/span&gt;&lt;span&gt; bs &lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; zero terminates the group (implied)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    |&lt;/span&gt;&lt;span&gt; otherwise &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; go &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;grp &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;&amp;gt;&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span&gt;b&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; bs&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  emit grp &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; fromIntegral &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;L.&lt;/span&gt;&lt;span&gt;length grp &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;+&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; :&lt;/span&gt;&lt;span&gt; grp&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Read &lt;code&gt;emit&lt;/code&gt; first, because it defines the shape of the output. A &lt;strong&gt;group&lt;/strong&gt; is a
+&lt;em&gt;code byte&lt;/em&gt; followed by its data bytes, and the code byte is &lt;code&gt;length + 1&lt;/code&gt; — so
+an empty group emits &lt;code&gt;[0x01]&lt;/code&gt;, a group of three data bytes emits &lt;code&gt;[0x04, …]&lt;/code&gt;.
+The &lt;code&gt;+ 1&lt;/code&gt; is what keeps zeros out of the code byte itself: the smallest code is
+&lt;code&gt;0x01&lt;/code&gt;, never &lt;code&gt;0x00&lt;/code&gt;, so no code byte can ever collide with the delimiter.&lt;/p&gt;
+&lt;p&gt;Then &lt;code&gt;go&lt;/code&gt; walks the input, accumulating non-zero bytes into &lt;code&gt;grp&lt;/code&gt;. Three arms,
+and the order they are written in is the whole subtlety of the algorithm:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;b == 0&lt;/code&gt;&lt;/strong&gt; terminates the group. The zero is &lt;em&gt;consumed&lt;/em&gt; — it never appears
+in the output — and its presence is recorded &lt;em&gt;implicitly&lt;/em&gt;, by the fact that
+a new group starts after it. A code byte less than &lt;code&gt;0xFF&lt;/code&gt; means “this group
+was closed by a zero the encoder ate,” and the decoder puts that zero back.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;otherwise&lt;/code&gt;&lt;/strong&gt; appends the non-zero byte and keeps going.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;length grp == 254&lt;/code&gt;&lt;/strong&gt; is checked &lt;em&gt;first&lt;/em&gt;, before either of the others, and
+that ordering is load-bearing.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;The load-bearing case is worth slowing down for, because it is the one bug this
+whole design is arranged to avoid. A group can hold at most 254 data bytes —
+the code byte is &lt;code&gt;length + 1&lt;/code&gt;, and &lt;code&gt;254 + 1 = 255 = 0xFF&lt;/code&gt; is the largest byte.
+When a group fills to 254, it must be flushed, and the flush code &lt;code&gt;0xFF&lt;/code&gt; carries
+a special meaning: &lt;em&gt;this group was full, not closed by a zero&lt;/em&gt;. There is no
+implied zero after a &lt;code&gt;0xFF&lt;/code&gt; group.&lt;/p&gt;
+&lt;p&gt;Now imagine a zero arrives exactly when the group is full. If the &lt;code&gt;b == 0&lt;/code&gt; case
+ran first, the zero would fold into the full group — which flushes as &lt;code&gt;0xFF&lt;/code&gt;,
+which carries &lt;em&gt;no&lt;/em&gt; implied zero — and the zero would silently vanish on
+decode. Checking &lt;code&gt;length == 254&lt;/code&gt; first prevents that: the full group flushes as
+&lt;code&gt;0xFF&lt;/code&gt; and reprocesses &lt;code&gt;b&lt;/code&gt; in a &lt;em&gt;fresh&lt;/em&gt; empty group, so a zero landing on a full
+boundary terminates that fresh group and survives as an implied zero. The
+source comment spells it out, and there is a regression test pinned to exactly
+this input:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;testCase &lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;cobsEncode 254 non-zero then 0x00 == FF,&amp;lt;254&amp;gt;,01,01&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  $&lt;/span&gt;&lt;span&gt; cobsEncode &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;run254 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;&amp;gt;&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0x00&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  @?=&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0xFF&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; :&lt;/span&gt;&lt;span&gt; run254&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;lt;&amp;gt;&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0x01&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0x01&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The &lt;code&gt;0xFF&lt;/code&gt; flushes the full group, and the trailing &lt;code&gt;[0x01, 0x01]&lt;/code&gt; is a fresh
+empty group (code &lt;code&gt;0x01&lt;/code&gt;) closed by the zero (another &lt;code&gt;0x01&lt;/code&gt;). Fold the zero
+into the full group and that &lt;code&gt;[0x01, 0x01]&lt;/code&gt; disappears — and so does the zero.
+This is the same ordering the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-loader-cobs/&quot;&gt;streaming COBS post&lt;/a&gt; had to get
+right in its &lt;code&gt;s -&amp;gt; i -&amp;gt; (s, o)&lt;/code&gt; form: same algorithm, same trap, two
+realizations, and the differential tests weld them together.&lt;/p&gt;
+&lt;h2 id=&quot;putting-the-zeros-back&quot;&gt;Putting the zeros back&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;cobsDecode&lt;/code&gt; is the inverse, and it carries the totality discipline the whole
+series leans on: it returns &lt;code&gt;Maybe&lt;/code&gt;, &lt;code&gt;Nothing&lt;/code&gt; on anything malformed.&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;cobsDecode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Maybe&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;cobsDecode bytes&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; L.&lt;/span&gt;&lt;span&gt;null bytes &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; empty is not a valid frame&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; L.&lt;/span&gt;&lt;span&gt;elem &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0&lt;/span&gt;&lt;span&gt; bytes &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; a valid (delimiter-stripped) frame has no 0x00&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span&gt; otherwise &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; go bytes&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; where&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  go &lt;/span&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt;]&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Just&lt;/span&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt;]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  go &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;code &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span&gt; rest&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    let&lt;/span&gt;&lt;span&gt; n &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; fromIntegral code &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; data bytes in this group&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;     in&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; do&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;          (&lt;/span&gt;&lt;span&gt;grp&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; more&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;lt;-&lt;/span&gt;&lt;span&gt; takeExactly n rest&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;          if&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; L.&lt;/span&gt;&lt;span&gt;null more&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;            then&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Just&lt;/span&gt;&lt;span&gt; grp &lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; final group: no trailing zero&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;            else&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; do&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;              decoded &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;-&lt;/span&gt;&lt;span&gt; go more&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;              Just&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;grp &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;if&lt;/span&gt;&lt;span&gt; code &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 255&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; then&lt;/span&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt;]&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; else&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;lt;&amp;gt;&lt;/span&gt;&lt;span&gt; decoded&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The two guards reject the two ways a delimiter-stripped frame can be malformed
+on its face: it cannot be empty, and it cannot contain a &lt;code&gt;0x00&lt;/code&gt; — because COBS
+by construction removed all of them, so a zero in the input means corruption.
+Everything else is handled by &lt;code&gt;go&lt;/code&gt;, one group at a time. It reads the code
+byte, takes exactly &lt;code&gt;code - 1&lt;/code&gt; data bytes via &lt;code&gt;takeExactly&lt;/code&gt; (which returns
+&lt;code&gt;Nothing&lt;/code&gt; if the input is too short — a code byte demanding more bytes than
+remain), and then decides whether to reinsert a zero. The final group —
+&lt;code&gt;more&lt;/code&gt; is empty — gets no trailing zero, because nothing came after it. An
+interior group gets a zero &lt;em&gt;unless&lt;/em&gt; its code was &lt;code&gt;0xFF&lt;/code&gt;, because &lt;code&gt;0xFF&lt;/code&gt; means
+“full group, no implied zero,” the exact flag &lt;code&gt;cobsEncode&lt;/code&gt; set.&lt;/p&gt;
+&lt;p&gt;That single &lt;code&gt;if code == 255 then [] else [0]&lt;/code&gt; is the decoder’s half of the
+load-bearing case. It is why the full-group flush and the zero-terminated group
+decode back to different things, and why the regression test round-trips.&lt;/p&gt;
+&lt;p&gt;The round-trip law is stated as a property, and it is tested over two
+generators for a reason:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;testProperty &lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;cobsDecode . cobsEncode == Just&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; $&lt;/span&gt;&lt;span&gt; property &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; do&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  xs &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;-&lt;/span&gt;&lt;span&gt; forAll &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Gen.&lt;/span&gt;&lt;span&gt;list &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Range.&lt;/span&gt;&lt;span&gt;linear &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 300&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; genByteZeros&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  cobsDecode &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;cobsEncode xs&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ===&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Just&lt;/span&gt;&lt;span&gt; xs&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;genByteZeros&lt;/code&gt; is zero-dense — it produces many group boundaries by emitting
+frequent zeros — but by design it &lt;em&gt;cannot&lt;/em&gt; build a 254-byte non-zero run, so
+it never reaches the full-group cap. A second generator, &lt;code&gt;genRuns&lt;/code&gt;,
+concatenates non-zero runs up to 260 long, each optionally followed by a single
+zero, so it crosses the 254 boundary and exercises the full-group / trailing-zero
+interaction directly. Two generators, one law, and the boundary the first one
+cannot reach is exactly where the algorithm is subtlest.&lt;/p&gt;
+&lt;h2 id=&quot;from-bytes-to-a-word-and-back&quot;&gt;From bytes to a word, and back&lt;/h2&gt;
+&lt;p&gt;With the zero-stuffing in hand, we climb to &lt;code&gt;Tamal.Wire&lt;/code&gt;, and its first job is
+smaller than COBS: turn a 32-bit instruction word into bytes. The engine speaks
+32-bit words; the wire speaks bytes; something has to choose an order.&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;wordToBytesLE&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Vec&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 4&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;wordToBytesLE &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; reverse &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span&gt; unpack&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;bytesToWordLE&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Vec&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 4&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;bytesToWordLE &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; pack &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span&gt; reverse&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;unpack&lt;/code&gt; splits the word into a &lt;code&gt;Vec 4 (BitVector 8)&lt;/code&gt; with the most significant
+byte first; &lt;code&gt;reverse&lt;/code&gt; flips it to &lt;strong&gt;little-endian&lt;/strong&gt; — least significant byte
+first, so &lt;code&gt;0xAABBCCDD&lt;/code&gt; becomes &lt;code&gt;&amp;lt;0xDD, 0xCC, 0xBB, 0xAA&amp;gt;&lt;/code&gt; (ISA §4). This is a
+detail worth naming out loud, because it runs &lt;em&gt;against&lt;/em&gt; the grain of everything
+the bus side of the engine did: the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-crc/&quot;&gt;CRC post&lt;/a&gt; and the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-serdes/&quot;&gt;serdes
+post&lt;/a&gt; both unpacked bytes &lt;strong&gt;MSB-first&lt;/strong&gt; onto the eSPI wire, because that
+is what the eSPI spec demands. Here, the &lt;em&gt;host transport&lt;/em&gt; is little-endian —
+the natural order for a host CPU writing words to a serial port. The two
+orderings live in different worlds and never meet: the eSPI wire is MSB-first,
+the host word transport is LE, and &lt;code&gt;wordToBytesLE&lt;/code&gt; is the seam that keeps them
+straight.&lt;/p&gt;
+&lt;p&gt;The inverse is &lt;code&gt;pack . reverse&lt;/code&gt;, and &lt;code&gt;bytesToWordLE (wordToBytesLE w) == w&lt;/code&gt;
+falls out by construction — &lt;code&gt;reverse&lt;/code&gt; is its own inverse and &lt;code&gt;pack&lt;/code&gt;/&lt;code&gt;unpack&lt;/code&gt;
+are &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-isa/&quot;&gt;total, zero-cost reinterpretations&lt;/a&gt;. The test states it as a property
+and pins the concrete vector:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;testCase &lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;wordToBytesLE 0xAABBCCDD == [DD,CC,BB,AA]&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  $&lt;/span&gt;&lt;span&gt; toList &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;wordToBytesLE &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0xAABBCCDD&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  @?=&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0xDD&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0xCC&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0xBB&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0xAA&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;h2 id=&quot;the-crc-one-layer-up&quot;&gt;The CRC, one layer up&lt;/h2&gt;
+&lt;p&gt;A frame needs integrity, and the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-crc/&quot;&gt;CRC post&lt;/a&gt; already built the primitive:
+&lt;code&gt;crc8Update&lt;/code&gt;, one byte folded into a running CRC-8 (polynomial &lt;code&gt;0x07&lt;/code&gt;, initial
+&lt;code&gt;0x00&lt;/code&gt;, MSB-first). &lt;code&gt;Tamal.Wire&lt;/code&gt; reuses it, unchanged, one layer up:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;crc8&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;crc8 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; L.&lt;/span&gt;&lt;span&gt;foldl&amp;#39; crc8Update &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;That is the whole function — fold &lt;code&gt;crc8Update&lt;/code&gt; over a byte &lt;em&gt;list&lt;/em&gt;, starting
+from &lt;code&gt;0&lt;/code&gt;. The CRC block did the hard per-byte arithmetic; the frame layer just
+sequences it over a payload. And because it is the CRC-8/SMBUS parameterization,
+it satisfies the standard check vector, which the test uses as an independent
+oracle:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;testCase &lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;crc8 matches CRC-8/SMBUS check vector (0xF4)&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  $&lt;/span&gt;&lt;span&gt; crc8 &lt;/span&gt;&lt;span&gt;[&lt;/span&gt;&lt;span&gt;fromIntegral &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;fromEnum c&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; |&lt;/span&gt;&lt;span&gt; c &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;-&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;123456789&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  @?=&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0xF4&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The string &lt;code&gt;&quot;123456789&quot;&lt;/code&gt; is the canonical CRC check input, and &lt;code&gt;0xF4&lt;/code&gt; is the
+published CRC-8/SMBUS result. If the polynomial or the fold order ever drifted,
+this one line would catch it against a number no Tamal code produced.&lt;/p&gt;
+&lt;h2 id=&quot;the-frame-crc-then-stuff-then-delimit&quot;&gt;The frame: CRC, then stuff, then delimit&lt;/h2&gt;
+&lt;p&gt;Now the three pieces — CRC, COBS, delimiter — assemble into a frame. The
+encoder is one line, and the order of operations is the entire format:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;frameEncode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;frameEncode logical &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; cobsEncode &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;logical &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;&amp;gt;&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span&gt;crc8 logical&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;lt;&amp;gt;&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Read it inside out. Start with the &lt;em&gt;logical&lt;/em&gt; bytes (an opcode and its payload).
+Append the CRC of those bytes. COBS-encode the whole &lt;code&gt;logical ++ [crc]&lt;/code&gt; blob —
+which removes every &lt;code&gt;0x00&lt;/code&gt; from it. Then, and only then, append a single &lt;code&gt;0x00&lt;/code&gt;
+delimiter. The delimiter is safe precisely because COBS guaranteed there are no
+other zeros in front of it: the one &lt;code&gt;0x00&lt;/code&gt; on the wire is unambiguously the end
+of the frame.&lt;/p&gt;
+&lt;figure&gt;
+&lt;svg class=&quot;wirew&quot; viewBox=&quot;0 0 760 200&quot; role=&quot;img&quot; aria-labelledby=&quot;wirew-t wirew-d&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot;&gt;
+  &lt;title id=&quot;wirew-t&quot;&gt;A wire frame built in four layers&lt;/title&gt;
+  &lt;desc id=&quot;wirew-d&quot;&gt;A byte pipeline shown as four stacked rows. Row one, the logical frame, is an opcode byte followed by payload bytes. Row two appends a CRC-8 byte, accented, to the end. Row three COBS-encodes the result: a code byte leads each group and every 0x00 has been removed. Row four appends a single 0x00 delimiter byte, accented, at the very end; it is the only zero on the wire.&lt;/desc&gt;
+  &lt;style&gt;
+    .wirew text { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; fill: var(--fg, #222); }
+    .wirew .lbl { font-family: system-ui, sans-serif; font-size: 12px; fill: var(--fg-dim, #777); }
+    .wirew .cell { fill: none; stroke: var(--fg-dim, #999); stroke-width: 1; }
+    .wirew .accent { fill: var(--accent, #c25); fill-opacity: 0.16; stroke: var(--accent, #c25); }
+    .wirew .code { fill: var(--fg-dim, #999); fill-opacity: 0.12; }
+  &lt;/style&gt;
+  &lt;text class=&quot;lbl&quot; x=&quot;8&quot; y=&quot;26&quot;&gt;logical&lt;/text&gt;
+  &lt;rect class=&quot;cell&quot; x=&quot;120&quot; y=&quot;14&quot; width=&quot;70&quot; height=&quot;24&quot;/&gt;&lt;text x=&quot;132&quot; y=&quot;31&quot;&gt;opcode&lt;/text&gt;
+  &lt;rect class=&quot;cell&quot; x=&quot;190&quot; y=&quot;14&quot; width=&quot;60&quot; height=&quot;24&quot;/&gt;&lt;text x=&quot;200&quot; y=&quot;31&quot;&gt;pay&lt;/text&gt;
+  &lt;rect class=&quot;cell&quot; x=&quot;250&quot; y=&quot;14&quot; width=&quot;60&quot; height=&quot;24&quot;/&gt;&lt;text x=&quot;260&quot; y=&quot;31&quot;&gt;pay&lt;/text&gt;
+  &lt;rect class=&quot;cell&quot; x=&quot;310&quot; y=&quot;14&quot; width=&quot;60&quot; height=&quot;24&quot;/&gt;&lt;text x=&quot;320&quot; y=&quot;31&quot;&gt;pay&lt;/text&gt;
+  &lt;text class=&quot;lbl&quot; x=&quot;8&quot; y=&quot;70&quot;&gt;+ CRC-8&lt;/text&gt;
+  &lt;rect class=&quot;cell&quot; x=&quot;120&quot; y=&quot;58&quot; width=&quot;70&quot; height=&quot;24&quot;/&gt;&lt;text x=&quot;132&quot; y=&quot;75&quot;&gt;opcode&lt;/text&gt;
+  &lt;rect class=&quot;cell&quot; x=&quot;190&quot; y=&quot;58&quot; width=&quot;60&quot; height=&quot;24&quot;/&gt;&lt;text x=&quot;200&quot; y=&quot;75&quot;&gt;pay&lt;/text&gt;
+  &lt;rect class=&quot;cell&quot; x=&quot;250&quot; y=&quot;58&quot; width=&quot;60&quot; height=&quot;24&quot;/&gt;&lt;text x=&quot;260&quot; y=&quot;75&quot;&gt;pay&lt;/text&gt;
+  &lt;rect class=&quot;cell&quot; x=&quot;310&quot; y=&quot;58&quot; width=&quot;60&quot; height=&quot;24&quot;/&gt;&lt;text x=&quot;320&quot; y=&quot;75&quot;&gt;pay&lt;/text&gt;
+  &lt;rect class=&quot;cell accent&quot; x=&quot;370&quot; y=&quot;58&quot; width=&quot;60&quot; height=&quot;24&quot;/&gt;&lt;text x=&quot;382&quot; y=&quot;75&quot;&gt;crc&lt;/text&gt;
+  &lt;text class=&quot;lbl&quot; x=&quot;8&quot; y=&quot;114&quot;&gt;COBS&lt;/text&gt;
+  &lt;rect class=&quot;cell code&quot; x=&quot;120&quot; y=&quot;102&quot; width=&quot;52&quot; height=&quot;24&quot;/&gt;&lt;text x=&quot;130&quot; y=&quot;119&quot;&gt;code&lt;/text&gt;
+  &lt;rect class=&quot;cell&quot; x=&quot;172&quot; y=&quot;102&quot; width=&quot;70&quot; height=&quot;24&quot;/&gt;&lt;text x=&quot;184&quot; y=&quot;119&quot;&gt;opcode&lt;/text&gt;
+  &lt;rect class=&quot;cell&quot; x=&quot;242&quot; y=&quot;102&quot; width=&quot;52&quot; height=&quot;24&quot;/&gt;&lt;text x=&quot;252&quot; y=&quot;119&quot;&gt;pay&lt;/text&gt;
+  &lt;rect class=&quot;cell code&quot; x=&quot;294&quot; y=&quot;102&quot; width=&quot;52&quot; height=&quot;24&quot;/&gt;&lt;text x=&quot;304&quot; y=&quot;119&quot;&gt;code&lt;/text&gt;
+  &lt;rect class=&quot;cell&quot; x=&quot;346&quot; y=&quot;102&quot; width=&quot;52&quot; height=&quot;24&quot;/&gt;&lt;text x=&quot;356&quot; y=&quot;119&quot;&gt;pay&lt;/text&gt;
+  &lt;rect class=&quot;cell accent&quot; x=&quot;398&quot; y=&quot;102&quot; width=&quot;52&quot; height=&quot;24&quot;/&gt;&lt;text x=&quot;410&quot; y=&quot;119&quot;&gt;crc&lt;/text&gt;
+  &lt;text class=&quot;lbl&quot; x=&quot;460&quot; y=&quot;118&quot;&gt;no 0x00 inside&lt;/text&gt;
+  &lt;text class=&quot;lbl&quot; x=&quot;8&quot; y=&quot;158&quot;&gt;+ delim&lt;/text&gt;
+  &lt;rect class=&quot;cell code&quot; x=&quot;120&quot; y=&quot;146&quot; width=&quot;52&quot; height=&quot;24&quot;/&gt;&lt;text x=&quot;130&quot; y=&quot;163&quot;&gt;code&lt;/text&gt;
+  &lt;rect class=&quot;cell&quot; x=&quot;172&quot; y=&quot;146&quot; width=&quot;70&quot; height=&quot;24&quot;/&gt;&lt;text x=&quot;184&quot; y=&quot;163&quot;&gt;opcode&lt;/text&gt;
+  &lt;rect class=&quot;cell&quot; x=&quot;242&quot; y=&quot;146&quot; width=&quot;52&quot; height=&quot;24&quot;/&gt;&lt;text x=&quot;252&quot; y=&quot;163&quot;&gt;pay&lt;/text&gt;
+  &lt;rect class=&quot;cell code&quot; x=&quot;294&quot; y=&quot;146&quot; width=&quot;52&quot; height=&quot;24&quot;/&gt;&lt;text x=&quot;304&quot; y=&quot;163&quot;&gt;code&lt;/text&gt;
+  &lt;rect class=&quot;cell&quot; x=&quot;346&quot; y=&quot;146&quot; width=&quot;52&quot; height=&quot;24&quot;/&gt;&lt;text x=&quot;356&quot; y=&quot;163&quot;&gt;pay&lt;/text&gt;
+  &lt;rect class=&quot;cell accent&quot; x=&quot;398&quot; y=&quot;146&quot; width=&quot;52&quot; height=&quot;24&quot;/&gt;&lt;text x=&quot;410&quot; y=&quot;163&quot;&gt;crc&lt;/text&gt;
+  &lt;rect class=&quot;cell accent&quot; x=&quot;450&quot; y=&quot;146&quot; width=&quot;44&quot; height=&quot;24&quot;/&gt;&lt;text x=&quot;462&quot; y=&quot;163&quot;&gt;00&lt;/text&gt;
+  &lt;text class=&quot;lbl&quot; x=&quot;506&quot; y=&quot;162&quot;&gt;the one zero on the wire&lt;/text&gt;
+&lt;/svg&gt;
+&lt;figcaption style=&quot;text-align:center;color:var(--fg-dim);font-size:.9rem;margin-top:.85rem;font-family:var(--sans)&quot;&gt;A frame is built in four steps. The &lt;em&gt;logical&lt;/em&gt; bytes are an opcode and its payload; &lt;code&gt;frameEncode&lt;/code&gt; appends the CRC-8 (accented), COBS-encodes the whole blob so every interior &lt;code&gt;0x00&lt;/code&gt; is removed and each group gains a leading code byte, then appends a single &lt;code&gt;0x00&lt;/code&gt; delimiter (accented) --- the only zero on the wire, and therefore an unambiguous end-of-frame marker.&lt;/figcaption&gt;
+&lt;/figure&gt;
+&lt;p&gt;The decoder runs the pipeline backwards, and every step that can fail names its
+failure:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;frameDecode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Either&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; WireError&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;frameDecode wire &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; do&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  stripped &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;-&lt;/span&gt;&lt;span&gt; stripDelim wire&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  content &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;-&lt;/span&gt;&lt;span&gt; maybe &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Left&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; BadCobs&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Right&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;cobsDecode stripped&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;/span&gt;&lt;span&gt;logical&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; crc&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;lt;-&lt;/span&gt;&lt;span&gt; splitLastByte content&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  if&lt;/span&gt;&lt;span&gt; crc8 logical &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span&gt; crc&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    then&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Right&lt;/span&gt;&lt;span&gt; logical&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    else&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Left&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; BadCrc&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Strip the trailing &lt;code&gt;0x00&lt;/code&gt; delimiter (&lt;code&gt;stripDelim&lt;/code&gt;, failing &lt;code&gt;ShortFrame&lt;/code&gt; on empty
+or &lt;code&gt;BadCobs&lt;/code&gt; if the last byte is not a zero), COBS-decode (lifting the codec’s
+&lt;code&gt;Nothing&lt;/code&gt; to &lt;code&gt;BadCobs&lt;/code&gt;), split off the trailing CRC byte, and verify it against
+a freshly recomputed CRC. Four steps, each in the &lt;code&gt;Either WireError&lt;/code&gt; monad, so
+the first failure short-circuits and names itself.&lt;/p&gt;
+&lt;p&gt;That &lt;code&gt;WireError&lt;/code&gt; sum is the same “total, named failures” discipline as the
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-isa/&quot;&gt;ISA post’s&lt;/a&gt; &lt;code&gt;DecodeError&lt;/code&gt;:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; WireError&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; BadCrc&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;          --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; CRC byte did not match the recomputed CRC&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; BadCobs&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;         --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; malformed COBS or missing delimiter&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; UnknownOpcode&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; ShortFrame&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;      --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; decoded frame lacks an opcode and/or CRC byte&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; BadPayloadLen&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;   --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; payload length invalid for the opcode&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  deriving&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; stock&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Generic&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Show&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Eq&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  deriving&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; anyclass&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;NFDataX&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Five ways a frame can be wrong, each a constructor, none of them an exception or
+a crash. A decoder that returns &lt;code&gt;Either WireError&lt;/code&gt; cannot silently accept a
+corrupt frame — the caller must handle every arm — and the property test
+proves the pipeline never lies:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;testProperty &lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;single-byte corruption is never a silent success&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; $&lt;/span&gt;&lt;span&gt; property &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; do&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  xs &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;-&lt;/span&gt;&lt;span&gt; forAll &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Gen.&lt;/span&gt;&lt;span&gt;list &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Range.&lt;/span&gt;&lt;span&gt;linear &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; genByte&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  let&lt;/span&gt;&lt;span&gt; f &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; frameEncode xs&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  i &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;-&lt;/span&gt;&lt;span&gt; forAll &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Gen.&lt;/span&gt;&lt;span&gt;int &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Range.&lt;/span&gt;&lt;span&gt;linear &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;L.&lt;/span&gt;&lt;span&gt;length f &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  let&lt;/span&gt;&lt;span&gt; f&amp;#39; &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;if&lt;/span&gt;&lt;span&gt; j &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span&gt; i &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;then&lt;/span&gt;&lt;span&gt; x &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;`&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;xor&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;`&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; else&lt;/span&gt;&lt;span&gt; x &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;|&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;j&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; x&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;lt;-&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; L.&lt;/span&gt;&lt;span&gt;zip &lt;/span&gt;&lt;span&gt;[&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ..&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt; f&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  frameDecode f&amp;#39; &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;/==&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Right&lt;/span&gt;&lt;span&gt; xs&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Flip a single bit anywhere in a valid frame and decode must &lt;em&gt;not&lt;/em&gt; return the
+original bytes. It might return a &lt;code&gt;Left&lt;/code&gt; of some &lt;code&gt;WireError&lt;/code&gt;, or a &lt;code&gt;Right&lt;/code&gt; of
+&lt;em&gt;different&lt;/em&gt; bytes — but never a silent success on corrupted input. That is the
+CRC earning its byte, checked at every position in the frame.&lt;/p&gt;
+&lt;h2 id=&quot;the-messages-the-frames-carry&quot;&gt;The messages the frames carry&lt;/h2&gt;
+&lt;p&gt;The top layer gives the frames meaning. A frame is just an opcode and a payload;
+a &lt;em&gt;message&lt;/em&gt; is what those mean. Two directions, host-to-FPGA control and
+FPGA-to-host results, and a small type for the control plane:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; ControlMsg&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; LoadProgram&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;  --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; instruction words to load into the instr BRAM&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Trigger&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;                     --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; start-of-run pulse&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  deriving&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; stock&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Generic&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Show&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Eq&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  deriving&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; anyclass&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;NFDataX&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Three opcodes name the traffic (§8.1), and &lt;code&gt;0x00&lt;/code&gt; is conspicuously &lt;em&gt;not&lt;/em&gt; among
+them, because it is the delimiter and can never be an opcode:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;opLoadProgram &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0x01&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;opTrigger     &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0x02&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;opTraceDrain  &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0x81&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Encoding a control message is opcode-prefix plus payload, run through
+&lt;code&gt;frameEncode&lt;/code&gt;:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;encodeControl&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; ControlMsg&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;encodeControl &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;LoadProgram&lt;/span&gt;&lt;span&gt; ws&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  frameEncode &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;opLoadProgram &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; L.&lt;/span&gt;&lt;span&gt;concatMap &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;toList &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span&gt; wordToBytesLE&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; ws&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;encodeControl &lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Trigger&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; frameEncode &lt;/span&gt;&lt;span&gt;[&lt;/span&gt;&lt;span&gt;opTrigger&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;LoadProgram&lt;/code&gt; splits each 32-bit word into its four little-endian bytes and
+concatenates them behind the opcode; &lt;code&gt;Trigger&lt;/code&gt; is a lone opcode with no payload.
+Decoding reverses it and enforces the per-opcode payload rules:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;decodeControl&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Either&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; WireError&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; ControlMsg&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;decodeControl wire &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; do&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  logical &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;-&lt;/span&gt;&lt;span&gt; frameDecode wire&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  case&lt;/span&gt;&lt;span&gt; logical &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;of&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt;    [&lt;/span&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt;]&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Left&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; ShortFrame&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    (&lt;/span&gt;&lt;span&gt;op &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span&gt; payload&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;      |&lt;/span&gt;&lt;span&gt; op &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span&gt; opLoadProgram &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; LoadProgram&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;lt;$&amp;gt;&lt;/span&gt;&lt;span&gt; bytesToWords payload&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;      |&lt;/span&gt;&lt;span&gt; op &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span&gt; opTrigger &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;          if&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; L.&lt;/span&gt;&lt;span&gt;null payload &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;then&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Right&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Trigger&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; else&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Left&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; BadPayloadLen&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;      |&lt;/span&gt;&lt;span&gt; otherwise &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Left&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;UnknownOpcode&lt;/span&gt;&lt;span&gt; op&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Every branch is total: an empty logical frame is &lt;code&gt;ShortFrame&lt;/code&gt;, a &lt;code&gt;Trigger&lt;/code&gt; with
+a non-empty payload is &lt;code&gt;BadPayloadLen&lt;/code&gt;, an opcode outside the set is
+&lt;code&gt;UnknownOpcode op&lt;/code&gt; carrying the offending byte. And &lt;code&gt;LoadProgram&lt;/code&gt; defers to
+&lt;code&gt;bytesToWords&lt;/code&gt;, which regroups the little-endian byte payload back into words and
+refuses anything that is not a clean multiple of four:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;bytesToWords&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Either&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; WireError&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;bytesToWords &lt;/span&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt;]&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Right&lt;/span&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt;]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;bytesToWords &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;a &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span&gt; b &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span&gt; c &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span&gt; d &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span&gt; rest&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;/span&gt;&lt;span&gt;bytesToWordLE &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;a &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&amp;gt;&lt;/span&gt;&lt;span&gt; b &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&amp;gt;&lt;/span&gt;&lt;span&gt; c &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&amp;gt;&lt;/span&gt;&lt;span&gt; d &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nil&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; :&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;lt;$&amp;gt;&lt;/span&gt;&lt;span&gt; bytesToWords rest&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;bytesToWords _ &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Left&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; BadPayloadLen&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Four bytes make a word; zero bytes left over is success; one, two, or three
+trailing bytes is &lt;code&gt;BadPayloadLen&lt;/code&gt;. A program is a whole number of 32-bit
+instructions or it is not a program.&lt;/p&gt;
+&lt;p&gt;The result direction is the mirror. &lt;code&gt;encodeResult&lt;/code&gt; wraps a drained ring
+word-stream — the REVISION word, the records, the HALT terminator (§8.3) —
+behind the &lt;code&gt;opTraceDrain&lt;/code&gt; opcode, and &lt;code&gt;decodeResult&lt;/code&gt; unwraps it:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;encodeResult ws &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; frameEncode &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;opTraceDrain &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; L.&lt;/span&gt;&lt;span&gt;concatMap &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;toList &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span&gt; wordToBytesLE&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; ws&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;decodeResult wire &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; do&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  logical &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;-&lt;/span&gt;&lt;span&gt; frameDecode wire&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  case&lt;/span&gt;&lt;span&gt; logical &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;of&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt;    [&lt;/span&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt;]&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Left&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; ShortFrame&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    (&lt;/span&gt;&lt;span&gt;op &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span&gt; payload&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;      |&lt;/span&gt;&lt;span&gt; op &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span&gt; opTraceDrain &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span&gt; bytesToWords payload&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;      |&lt;/span&gt;&lt;span&gt; otherwise &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Left&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;UnknownOpcode&lt;/span&gt;&lt;span&gt; op&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Same shape as the control path, same LE byte regrouping, same named failures —
+and the &lt;em&gt;content&lt;/em&gt; of that word-stream, the records the ring holds, is the
+subject of the &lt;a href=&quot;https://balbi.sh/posts/tamal-wire/#what-we-read&quot;&gt;next post&lt;/a&gt;. The two directions round-trip in
+tests (&lt;code&gt;decodeControl . encodeControl == Right&lt;/code&gt;, &lt;code&gt;decodeResult . encodeResult == Right&lt;/code&gt;), and each rejects the other’s opcodes: a &lt;code&gt;Trigger&lt;/code&gt; frame fed to
+&lt;code&gt;decodeResult&lt;/code&gt; comes back &lt;code&gt;Left (UnknownOpcode 0x02)&lt;/code&gt;, because the result
+decoder answers only to &lt;code&gt;0x81&lt;/code&gt;.&lt;/p&gt;
+&lt;h2 id=&quot;the-reference-model-role-made-explicit&quot;&gt;The reference-model role, made explicit&lt;/h2&gt;
+&lt;p&gt;Nothing in either file is synthesizable. &lt;code&gt;cobsEncode&lt;/code&gt; builds an unbounded list
+with &lt;code&gt;&amp;lt;&amp;gt;&lt;/code&gt;; &lt;code&gt;bytesToWords&lt;/code&gt; recurses over a list of runtime-unknown length;
+&lt;code&gt;frameDecode&lt;/code&gt; returns &lt;code&gt;Either&lt;/code&gt; — these are ordinary Haskell over &lt;code&gt;[BitVector 8]&lt;/code&gt;, and no fabric ever runs them. So why do they exist, if the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-loader/&quot;&gt;loader&lt;/a&gt;
+already implements the streaming form the hardware actually clocks?&lt;/p&gt;
+&lt;p&gt;Because the streaming form needs something to be &lt;em&gt;right against&lt;/em&gt;. The
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-loader/&quot;&gt;loader&lt;/a&gt; walks the wire a byte per cycle, threading state through a
+mealy machine; &lt;code&gt;Tamal.Wire&lt;/code&gt; describes the same result in one pure pass over a
+list. The two are welded together by differential property tests — feed both
+the same input, assert the same output — so the readable model is the
+&lt;em&gt;specification&lt;/em&gt; and the streaming machine is the &lt;em&gt;implementation&lt;/em&gt;, and the tests
+prove they agree. This is the third time the series has used this move: the
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-serdes/&quot;&gt;serdes post’s&lt;/a&gt; &lt;code&gt;deserializeX1&lt;/code&gt;, the &lt;code&gt;Tamal.Trace&lt;/code&gt; model the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-bus/&quot;&gt;bus
+post&lt;/a&gt; kept pointing at, and now the wire format. Each is a pure twin kept
+alive not because the fabric calls it, but because a specification you can read
+is what lets you trust the machine you cannot.&lt;/p&gt;
+&lt;h2 id=&quot;what-we-read&quot;&gt;What we read&lt;/h2&gt;
+&lt;p&gt;The pure wire format, opened whole. &lt;code&gt;Tamal.Wire.Cobs&lt;/code&gt; first — the leaf that
+removes every &lt;code&gt;0x00&lt;/code&gt; so one &lt;code&gt;0x00&lt;/code&gt; can delimit frames, its groups a code byte
+&lt;code&gt;(len + 1)&lt;/code&gt; and up to 254 non-zero data bytes, its one subtle case the full
+group flushed as &lt;code&gt;0xFF&lt;/code&gt; &lt;em&gt;before&lt;/em&gt; the zero case is checked, so a zero on a full
+boundary opens a fresh group instead of vanishing. Then &lt;code&gt;Tamal.Wire&lt;/code&gt; above it:
+&lt;code&gt;wordToBytesLE&lt;/code&gt; splitting a word into little-endian bytes (the host transport LE,
+against the eSPI wire’s MSB-first), &lt;code&gt;crc8&lt;/code&gt; folding the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-crc/&quot;&gt;CRC post’s&lt;/a&gt;
+&lt;code&gt;crc8Update&lt;/code&gt; over a list, &lt;code&gt;frameEncode&lt;/code&gt; appending the CRC then COBS-encoding then
+the delimiter, and &lt;code&gt;frameDecode&lt;/code&gt; undoing it through a &lt;code&gt;WireError&lt;/code&gt; sum of named
+failures. And the message layer on top: &lt;code&gt;ControlMsg&lt;/code&gt;, the &lt;code&gt;0x01&lt;/code&gt;/&lt;code&gt;0x02&lt;/code&gt;/&lt;code&gt;0x81&lt;/code&gt;
+opcodes, the control and result codecs, &lt;code&gt;bytesToWords&lt;/code&gt; insisting on whole words.
+All of it pure, all of it a specification the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-loader/&quot;&gt;loader&lt;/a&gt; and the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-loader-cobs/&quot;&gt;streaming
+COBS codec&lt;/a&gt; were proven equal to.&lt;/p&gt;
+&lt;p&gt;The wire carries a program &lt;em&gt;in&lt;/em&gt; and a trace &lt;em&gt;out&lt;/em&gt;. We have read the program side
+— &lt;code&gt;LoadProgram&lt;/code&gt;, the words, the LE bytes. The trace side ended at
+&lt;code&gt;encodeResult&lt;/code&gt;, wrapping a word-stream this post never looked inside: the
+REVISION word, the records, the HALT terminator. Those records — what a
+&lt;code&gt;CAPTURE&lt;/code&gt; packs, what a &lt;code&gt;MARK&lt;/code&gt; carries, how the ring pushes them without ever
+tearing a two-word record in half — are the &lt;code&gt;Tamal.Trace&lt;/code&gt; model, the pure twin
+the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-bus/&quot;&gt;bus post&lt;/a&gt; kept promising. That is the next post, and with it both
+formats, in and out, are done — and the series turns, at last, to the impure
+shell that makes the pins physical.&lt;/p&gt;
+</content>
+  </entry>
+  
+</feed>

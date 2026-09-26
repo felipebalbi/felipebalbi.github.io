@@ -1,0 +1,293 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"
+     xmlns:atom="http://www.w3.org/2005/Atom"
+     xmlns:content="http://purl.org/rss/1.0/modules/content/"
+     xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Felipe Balbi</title>
+    <link>https://balbi.sh</link>
+    <description>Notes on embedded systems, Rust, and the craft of writing software.</description>
+    <generator>Zola</generator>
+    <language>en</language>
+    <lastBuildDate>Wed, 23 Sep 2026 09:00:00 +0000</lastBuildDate>
+    <atom:link href="https://balbi.sh/tags/documentation/rss.xml" rel="self" type="application/rss+xml"/>
+    
+    <item>
+      <title>Six Entries, and the One I Argued Away</title>
+      <link>https://balbi.sh/posts/six-entries/</link>
+      <guid isPermaLink="true">https://balbi.sh/posts/six-entries/</guid>
+      <pubDate>Wed, 23 Sep 2026 09:00:00 +0000</pubDate>
+      <dc:creator>Felipe Balbi</dc:creator>
+      <description>&lt;p&gt;Most driver crates do not have a heading in the README that says
+&lt;strong&gt;Not yet implemented&lt;/strong&gt;. The ones that do usually grew it after
+somebody filed an issue.&lt;/p&gt;
+&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/ina4230&quot;&gt;&lt;code&gt;ina4230&lt;/code&gt;&lt;/a&gt; crate had one from the day the driver was
+restructured, before anybody had asked for anything, because the
+restructuring involved reading the whole datasheet and it seemed
+dishonest to finish that and write down only the parts I had done.&lt;/p&gt;
+&lt;p&gt;Three days later — at the time of writing — the list is one entry
+long, and it has gained a second heading underneath it for the item
+that turned out never to have been a gap in the first place.&lt;/p&gt;</description>
+      
+      <content:encoded>&lt;p&gt;Most driver crates do not have a heading in the README that says
+&lt;strong&gt;Not yet implemented&lt;/strong&gt;. The ones that do usually grew it after
+somebody filed an issue.&lt;/p&gt;
+&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/ina4230&quot;&gt;&lt;code&gt;ina4230&lt;/code&gt;&lt;/a&gt; crate had one from the day the driver was
+restructured, before anybody had asked for anything, because the
+restructuring involved reading the whole datasheet and it seemed
+dishonest to finish that and write down only the parts I had done.&lt;/p&gt;
+&lt;p&gt;Three days later — at the time of writing — the list is one entry
+long, and it has gained a second heading underneath it for the item
+that turned out never to have been a gap in the first place.&lt;/p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;/span&gt;&lt;h2 id=&quot;what-a-completeness-ledger-is&quot;&gt;What a completeness ledger is&lt;/h2&gt;
+&lt;p&gt;The heading went in with six entries. Each one names the registers,
+gives their addresses, and — this is the part that turned out to
+matter — says why it is not done yet.&lt;/p&gt;
+&lt;p&gt;Here is the entry for alert limits, verbatim, from the first version
+of the list:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;&lt;strong&gt;Alert limits&lt;/strong&gt; (&lt;code&gt;ALERT_LIMIT1..4&lt;/code&gt;, addresses &lt;code&gt;0x06&lt;/code&gt;, &lt;code&gt;0x0E&lt;/code&gt;,
+&lt;code&gt;0x16&lt;/code&gt;, &lt;code&gt;0x1E&lt;/code&gt;). The format follows the result register the
+selected alert function refers to: signed 16-bit for shunt limits,
+unsigned 15-bit for bus limits (bit 15 reserved), and unsigned
+16-bit for power limits. Representing that reinterpretation safely
+is the interesting part of the design, and the reason these are not
+simply exposed as a &lt;code&gt;u16&lt;/code&gt; setter.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;That last sentence is the whole difference between a ledger and a
+backlog. A backlog item says &lt;em&gt;this is missing&lt;/em&gt;. This says what the
+work actually is, why the obvious implementation is the wrong one,
+and therefore what a reader should expect when it lands. Six months
+from now, when I have forgotten all of it, that paragraph is the
+thing that lets me start rather than re-derive.&lt;/p&gt;
+&lt;p&gt;It also has a less comfortable property. Having written down that a
+&lt;code&gt;u16&lt;/code&gt; setter would be wrong, I could no longer ship a &lt;code&gt;u16&lt;/code&gt; setter
+and call it progress.&lt;/p&gt;
+&lt;h2 id=&quot;three-things-the-documentation-did-not-say&quot;&gt;Three things the documentation did not say&lt;/h2&gt;
+&lt;p&gt;Once the list existed, the obvious next move was to check it — not
+the code against the datasheet, which the restructuring had already
+done, but the &lt;em&gt;documentation&lt;/em&gt; against the datasheet. Where does
+&lt;a rel=&quot;external&quot; href=&quot;https://www.ti.com/lit/ds/symlink/ina4230.pdf&quot;&gt;SBOSAD4&lt;/a&gt; describe behaviour this crate exposes and the prose
+does not explain?&lt;/p&gt;
+&lt;p&gt;Most of it came back clean. The register map, the signedness of every
+measurement type, the LSB constants, the &lt;code&gt;CONFIG1&lt;/code&gt; reset decode, and
+the power and energy equations all checked out. That is worth saying
+out loud, because an audit that finds nothing in five places and
+something in three is a great deal more believable than one that
+finds problems everywhere it looks.&lt;/p&gt;
+&lt;p&gt;Three things were missing, and the most interesting of them was not a
+missing fact.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;The first was two facts that had never been introduced to each
+other.&lt;/strong&gt; The README said, in one place, that the energy overflow bit
+clears only through &lt;code&gt;CONFIG2.ACC_RST&lt;/code&gt;. It said, in a different place,
+that &lt;code&gt;ACC_RST&lt;/code&gt; was not implemented. Both true, both written down, and
+the conclusion — &lt;em&gt;therefore an energy overflow is unrecoverable
+through this crate&lt;/em&gt; — appeared nowhere, because no single paragraph
+contained both halves.&lt;/p&gt;
+&lt;p&gt;Meanwhile the README’s own worked example told the reader to check
+&lt;code&gt;any_energy_overflow()&lt;/code&gt; and act on it, and then offered no way to act.&lt;/p&gt;
+&lt;p&gt;That is the most expensive kind of documentation bug I know of. Every
+individual sentence passes review. Nothing is factually wrong. A
+reader with the whole document in their head could derive the
+consequence, and no reader has the whole document in their head —
+that is what the document is &lt;em&gt;for&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;The second was a caveat that could not yet bite.&lt;/strong&gt; The device
+compares each alert limit against every conversion rather than
+against the averaged result that reaches the output registers
+(§6.3.5). So with averaging enabled, a limit flag can report an
+excursion that appears in no value the crate can read back. A flag
+disagreeing with the measurement registers is correct behaviour, and
+somebody debugging that at two in the morning deserves to be told.&lt;/p&gt;
+&lt;p&gt;The note that went in recorded the caveat &lt;em&gt;and the conditions under
+which it becomes reachable&lt;/em&gt;:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;It cannot arise through this crate today, because &lt;code&gt;AVG&lt;/code&gt; is not
+configurable here and the power-on default is a single sample, but
+it can if another controller on the bus has programmed &lt;code&gt;CONFIG1&lt;/code&gt;.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;Hold onto that one. It comes back.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;The third was silence, and silence turned out not to be neutral.&lt;/strong&gt;
+High-speed I²C (§6.5.3) appeared nowhere in the repository. That
+would be unremarkable except that the “Not yet implemented” list
+deliberately enumerates the other two bus-level protocols the
+datasheet describes — SMBus Alert Response and General Call reset.&lt;/p&gt;
+&lt;p&gt;So a reader auditing the crate against the datasheet finds two of the
+three bus protocols accounted for, and nothing at all about the
+third. Having made a completeness claim, I had created an obligation
+I did not know I had taken on: on a list that says what is missing,
+an omission is indistinguishable from a gap nobody noticed.&lt;/p&gt;
+&lt;h2 id=&quot;the-entry-that-was-a-functional-hole&quot;&gt;The entry that was a functional hole&lt;/h2&gt;
+&lt;p&gt;Of the six entries, one was not a missing convenience. From the
+commit that closed it:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;This was a functional hole rather than a convenience gap.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;&lt;code&gt;CONFIG2.ACC_RST&lt;/code&gt; resets a channel’s energy accumulator and clears
+its overflow flag. Without it, the trap closes like this. The
+overflow bit is not read-to-clear. &lt;code&gt;ACC_RST&lt;/code&gt; is the only thing that
+clears it. So once a channel’s accumulator wrapped, the flag was
+stuck and the energy readings stayed wrong for the life of the
+driver.&lt;/p&gt;
+&lt;p&gt;The only escape was &lt;code&gt;reset()&lt;/code&gt;, which restores every register to its
+default — including &lt;code&gt;SHUNT_CAL&lt;/code&gt;. And a channel with a zero
+calibration register reports exactly zero current, indefinitely
+(§8.1.2). So the recovery path for one channel’s accumulator was: reset
+the whole device, then recalibrate all four channels, or quietly
+start reading zeros.&lt;/p&gt;
+&lt;p&gt;A full device reset and a four-channel recalibration, to clear
+something the hardware clears in a single write.&lt;/p&gt;
+&lt;p&gt;The fix is one method:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;pub&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; async&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; fn&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; reset_energy_accumulators&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    &amp;amp;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;mut&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; self&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;    channels&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;amp;&lt;/span&gt;&lt;span&gt;[&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Channel&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Result&lt;/span&gt;&lt;span&gt;&amp;lt;&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Ina4230Error&lt;/span&gt;&lt;span&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;E&lt;/span&gt;&lt;span&gt;&amp;gt;&lt;/span&gt;&lt;span&gt;&amp;gt;&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;A slice rather than a single &lt;code&gt;Channel&lt;/code&gt;, because &lt;code&gt;ACC_RST&lt;/code&gt; is a
+four-bit mask and clearing three accumulators should be one bus write
+rather than three. Duplicates fold together harmlessly. An empty
+slice is an explicit no-op that does not touch the bus at all. And
+there is deliberately no getter, because the bits self-clear — this
+is a command, not a setting, and a getter would only ever return
+zero.&lt;/p&gt;
+&lt;p&gt;But the part worth stealing is not the method. It is what else had to
+change in the same commit.&lt;/p&gt;
+&lt;p&gt;Three documentation claims became false the instant that code landed:
+the rustdoc on &lt;code&gt;Flags::energy_overflow&lt;/code&gt;, the rustdoc on &lt;code&gt;read_flags&lt;/code&gt;,
+and the README’s “Reading flags” section all described energy
+overflow as unrecoverable, or recoverable only through a full reset.
+&lt;code&gt;examples/energy.rs&lt;/code&gt; went further — it &lt;em&gt;documented the dead end&lt;/em&gt; as
+part of the example, and now demonstrates the recovery instead,
+invalidating its cached previous reading after the reset.&lt;/p&gt;
+&lt;p&gt;A ledger entry does not get deleted. It has edges. Everything that
+referred to the gap has to stop referring to it in the same change,
+or you have swapped a documented hole for an undocumented lie, which
+is strictly worse than where you started.&lt;/p&gt;
+&lt;p&gt;The docs also picked up the arithmetic for avoiding the wrap in the
+first place, since the answer depends on calibration. &lt;code&gt;ENERGY&lt;/code&gt; is an
+unsigned 32-bit accumulator whose LSB is $32 \times \mathrm{CURRENT_LSB}$
+joules. For a rail that can pull 2 A at 48 V and has to run for a
+day, there are two independent floors — one from the run time, one
+from the current range — and you take the larger and round up:&lt;/p&gt;
+&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Constraint&lt;/th&gt;&lt;th&gt;Floor&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;
+&lt;tr&gt;&lt;td&gt;24 h at 96 W&lt;/td&gt;&lt;td&gt;60,350 nA/LSB&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;2 A full scale&lt;/td&gt;&lt;td&gt;61,036 nA/LSB&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;chosen&lt;/td&gt;&lt;td&gt;&lt;strong&gt;62,500 nA/LSB&lt;/strong&gt;&lt;/td&gt;&lt;/tr&gt;
+&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;which buys 24.8551 hours before the accumulator wraps, and a maximum
+current of 2.0479375 A. Both numbers are in the crate documentation,
+because “size &lt;code&gt;CurrentLsb&lt;/code&gt; appropriately” is not advice, it is a
+homework assignment.&lt;/p&gt;
+&lt;h2 id=&quot;the-caveat-that-predicted-its-own-activation&quot;&gt;The caveat that predicted its own activation&lt;/h2&gt;
+&lt;p&gt;Remember the note about limit alerts disagreeing with averaged
+readings — the one that could not bite yet, because &lt;code&gt;AVG&lt;/code&gt; was not
+configurable.&lt;/p&gt;
+&lt;p&gt;Two entries later, &lt;code&gt;AVG&lt;/code&gt; became configurable.&lt;/p&gt;
+&lt;p&gt;From that commit:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;&lt;code&gt;Flags::limit_alerts&lt;/code&gt; documented that caveat as unreachable
+precisely because &lt;code&gt;AVG&lt;/code&gt; was pinned at one sample. Making &lt;code&gt;AVG&lt;/code&gt;
+configurable makes it live.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;So the rustdoc and the matching README passage were rewritten in the
+same change that made them wrong, and not because anyone remembered
+they existed. They were found because the original note had recorded
+&lt;em&gt;why&lt;/em&gt; the caveat was dormant. The condition was written down next to
+the consequence, so making the condition false pointed straight at
+the text that needed to change.&lt;/p&gt;
+&lt;p&gt;This is the argument for citations in documentation, and it is not
+the argument I expected to be making. Citing §6.3.5 is not about
+looking rigorous. It is that a note carrying its own activation
+condition is greppable, and a note that says “note: averaging may
+affect alerts” is not. A &lt;code&gt;// TODO&lt;/code&gt; would have done nothing at all
+here: it names no condition, so nothing can ever make it fire.&lt;/p&gt;
+&lt;h2 id=&quot;the-one-i-argued-away&quot;&gt;The one I argued away&lt;/h2&gt;
+&lt;p&gt;The most interesting entry on a completeness ledger is the one you
+take off it without implementing anything.&lt;/p&gt;
+&lt;p&gt;High-speed I²C is the third bus-level protocol in the datasheet, and
+the natural move — having listed the other two — is to list it as
+a third gap and feel thorough. That would have been wrong.&lt;/p&gt;
+&lt;p&gt;The device enters high-speed mode when a controller sends the reserved
+master code &lt;code&gt;0b00001xxx&lt;/code&gt;, and leaves it on the next stop
+condition. Nothing in that sequence is addressed to the INA4230. The
+part writes no register to participate. It switches its input filters
+and gets on with it.&lt;/p&gt;
+&lt;p&gt;Which means participation is a property of whichever
+&lt;code&gt;embedded-hal-async&lt;/code&gt; implementation gets handed to &lt;code&gt;Ina4230::new&lt;/code&gt;, and
+not of this crate at all:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;It is a property of the bus, and therefore of whichever
+&lt;code&gt;embedded-hal-async&lt;/code&gt; I²C implementation is passed to &lt;code&gt;Ina4230::new&lt;/code&gt;
+— not something this crate can offer or withhold.  If the
+controller supports 2.94 MHz operation, this driver already works
+over it.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;So it went under a new heading, &lt;strong&gt;Out of scope&lt;/strong&gt;, which is the
+accurate statement rather than a pending one.&lt;/p&gt;
+&lt;p&gt;The contrast is what makes this worth a section. SMBus Alert Response
+and General Call reset stayed on the “Not yet implemented” list,
+because those genuinely &lt;em&gt;are&lt;/em&gt; this crate’s to offer — they are
+addressed transactions the driver could issue and currently does not.
+High-speed I²C is not. Three protocols, same datasheet chapter, same
+apparent shape, and one of them belongs in a different category
+entirely.&lt;/p&gt;
+&lt;p&gt;From the outside, “not implemented” and “not ours” look identical:
+both are a feature you cannot call. A ledger that does not tell them
+apart is just a list of things that make the crate look incomplete,
+and it will accumulate items forever, because the set of things a
+crate does not do is unbounded.&lt;/p&gt;
+&lt;p&gt;Telling them apart takes an argument each time. There is no rule. You
+have to work out, for that specific feature, whether the crate is the
+thing standing between the user and the capability — and then write
+the argument down, so the next person auditing against the datasheet
+does not have to rediscover it and quietly re-add the entry.&lt;/p&gt;
+&lt;h2 id=&quot;done-is-a-shape-not-a-number&quot;&gt;Done is a shape, not a number&lt;/h2&gt;
+&lt;p&gt;The list today: one entry, holding the two bus protocols. Plus the
+“Out of scope” section, holding its one argued-away item.&lt;/p&gt;
+&lt;p&gt;I do not think the value was in getting the number down. It was in
+three other things.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;It is a map, and mostly for me.&lt;/strong&gt; Every entry that got closed was
+closed starting from a paragraph explaining what the work was. The
+alert-limits entry had already identified the hard part — the
+reinterpreting limit register — which meant the design work started
+from a real problem statement rather than from re-reading Table 7-8 to
+find out why I had skipped it.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;It turns “is this crate any good” into a diff.&lt;/strong&gt; Without the list,
+that question is answered by vibes: how does the README feel, how many
+downloads, is the author responsive. With it, the question is
+mechanical. Take the datasheet, take the list, and see whether they
+agree. That is checkable by someone who does not trust me, which is
+the only kind of checkable that counts.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;It ends.&lt;/strong&gt; This is the part I did not anticipate and value most. A
+backlog is unbounded, because features are unbounded. A datasheet is
+finite. There is a last register, a last table, a last protocol, and
+when you have accounted for all of them you are not “done” in any
+grand sense but you are done &lt;em&gt;with that question&lt;/em&gt;, and the question
+stops consuming attention.&lt;/p&gt;
+&lt;p&gt;The honest limits, since this post has been fairly pleased with
+itself. The ledger is exactly as good as the reading that produced it,
+and it is a claim that I found everything — checked against a
+document that has its own errors, which is not a hypothetical
+concern.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-rev-1&quot;&gt;&lt;a href=&quot;https://balbi.sh/posts/six-entries/#fn-rev&quot;&gt;[1]&lt;/a&gt;&lt;/sup&gt; An audit against one revision of a datasheet says
+nothing whatsoever about the next. And a list of gaps is not a list of
+bugs: everything on it was, by construction, something I knew
+about. The failures that hurt are the ones where the code and the
+datasheet disagree and I read straight past it.&lt;/p&gt;
+&lt;p&gt;A datasheet is finite. Almost nothing else in this job is, and it is
+worth taking the win.&lt;/p&gt;
+&lt;section class=&quot;footnotes&quot;&gt;
+&lt;ol class=&quot;footnotes-list&quot;&gt;
+&lt;li id=&quot;fn-rev&quot;&gt;
+&lt;p&gt;The driver before this one had been decoding the TMP108
+datasheet’s own stated power-on value into a temperature the part
+cannot produce, for about a year, which is the subject of &lt;a href=&quot;https://balbi.sh/posts/thirty-six-registers/&quot;&gt;the
+previous post&lt;/a&gt;. An audit
+against a document is not an audit against reality. It is just
+considerably cheaper than the alternative, and it is the one you can
+do on a Sunday. &lt;a href=&quot;https://balbi.sh/posts/six-entries/#fr-rev-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/section&gt;
+</content:encoded>
+    </item>
+    
+  </channel>
+</rss>

@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+  <title>Felipe Balbi</title>
+  <subtitle>Notes on embedded systems, Rust, and the craft of writing software.</subtitle>
+  <link href="https://balbi.sh/tags/trace/atom.xml" rel="self" type="application/atom+xml"/>
+  <link href="https://balbi.sh"/>
+  <generator uri="https://www.getzola.org/">Zola</generator>
+  <updated>2026-08-12T09:00:00+00:00</updated>
+  <id>https://balbi.sh/tags/trace/atom.xml</id>
+  
+  <entry xml:lang="en">
+    <title>Tamal: The Record and the Ring</title>
+    <published>2026-08-12T09:00:00+00:00</published>
+    <updated>2026-08-12T09:00:00+00:00</updated>
+    <author><name>Felipe Balbi</name></author>
+    <link rel="alternate" href="https://balbi.sh/posts/tamal-trace/" type="text/html"/>
+    <id>https://balbi.sh/posts/tamal-trace/</id>
+    <summary type="html">&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-wire/&quot;&gt;wire post&lt;/a&gt; left a word-stream sealed. &lt;code&gt;encodeResult&lt;/code&gt; wrapped a
+drained ring — a REVISION word, some records, a HALT terminator — behind an
+opcode and never looked inside. This post looks inside. It is the smallest file
+of the whole descent, sixty-four lines, and it is the pure twin the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-bus/&quot;&gt;bus
+post&lt;/a&gt; kept promising: every time the engine packed a &lt;code&gt;CAPTURE&lt;/code&gt; or a &lt;code&gt;MARK&lt;/code&gt;
+or a &lt;code&gt;HALT&lt;/code&gt; inline, a comment said &lt;em&gt;mirrors &lt;code&gt;Trace.encodeRecord&lt;/code&gt;&lt;/em&gt;. &lt;code&gt;Tamal.Trace&lt;/code&gt;
+is that mirror.&lt;/p&gt;</summary>
+    
+    <content type="html">&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-wire/&quot;&gt;wire post&lt;/a&gt; left a word-stream sealed. &lt;code&gt;encodeResult&lt;/code&gt; wrapped a
+drained ring — a REVISION word, some records, a HALT terminator — behind an
+opcode and never looked inside. This post looks inside. It is the smallest file
+of the whole descent, sixty-four lines, and it is the pure twin the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-bus/&quot;&gt;bus
+post&lt;/a&gt; kept promising: every time the engine packed a &lt;code&gt;CAPTURE&lt;/code&gt; or a &lt;code&gt;MARK&lt;/code&gt;
+or a &lt;code&gt;HALT&lt;/code&gt; inline, a comment said &lt;em&gt;mirrors &lt;code&gt;Trace.encodeRecord&lt;/code&gt;&lt;/em&gt;. &lt;code&gt;Tamal.Trace&lt;/code&gt;
+is that mirror.&lt;/p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;/span&gt;
+&lt;p&gt;Like &lt;code&gt;Tamal.Wire&lt;/code&gt;, nothing here runs on the fabric. &lt;code&gt;encodeRecord&lt;/code&gt; returns a
+list; &lt;code&gt;ringPush&lt;/code&gt; recurses over one. The engine emits at most one word per cycle,
+inline, in the fast synchronous path the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-bus/&quot;&gt;bus post&lt;/a&gt; read. This module
+exists so the &lt;em&gt;layout&lt;/em&gt; lives somewhere readable, and a test can prove the fast
+path and the readable model agree. Two functions on the door:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;module&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Tamal.Trace&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Record&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;..&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; encodeRecord&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; ringPush&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  )&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; where&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;h2 id=&quot;three-shapes&quot;&gt;Three shapes&lt;/h2&gt;
+&lt;p&gt;A run leaves behind a stream of records, and there are exactly three kinds:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Record&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Capture&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 4&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;          --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; nbits (1..8), sampled byte&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Mark&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 14&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;           --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; label, payload&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Halt&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bool&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 3&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bool&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;   --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; trap, reason, overflow, status&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;These are the same three the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-bus/&quot;&gt;bus post&lt;/a&gt; met from the engine side. &lt;code&gt;Capture&lt;/code&gt;
+reports a sampled byte with its valid-bit count; &lt;code&gt;Mark&lt;/code&gt; carries a host↔trace
+correlation label and a register payload; &lt;code&gt;Halt&lt;/code&gt; terminates the run, folding in
+the sticky trap and overflow flags, a 3-bit reason, and a status byte. What the
+engine built with hand-rolled &lt;code&gt;bitCoerce&lt;/code&gt; calls, this type names.&lt;/p&gt;
+&lt;h2 id=&quot;one-encoder-laid-in-field-rulers&quot;&gt;One encoder, laid in field rulers&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;encodeRecord&lt;/code&gt; is the whole point of the file — three lines, one per shape:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;encodeRecord&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Record&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;encodeRecord &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; \&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;case&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  Capture&lt;/span&gt;&lt;span&gt; n b        &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span&gt;bitCoerce &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0b00&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 2&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 18&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; n&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; b&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  Mark&lt;/span&gt;&lt;span&gt; lbl pl        &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span&gt;bitCoerce &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0b10&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 2&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 16&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; lbl&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; pl&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  Halt&lt;/span&gt;&lt;span&gt; trp rsn ovf st &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span&gt;bitCoerce &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0b11&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 2&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 17&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; rsn&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; trp&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; ovf&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; st&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Read these against the engine’s inline builders and they are &lt;em&gt;identical&lt;/em&gt; tuples.
+&lt;code&gt;captureWord&lt;/code&gt; was &lt;code&gt;bitCoerce (0b00, 0 :: BitVector 18, nbits, byte)&lt;/code&gt;;
+&lt;code&gt;markLabelWord&lt;/code&gt; was &lt;code&gt;bitCoerce (0b10, 0 :: BitVector 16, lbl)&lt;/code&gt;; &lt;code&gt;haltWith&lt;/code&gt; built
+&lt;code&gt;bitCoerce (0b11, 0 :: BitVector 17, reason, trap, ovf, status)&lt;/code&gt;. Same tags, same
+zero padding, same field order. The engine open-codes them for speed; this
+gathers them in one place you can actually read. (The REVISION preamble lives in
+the engine, not here — this is the &lt;em&gt;record&lt;/em&gt; encoder, nothing more.)&lt;/p&gt;
+&lt;p&gt;Every shape sums to a clean 32 bits, and the two-bit tag column is what a host
+reads first to know which shape follows:&lt;/p&gt;
+&lt;figure&gt;
+&lt;svg class=&quot;trec&quot; viewBox=&quot;0 0 720 210&quot; role=&quot;img&quot; aria-labelledby=&quot;trec-t trec-d&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot; style=&quot;width:100%;max-width:720px;height:auto;display:block;margin:0 auto&quot;&gt;
+  &lt;title id=&quot;trec-t&quot;&gt;The three record shapes as 32-bit field rulers&lt;/title&gt;
+  &lt;desc id=&quot;trec-d&quot;&gt;Three rows of bit-field rulers, each row summing to 32 bits. CAPTURE is one word: a two-bit tag 00, eighteen zero bits, a four-bit nbits field, and an eight-bit byte. MARK is two words: word one is tag 10, sixteen zero bits, and a fourteen-bit label; word two is a thirty-two-bit payload. HALT is one word: tag 11, seventeen zero bits, a three-bit reason, a one-bit trap flag, a one-bit overflow flag, and an eight-bit status. The two-bit tag column on the left of each first word is accented.&lt;/desc&gt;
+  &lt;g fill=&quot;none&quot; stroke=&quot;var(--fg-dim,#999)&quot; stroke-width=&quot;1&quot;&gt;
+    &lt;rect x=&quot;120&quot; y=&quot;18&quot; width=&quot;28&quot; height=&quot;26&quot; fill=&quot;var(--accent,#c25)&quot; fill-opacity=&quot;0.16&quot; stroke=&quot;var(--accent,#c25)&quot;/&gt;
+    &lt;rect x=&quot;148&quot; y=&quot;18&quot; width=&quot;252&quot; height=&quot;26&quot; fill=&quot;var(--fg-dim,#999)&quot; fill-opacity=&quot;0.10&quot;/&gt;
+    &lt;rect x=&quot;400&quot; y=&quot;18&quot; width=&quot;56&quot; height=&quot;26&quot;/&gt;
+    &lt;rect x=&quot;456&quot; y=&quot;18&quot; width=&quot;112&quot; height=&quot;26&quot;/&gt;
+    &lt;rect x=&quot;120&quot; y=&quot;74&quot; width=&quot;28&quot; height=&quot;26&quot; fill=&quot;var(--accent,#c25)&quot; fill-opacity=&quot;0.16&quot; stroke=&quot;var(--accent,#c25)&quot;/&gt;
+    &lt;rect x=&quot;148&quot; y=&quot;74&quot; width=&quot;224&quot; height=&quot;26&quot; fill=&quot;var(--fg-dim,#999)&quot; fill-opacity=&quot;0.10&quot;/&gt;
+    &lt;rect x=&quot;372&quot; y=&quot;74&quot; width=&quot;196&quot; height=&quot;26&quot;/&gt;
+    &lt;rect x=&quot;120&quot; y=&quot;112&quot; width=&quot;448&quot; height=&quot;26&quot;/&gt;
+    &lt;rect x=&quot;120&quot; y=&quot;168&quot; width=&quot;28&quot; height=&quot;26&quot; fill=&quot;var(--accent,#c25)&quot; fill-opacity=&quot;0.16&quot; stroke=&quot;var(--accent,#c25)&quot;/&gt;
+    &lt;rect x=&quot;148&quot; y=&quot;168&quot; width=&quot;238&quot; height=&quot;26&quot; fill=&quot;var(--fg-dim,#999)&quot; fill-opacity=&quot;0.10&quot;/&gt;
+    &lt;rect x=&quot;386&quot; y=&quot;168&quot; width=&quot;42&quot; height=&quot;26&quot;/&gt;
+    &lt;rect x=&quot;428&quot; y=&quot;168&quot; width=&quot;14&quot; height=&quot;26&quot;/&gt;
+    &lt;rect x=&quot;442&quot; y=&quot;168&quot; width=&quot;14&quot; height=&quot;26&quot;/&gt;
+    &lt;rect x=&quot;456&quot; y=&quot;168&quot; width=&quot;112&quot; height=&quot;26&quot;/&gt;
+  &lt;/g&gt;
+  &lt;g fill=&quot;var(--fg,#222)&quot; font-family=&quot;ui-monospace,SFMono-Regular,Menlo,monospace&quot; font-size=&quot;12&quot; text-anchor=&quot;middle&quot;&gt;
+    &lt;text x=&quot;134&quot; y=&quot;35&quot;&gt;00&lt;/text&gt;
+    &lt;text x=&quot;274&quot; y=&quot;35&quot;&gt;0 (18)&lt;/text&gt;
+    &lt;text x=&quot;428&quot; y=&quot;35&quot;&gt;nbits·4&lt;/text&gt;
+    &lt;text x=&quot;512&quot; y=&quot;35&quot;&gt;byte·8&lt;/text&gt;
+    &lt;text x=&quot;134&quot; y=&quot;91&quot;&gt;10&lt;/text&gt;
+    &lt;text x=&quot;260&quot; y=&quot;91&quot;&gt;0 (16)&lt;/text&gt;
+    &lt;text x=&quot;470&quot; y=&quot;91&quot;&gt;label·14&lt;/text&gt;
+    &lt;text x=&quot;344&quot; y=&quot;129&quot;&gt;payload·32&lt;/text&gt;
+    &lt;text x=&quot;134&quot; y=&quot;185&quot;&gt;11&lt;/text&gt;
+    &lt;text x=&quot;267&quot; y=&quot;185&quot;&gt;0 (17)&lt;/text&gt;
+    &lt;text x=&quot;407&quot; y=&quot;185&quot;&gt;rsn·3&lt;/text&gt;
+    &lt;text x=&quot;435&quot; y=&quot;185&quot;&gt;t&lt;/text&gt;
+    &lt;text x=&quot;449&quot; y=&quot;185&quot;&gt;o&lt;/text&gt;
+    &lt;text x=&quot;512&quot; y=&quot;185&quot;&gt;st·8&lt;/text&gt;
+  &lt;/g&gt;
+  &lt;g fill=&quot;var(--fg-dim,#777)&quot; font-family=&quot;system-ui,sans-serif&quot; font-size=&quot;12&quot;&gt;
+    &lt;text x=&quot;8&quot; y=&quot;34&quot;&gt;CAPTURE&lt;/text&gt;
+    &lt;text x=&quot;8&quot; y=&quot;90&quot;&gt;MARK w1&lt;/text&gt;
+    &lt;text x=&quot;8&quot; y=&quot;128&quot;&gt;MARK w2&lt;/text&gt;
+    &lt;text x=&quot;8&quot; y=&quot;184&quot;&gt;HALT&lt;/text&gt;
+  &lt;/g&gt;
+&lt;/svg&gt;
+&lt;figcaption style=&quot;text-align:center;color:var(--fg-dim);font-size:.9rem;margin-top:.85rem;font-family:var(--sans)&quot;&gt;The three record shapes as 32-bit field rulers, each field&#39;s width drawn in proportion to its bit count. Each first word opens with a two-bit tag (accented) the host reads to know which shape follows; every row spans a full 32 bits. In &lt;code&gt;HALT&lt;/code&gt;, &lt;code&gt;t&lt;/code&gt; and &lt;code&gt;o&lt;/code&gt; are the single-bit trap and overflow flags. &lt;code&gt;MARK&lt;/code&gt; is the only two-word record --- its label word then a full 32-bit payload --- which is exactly why the push has to be atomic.&lt;/figcaption&gt;
+&lt;/figure&gt;
+&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-isa/&quot;&gt;test&lt;/a&gt;-style oracle is a handful of literal-shift assertions — &lt;code&gt;Capture 8 0xA5&lt;/code&gt; must equal &lt;code&gt;0b00 &amp;lt;&amp;lt; 30 | 8 &amp;lt;&amp;lt; 8 | 0xA5&lt;/code&gt;, &lt;code&gt;Mark 0x1234 0xDEADBEEF&lt;/code&gt; must be
+two words with the label in the first and the payload verbatim in the second —
+each computed by a different arithmetic than &lt;code&gt;bitCoerce&lt;/code&gt;, so a drift in field
+placement would show as a mismatch against a number no &lt;code&gt;bitCoerce&lt;/code&gt; produced.&lt;/p&gt;
+&lt;h2 id=&quot;the-push-that-never-tears&quot;&gt;The push that never tears&lt;/h2&gt;
+&lt;p&gt;The other function is the ring discipline, made pure:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;ringPush ptr limit ovf ws&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span&gt; ovf       &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;ptr&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; True&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt;]&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span&gt; fits      &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;ptr &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;+&lt;/span&gt;&lt;span&gt; count&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; ws&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span&gt; otherwise &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;ptr&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; True&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt;]&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; where&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  count &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; fromIntegral &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;L.&lt;/span&gt;&lt;span&gt;length ws&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  fits  &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; L.&lt;/span&gt;&lt;span&gt;length ws &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;amp;&amp;amp;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;ptr &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;+&lt;/span&gt;&lt;span&gt; count &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;lt;=&lt;/span&gt;&lt;span&gt; limit&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Three cases, and they are the whole &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-mem/&quot;&gt;drop-on-full contract&lt;/a&gt; the bus post met
+a word at a time. Already overflowed: drop the record, keep the sticky flag high.
+Fits — the last index this record would occupy, &lt;code&gt;ptr + count - 1&lt;/code&gt;, stays within
+&lt;code&gt;limit&lt;/code&gt; — write every word and advance the pointer by the record’s &lt;em&gt;whole&lt;/em&gt; word
+count. Otherwise: drop, and latch overflow. The pointer never lands past &lt;code&gt;limit&lt;/code&gt;,
+so the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-mem/&quot;&gt;terminator slot&lt;/a&gt; beyond it is always free for the HALT that ends the
+run.&lt;/p&gt;
+&lt;p&gt;The load-bearing word is &lt;em&gt;atomically&lt;/em&gt;. &lt;code&gt;ringPush&lt;/code&gt; writes all of a record’s words
+or none of them — where the engine’s &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-bus/&quot;&gt;&lt;code&gt;pushWord&lt;/code&gt;&lt;/a&gt; went one word per cycle,
+this goes record at a time. The reason is &lt;code&gt;Mark&lt;/code&gt;: it is two words, and a &lt;code&gt;Mark&lt;/code&gt;
+half-written — its label word in the ring, its payload word dropped at the limit
+— desyncs the host’s parse, because the host reads the label, expects a payload
+word next, and finds the HALT terminator instead. Both words or neither. The test
+pushes ten one-word records into a ring with &lt;code&gt;limit = 3&lt;/code&gt; and checks the invariants
+the contract promises: the pointer never passes &lt;code&gt;limit + 1&lt;/code&gt;, at most four words
+are ever written, and the sticky overflow flag ends &lt;code&gt;True&lt;/code&gt;.&lt;/p&gt;
+&lt;h2 id=&quot;what-we-read&quot;&gt;What we read&lt;/h2&gt;
+&lt;p&gt;Sixty-four lines, and both formats are now closed. &lt;code&gt;Tamal.Trace&lt;/code&gt; is the record
+side made pure: three &lt;code&gt;Record&lt;/code&gt; shapes — &lt;code&gt;Capture&lt;/code&gt;, &lt;code&gt;Mark&lt;/code&gt;, &lt;code&gt;Halt&lt;/code&gt; —
+&lt;code&gt;encodeRecord&lt;/code&gt; laying each into 32-bit words with the exact &lt;code&gt;bitCoerce&lt;/code&gt; tuples the
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-bus/&quot;&gt;engine builds inline&lt;/a&gt;, and &lt;code&gt;ringPush&lt;/code&gt; enforcing the drop-on-full,
+never-past-the-limit, record-atomic push whose atomicity exists to keep a two-word
+&lt;code&gt;MARK&lt;/code&gt; from tearing. Not because the fabric calls any of it — the fabric emits a
+word a cycle in its own fast path — but because a readable specification is what
+lets a test prove the fast path honest. The third time the series has kept a pure
+twin alive for exactly this reason, after the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-serdes/&quot;&gt;serdes finale’s&lt;/a&gt;
+&lt;code&gt;deserializeX1&lt;/code&gt; and the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-wire/&quot;&gt;wire post’s&lt;/a&gt; whole reference model.&lt;/p&gt;
+&lt;p&gt;The wire carries a program in; the trace carries a run out; both are pure and
+done. What is left is not a &lt;em&gt;format&lt;/em&gt; at all — it is the impure shell that turns
+&lt;code&gt;(value, enable)&lt;/code&gt; pairs into real pins that float and drive. That crossing, out to
+the silicon, is the next post.&lt;/p&gt;
+</content>
+  </entry>
+  
+</feed>

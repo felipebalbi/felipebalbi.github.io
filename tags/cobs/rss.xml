@@ -1,0 +1,919 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"
+     xmlns:atom="http://www.w3.org/2005/Atom"
+     xmlns:content="http://purl.org/rss/1.0/modules/content/"
+     xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Felipe Balbi</title>
+    <link>https://balbi.sh</link>
+    <description>Notes on embedded systems, Rust, and the craft of writing software.</description>
+    <generator>Zola</generator>
+    <language>en</language>
+    <lastBuildDate>Sat, 25 Jul 2026 09:00:00 +0000</lastBuildDate>
+    <atom:link href="https://balbi.sh/tags/cobs/rss.xml" rel="self" type="application/rss+xml"/>
+    
+    <item>
+      <title>Tamal: The COBS codec</title>
+      <link>https://balbi.sh/posts/tamal-loader-cobs/</link>
+      <guid isPermaLink="true">https://balbi.sh/posts/tamal-loader-cobs/</guid>
+      <pubDate>Sat, 25 Jul 2026 09:00:00 +0000</pubDate>
+      <dc:creator>Felipe Balbi</dc:creator>
+      <description>&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-uart-tx/&quot;&gt;transmitter&lt;/a&gt; and &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-uart-rx/&quot;&gt;receiver&lt;/a&gt; built a byte &lt;em&gt;pipe&lt;/em&gt;; &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-uart-top/&quot;&gt;yesterday&lt;/a&gt;
+we sealed the two halves into a single word — &lt;em&gt;the UART&lt;/em&gt; — and left four
+wires hanging at the loader’s door. Today we walk through that door. But the
+first thing behind it is not a state machine. It is an answer to a question the
+pipe cannot answer for itself: a bare stream of bytes has no seams, so where
+does one message end and the next begin?&lt;/p&gt;
+&lt;p&gt;I have carried my answer to that question for a little while, and I
+did not find it in a textbook. I found it in &lt;a rel=&quot;external&quot; href=&quot;https://github.com/jamesmunns/postcard-rpc&quot;&gt;postcard-rpc&lt;/a&gt;,
+&lt;a rel=&quot;external&quot; href=&quot;https://www.linkedin.com/in/james-munns-8a42b429/&quot;&gt;James Munns’&lt;/a&gt; crate for speaking to embedded targets over a
+wire. I liked it enough to become one of its maintainers, and I lean
+on it — that is, I depend on it — hard on &lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/pico-de-gallo&quot;&gt;pico de gallo&lt;/a&gt; 🌶,
+where it frames every request and every response that crosses between
+host and firmware. So when Tamal’s loader needed a way to
+tell one message from the next on a bare UART, I did not go looking. I
+already knew what I wanted, and I reached for &lt;a rel=&quot;external&quot; href=&quot;https://en.wikipedia.org/wiki/Consistent_Overhead_Byte_Stuffing&quot;&gt;&lt;strong&gt;COBS&lt;/strong&gt;: Consistent
+Overhead Byte
+Stuffing&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;COBS earns its keep with a property that sounds too good until you see how
+plainly it is bought: it removes &lt;em&gt;every&lt;/em&gt; &lt;code&gt;0x00&lt;/code&gt; byte from a payload, at a cost
+of at most one extra byte per 254, so that a single &lt;code&gt;0x00&lt;/code&gt; can be reserved —
+unambiguously, forever — to mean &lt;em&gt;end of frame&lt;/em&gt;. The loader decodes the
+inbound stream on the way in and encodes its replies on the way out, and both
+directions are the subject of this post.&lt;/p&gt;
+&lt;p&gt;Like every Tamal block before it the codec fits in a screenful and change — but
+unlike the UART halves it holds no clock of its own. What follows are two &lt;em&gt;pure&lt;/em&gt;
+step functions; the loader is the machine that clocks them. We will spend almost
+all our words on the two that matter, &lt;code&gt;cobsDecodeStep&lt;/code&gt; and &lt;code&gt;cobsEncodeStep&lt;/code&gt;, and
+wave past the scaffolding around them, which by now is a ceremony we have read
+five times.&lt;/p&gt;</description>
+      
+      <content:encoded>&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-uart-tx/&quot;&gt;transmitter&lt;/a&gt; and &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-uart-rx/&quot;&gt;receiver&lt;/a&gt; built a byte &lt;em&gt;pipe&lt;/em&gt;; &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-uart-top/&quot;&gt;yesterday&lt;/a&gt;
+we sealed the two halves into a single word — &lt;em&gt;the UART&lt;/em&gt; — and left four
+wires hanging at the loader’s door. Today we walk through that door. But the
+first thing behind it is not a state machine. It is an answer to a question the
+pipe cannot answer for itself: a bare stream of bytes has no seams, so where
+does one message end and the next begin?&lt;/p&gt;
+&lt;p&gt;I have carried my answer to that question for a little while, and I
+did not find it in a textbook. I found it in &lt;a rel=&quot;external&quot; href=&quot;https://github.com/jamesmunns/postcard-rpc&quot;&gt;postcard-rpc&lt;/a&gt;,
+&lt;a rel=&quot;external&quot; href=&quot;https://www.linkedin.com/in/james-munns-8a42b429/&quot;&gt;James Munns’&lt;/a&gt; crate for speaking to embedded targets over a
+wire. I liked it enough to become one of its maintainers, and I lean
+on it — that is, I depend on it — hard on &lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/pico-de-gallo&quot;&gt;pico de gallo&lt;/a&gt; 🌶,
+where it frames every request and every response that crosses between
+host and firmware.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-postcard-1&quot;&gt;&lt;a href=&quot;https://balbi.sh/posts/tamal-loader-cobs/#fn-postcard&quot;&gt;[1]&lt;/a&gt;&lt;/sup&gt; So when Tamal’s loader needed a way to
+tell one message from the next on a bare UART, I did not go looking. I
+already knew what I wanted, and I reached for &lt;a rel=&quot;external&quot; href=&quot;https://en.wikipedia.org/wiki/Consistent_Overhead_Byte_Stuffing&quot;&gt;&lt;strong&gt;COBS&lt;/strong&gt;: Consistent
+Overhead Byte
+Stuffing&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;COBS earns its keep with a property that sounds too good until you see how
+plainly it is bought: it removes &lt;em&gt;every&lt;/em&gt; &lt;code&gt;0x00&lt;/code&gt; byte from a payload, at a cost
+of at most one extra byte per 254, so that a single &lt;code&gt;0x00&lt;/code&gt; can be reserved —
+unambiguously, forever — to mean &lt;em&gt;end of frame&lt;/em&gt;. The loader decodes the
+inbound stream on the way in and encodes its replies on the way out, and both
+directions are the subject of this post.&lt;/p&gt;
+&lt;p&gt;Like every Tamal block before it the codec fits in a screenful and change — but
+unlike the UART halves it holds no clock of its own. What follows are two &lt;em&gt;pure&lt;/em&gt;
+step functions; the loader is the machine that clocks them. We will spend almost
+all our words on the two that matter, &lt;code&gt;cobsDecodeStep&lt;/code&gt; and &lt;code&gt;cobsEncodeStep&lt;/code&gt;, and
+wave past the scaffolding around them, which by now is a ceremony we have read
+five times.&lt;/p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;/span&gt;&lt;h2 id=&quot;the-entire-source&quot;&gt;The entire source&lt;/h2&gt;
+&lt;p&gt;Minus the license header and the doc-comments — and, this once, minus the
+longer inline notes on the encoder, which we will read in place where they
+belong — here is &lt;code&gt;src/Tamal/Loader/Cobs.hs&lt;/code&gt;:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;module&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Tamal.Loader.Cobs&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; DecSt&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; initDec&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; cobsDecodeStep&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; EncSt&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; initEnc&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; cobsEncodeStep&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  )&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; where&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;import&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Clash.Prelude&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; DecSt&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; DecSt&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  {&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dCnt&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Unsigned&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dFull&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bool&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dPend&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bool&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dGot&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bool&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  }&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  deriving&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; stock&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Generic&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Show&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Eq&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  deriving&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; anyclass&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;NFDataX&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;initDec&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; DecSt&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;initDec &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; DecSt&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; EncMode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; EFilling&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; EEmitting&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  deriving&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; stock&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Generic&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Show&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Eq&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  deriving&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; anyclass&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;NFDataX&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; EncSt&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; EncSt&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  {&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eMode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; EncMode&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eBuf&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Vec&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 254&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eFill&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Unsigned&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eIx&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Unsigned&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; ePend&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Maybe&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bool&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eFinal&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bool&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eLast&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bool&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  }&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  deriving&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; stock&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Generic&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Show&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Eq&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  deriving&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; anyclass&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;NFDataX&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;initEnc&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; EncSt&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;initEnc &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; EncSt&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; EFilling&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;repeat &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;cobsDecodeStep&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; DecSt&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Maybe&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bool&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;DecSt&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Maybe&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bool&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bool&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;cobsDecodeStep s &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;mIn&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; frameEnd&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span&gt; frameEnd &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;initDec&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; True&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; not &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;dGot s&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ||&lt;/span&gt;&lt;span&gt; dCnt s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;/=&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span&gt; otherwise &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; case&lt;/span&gt;&lt;span&gt; mIn &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;of&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;      Nothing&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;s&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;      Just&lt;/span&gt;&lt;span&gt; b&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;        |&lt;/span&gt;&lt;span&gt; dCnt s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;            let&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;out&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; s1&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;                  if&lt;/span&gt;&lt;span&gt; dPend s&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;                    then&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Just&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; s&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;dPend&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dGot&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; True&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;                    else&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; s&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;dGot&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; True&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;                s2 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; startGroup s1 b&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;             in&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;s2&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;out&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;        |&lt;/span&gt;&lt;span&gt; otherwise &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;            let&lt;/span&gt;&lt;span&gt; cnt&amp;#39; &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; dCnt s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;                s&amp;#39; &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;                  s&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;                    {&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dCnt&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; cnt&amp;#39;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;                    ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dGot&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; True&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;                    ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dPend&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;                        if&lt;/span&gt;&lt;span&gt; cnt&amp;#39; &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;                          then&lt;/span&gt;&lt;span&gt; not &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;dFull s&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;                          else&lt;/span&gt;&lt;span&gt; dPend s&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;                    }&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;             in&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;s&amp;#39;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Just&lt;/span&gt;&lt;span&gt; b&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; where&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  startGroup st c &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    let&lt;/span&gt;&lt;span&gt; full &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; c &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 255&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        n &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;unpack c &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Unsigned&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; c is 1..255 (never 0), so n is 0..254&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;     in&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; if&lt;/span&gt;&lt;span&gt; n &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;          then&lt;/span&gt;&lt;span&gt; st&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;dCnt&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dFull&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; full&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dPend&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; not full&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;          else&lt;/span&gt;&lt;span&gt; st&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;dCnt&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; n&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dFull&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; full&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;cobsEncodeStep&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; EncSt&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Maybe&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bool&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bool&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;EncSt&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Bool&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Maybe&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bool&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;cobsEncodeStep s &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;mIn&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; dsReady&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; case&lt;/span&gt;&lt;span&gt; eMode s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;of&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  EFilling&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; case&lt;/span&gt;&lt;span&gt; mIn &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;of&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;    Nothing&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;s&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;True&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;    Just&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;b&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; lst&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;      |&lt;/span&gt;&lt;span&gt; eFill s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 254&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;          (&lt;/span&gt;&lt;span&gt;s&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;eMode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; EEmitting&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eIx&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; ePend&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Just&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;b&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; lst&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;True&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;      |&lt;/span&gt;&lt;span&gt; b &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;          (&lt;/span&gt;&lt;span&gt;s&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;eMode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; EEmitting&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eIx&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eFinal&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; lst&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eLast&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; lst&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;True&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;      |&lt;/span&gt;&lt;span&gt; lst &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;          (&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;store s b&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;eMode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; EEmitting&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eIx&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eLast&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; True&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eFinal&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;True&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;      |&lt;/span&gt;&lt;span&gt; otherwise &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;          (&lt;/span&gt;&lt;span&gt;store s b&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;True&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  EEmitting&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    |&lt;/span&gt;&lt;span&gt; not dsReady &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;s&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;False&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    |&lt;/span&gt;&lt;span&gt; eIx s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;=&lt;/span&gt;&lt;span&gt; eFill s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;        let&lt;/span&gt;&lt;span&gt; out &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;            out &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; if&lt;/span&gt;&lt;span&gt; eIx s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; then&lt;/span&gt;&lt;span&gt; fromIntegral &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;eFill s&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; +&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; else&lt;/span&gt;&lt;span&gt; eBuf s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;!!&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;eIx s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;         in&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;s&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;eIx&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; eIx s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;+&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;False&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Just&lt;/span&gt;&lt;span&gt; out&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    |&lt;/span&gt;&lt;span&gt; eFinal s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        (&lt;/span&gt;&lt;span&gt;s&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;eFill&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eIx&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eFinal&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;False&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    |&lt;/span&gt;&lt;span&gt; otherwise &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; case&lt;/span&gt;&lt;span&gt; ePend s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;of&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;        Just&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;pb&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; pl&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;          |&lt;/span&gt;&lt;span&gt; pb &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;              (&lt;/span&gt;&lt;span&gt;s&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;eMode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; EEmitting&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eFill&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eIx&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; ePend&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eFinal&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; pl&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eLast&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; pl&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;False&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;          |&lt;/span&gt;&lt;span&gt; pl &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;              (&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;store s&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;eFill&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;span&gt; pb&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;eMode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; EEmitting&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eIx&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; ePend&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eLast&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; True&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;False&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;          |&lt;/span&gt;&lt;span&gt; otherwise &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;              (&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;store s&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;eFill&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;span&gt; pb&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;eMode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; EFilling&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; ePend&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;False&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;        Nothing&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;          |&lt;/span&gt;&lt;span&gt; eLast s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;initEnc&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;False&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; True&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;          |&lt;/span&gt;&lt;span&gt; otherwise &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;s&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;eMode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; EFilling&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eFill&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;False&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; where&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  store st b &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; st&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;eBuf&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; replace &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;eFill st&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; b &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;eBuf st&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eFill&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; eFill st &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;+&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Six things, top to bottom: an export list that is wider than any we have seen; a
+four-field &lt;code&gt;DecSt&lt;/code&gt; record; a two-constructor &lt;code&gt;EncMode&lt;/code&gt; sum and a seven-field
+&lt;code&gt;EncSt&lt;/code&gt; record; two one-line initialisers; and the two step functions that are
+the whole point. We will glance at the first four and then slow right down for
+the last two.&lt;/p&gt;
+&lt;h2 id=&quot;the-ritual-one-more-time&quot;&gt;The ritual, one more time&lt;/h2&gt;
+&lt;p&gt;The opening beat is the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-crc/&quot;&gt;CRC&lt;/a&gt; module’s, played a sixth time, so I will be
+quick — but there is one genuinely new thing in it, and it is worth a sentence.&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;module&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Tamal.Loader.Cobs&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; DecSt&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; initDec&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; cobsDecodeStep&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; EncSt&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; initEnc&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; cobsEncodeStep&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  )&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; where&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;import&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Clash.Prelude&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Every module so far has had exactly &lt;em&gt;one&lt;/em&gt; name on its export list — &lt;code&gt;crc8Update&lt;/code&gt;,
+&lt;code&gt;uartTx&lt;/code&gt;, &lt;code&gt;uartRx&lt;/code&gt;, &lt;code&gt;uart&lt;/code&gt;. This one has six. The wall still has a door, but the
+door is wider, and the reason is a real design fact rather than an oversight: the
+two &lt;code&gt;St&lt;/code&gt; types and their initialisers leave the file &lt;em&gt;on purpose&lt;/em&gt;. This module is
+not a self-contained machine you plug a clock into; it is a &lt;strong&gt;component the
+loader embeds&lt;/strong&gt;. The loader holds a &lt;code&gt;DecSt&lt;/code&gt; and an &lt;code&gt;EncSt&lt;/code&gt; inside its &lt;em&gt;own&lt;/em&gt;
+state record and threads them through its own &lt;code&gt;mealy&lt;/code&gt;, so it must be handed the
+types to store and the &lt;code&gt;initDec&lt;/code&gt;/&lt;code&gt;initEnc&lt;/code&gt; values to seed them. The export list
+is exactly as wide as that contract requires and no wider: two opaque state
+types, two seeds, two steps. &lt;code&gt;EncMode&lt;/code&gt;, &lt;code&gt;dCnt&lt;/code&gt;, &lt;code&gt;store&lt;/code&gt;, &lt;code&gt;startGroup&lt;/code&gt; — the
+genuinely internal machinery — all stay sealed behind the wall.&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;import Clash.Prelude&lt;/code&gt; is the same prelude swap the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-crc/&quot;&gt;CRC post&lt;/a&gt; dwelt on —
+out goes ordinary Haskell’s furniture, in comes the hardware vocabulary. Here it
+is supplying &lt;code&gt;Vec 254&lt;/code&gt;, &lt;code&gt;Unsigned 8&lt;/code&gt;, &lt;code&gt;BitVector 8&lt;/code&gt;, &lt;code&gt;Maybe&lt;/code&gt;, and the &lt;code&gt;Vec&lt;/code&gt;
+operations &lt;code&gt;repeat&lt;/code&gt;, &lt;code&gt;replace&lt;/code&gt;, and &lt;code&gt;!!&lt;/code&gt; that the encoder’s buffer leans on. I
+will not re-derive it; the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-crc/&quot;&gt;CRC&lt;/a&gt; and &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-haskell-primer/&quot;&gt;primer&lt;/a&gt; posts did that at
+length.&lt;/p&gt;
+&lt;p&gt;The two state records are the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-haskell-primer/&quot;&gt;primer&lt;/a&gt;’s sum-and-product story once
+more, and I will gloss them in a single pass because the step functions are
+written entirely in terms of their fields. &lt;code&gt;DecSt&lt;/code&gt; is what the decoder carries
+tick to tick:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;dCnt&lt;/code&gt;&lt;/strong&gt; — data bytes still owed in the current group; &lt;code&gt;0&lt;/code&gt; means &lt;em&gt;the next
+byte is a code byte&lt;/em&gt;.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;dFull&lt;/code&gt;&lt;/strong&gt; — was this group’s code &lt;code&gt;255&lt;/code&gt;? A full group is special: it carries
+&lt;em&gt;no&lt;/em&gt; implied zero.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;dPend&lt;/code&gt;&lt;/strong&gt; — do we owe an injected &lt;code&gt;0x00&lt;/code&gt; before the next code byte?&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;dGot&lt;/code&gt;&lt;/strong&gt; — has any byte at all arrived this frame? (Only used to flag an empty
+frame as malformed.)&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;code&gt;EncSt&lt;/code&gt; carries more, because encoding buffers a whole group before it can know
+the group’s length:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;eMode&lt;/code&gt;&lt;/strong&gt; — &lt;code&gt;EFilling&lt;/code&gt; (accumulating a group) or &lt;code&gt;EEmitting&lt;/code&gt; (driving
+&lt;code&gt;code ++ group&lt;/code&gt; out).&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;eBuf&lt;/code&gt;&lt;/strong&gt;, &lt;strong&gt;&lt;code&gt;eFill&lt;/code&gt;&lt;/strong&gt; — the up-to-254-byte group buffer and how many bytes are
+in it.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;eIx&lt;/code&gt;&lt;/strong&gt; — the emit cursor: &lt;code&gt;0&lt;/code&gt; is the code byte, &lt;code&gt;1..eFill&lt;/code&gt; the data.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;ePend&lt;/code&gt;&lt;/strong&gt; — a byte stashed when a full 254-group is flushed; it will start the
+next group, and it remembers whether it was the stream’s last byte.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;eFinal&lt;/code&gt;&lt;/strong&gt; — is a final empty group still owed? (The last input byte was
+&lt;code&gt;0x00&lt;/code&gt;.)&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;eLast&lt;/code&gt;&lt;/strong&gt; — has the input stream ended?&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Both initialisers are the resting state written out — &lt;code&gt;initDec = DecSt 0 False False False&lt;/code&gt;, &lt;code&gt;initEnc = EncSt EFilling (repeat 0) 0 0 Nothing False False&lt;/code&gt; —
+and there is nothing in either worth a paragraph.&lt;/p&gt;
+&lt;p&gt;The one structural thing worth saying out loud before we start: look at the
+types of the two steps and notice what is &lt;strong&gt;absent&lt;/strong&gt;.&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;cobsDecodeStep&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; DecSt&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Maybe&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bool&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;DecSt&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Maybe&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bool&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bool&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;cobsEncodeStep&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; EncSt&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Maybe&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bool&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bool&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;EncSt&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Bool&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Maybe&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bool&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;No &lt;code&gt;Signal&lt;/code&gt;. No &lt;code&gt;HiddenClockResetEnable&lt;/code&gt;. No &lt;code&gt;mealy&lt;/code&gt;. These are &lt;code&gt;s -&amp;gt; i -&amp;gt; (s, o)&lt;/code&gt; in the flesh — the exact shape the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-uart-tx/&quot;&gt;transmitter&lt;/a&gt; taught us to read —
+but &lt;em&gt;un-lifted&lt;/em&gt;, pure functions with no clock anywhere in sight. That is
+deliberate, and it is the same division of labour the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-crc/&quot;&gt;CRC&lt;/a&gt;’s &lt;code&gt;step&lt;/code&gt; had:
+the codec describes &lt;em&gt;what one byte does to the state&lt;/em&gt;, and someone else owns the
+register that makes it sequential. That someone is the loader, which wraps both
+steps in its own &lt;code&gt;mealy&lt;/code&gt;. Everything below is combinational; the clock is a
+floor above.&lt;/p&gt;
+&lt;h2 id=&quot;what-cobs-actually-does&quot;&gt;What COBS actually does&lt;/h2&gt;
+&lt;p&gt;Strip the acronym away and COBS is one idea: &lt;strong&gt;turn every zero into a distance&lt;/strong&gt;.&lt;/p&gt;
+&lt;p&gt;Here is the whole trick. You want a byte that means “frame boundary,” and &lt;code&gt;0x00&lt;/code&gt;
+is the natural pick — it is what an idle line and a cleared buffer are already
+full of. The trouble is that real payloads contain &lt;code&gt;0x00&lt;/code&gt; too, so the delimiter
+is ambiguous the moment you pick it. COBS removes the ambiguity by removing the
+zeros: it chops the payload into &lt;strong&gt;groups&lt;/strong&gt; at each zero, and prefixes every
+group with a single &lt;strong&gt;code byte&lt;/strong&gt; that says how long the group is. The zeros
+themselves are never transmitted — they are &lt;em&gt;implied&lt;/em&gt; by the fact that one group
+ended and the next began.&lt;/p&gt;
+&lt;p&gt;Concretely, a group of &lt;code&gt;L&lt;/code&gt; non-zero bytes (with &lt;code&gt;0 ≤ L ≤ 254&lt;/code&gt;) is emitted as a
+code byte &lt;code&gt;L + 1&lt;/code&gt; followed by the &lt;code&gt;L&lt;/code&gt; bytes. Because the code is &lt;code&gt;L + 1&lt;/code&gt; and &lt;code&gt;L&lt;/code&gt;
+tops out at 254, the code ranges over &lt;code&gt;0x01..0xFF&lt;/code&gt; and is &lt;em&gt;never&lt;/em&gt; &lt;code&gt;0x00&lt;/code&gt;. Read
+the code another way and it becomes a pointer: &lt;code&gt;L + 1&lt;/code&gt; is exactly the distance
+from this code byte to the next one, i.e. to where the next zero used to be. The
+decoder follows the chain — jump &lt;code&gt;code&lt;/code&gt; bytes, you land on the next code byte;
+the byte that was there is a zero you re-insert — until the delimiter stops it.&lt;/p&gt;
+&lt;figure class=&quot;cobs-fig&quot; style=&quot;margin:2rem 0&quot;&gt;
+&lt;svg class=&quot;cobs&quot; viewBox=&quot;0 0 760 244&quot; role=&quot;img&quot; aria-labelledby=&quot;cobs-t cobs-d&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot;&gt;
+&lt;title id=&quot;cobs-t&quot;&gt;How COBS turns a payload with zeros into a stream with none&lt;/title&gt;
+&lt;desc id=&quot;cobs-d&quot;&gt;The payload 11 22 00 33 00 sits on top, its two zero bytes highlighted in accent. Below, the COBS encoding 03 11 22 02 33 01 followed by a single 00 frame delimiter drawn dashed. Each code byte — 03, 02 and 01 — is the distance to the next code byte, shown by accent arcs labelled 3, 2 and 1; the code byte stands in for the zero that used to sit at that distance. The encoded stream contains no 0x00, so the single trailing 0x00 delimits the frame unambiguously.&lt;/desc&gt;
+&lt;style&gt;
+.cobs{max-width:760px;width:100%;height:auto;display:block;margin:0 auto}
+.cobs .box{fill:var(--bg-dim);stroke:var(--fg-main);stroke-width:2}
+.cobs .zero{fill:var(--accent);opacity:0.16;stroke:var(--accent);stroke-width:2}
+.cobs .code{fill:var(--bg-dim);stroke:var(--accent);stroke-width:2.5}
+.cobs .delim{fill:none;stroke:var(--accent);stroke-width:2;stroke-dasharray:5 4}
+.cobs .arc{stroke:var(--accent);stroke-width:2;fill:none}
+.cobs text{font-family:var(--sans)}
+.cobs .val{fill:var(--fg-main);font-family:var(--mono);font-size:15px}
+.cobs .valz{fill:var(--accent);font-family:var(--mono);font-size:15px}
+.cobs .lab{fill:var(--fg-dim);font-size:12px}
+.cobs .num{fill:var(--accent);font-size:13px;font-family:var(--mono)}
+.cobs .ahA{fill:var(--accent)}
+&lt;/style&gt;
+&lt;defs&gt;
+&lt;marker id=&quot;cobs-aa&quot; markerWidth=&quot;8&quot; markerHeight=&quot;6&quot; refX=&quot;6&quot; refY=&quot;3&quot; orient=&quot;auto&quot;&gt;&lt;path d=&quot;M0,0 L6,3 L0,6 Z&quot; class=&quot;ahA&quot;/&gt;&lt;/marker&gt;
+&lt;/defs&gt;
+&lt;text class=&quot;lab&quot; x=&quot;44&quot; y=&quot;84&quot; text-anchor=&quot;start&quot;&gt;payload&lt;/text&gt;
+&lt;rect class=&quot;box&quot;  x=&quot;250&quot; y=&quot;60&quot; width=&quot;52&quot; height=&quot;44&quot; rx=&quot;5&quot;/&gt;
+&lt;rect class=&quot;box&quot;  x=&quot;314&quot; y=&quot;60&quot; width=&quot;52&quot; height=&quot;44&quot; rx=&quot;5&quot;/&gt;
+&lt;rect class=&quot;zero&quot; x=&quot;378&quot; y=&quot;60&quot; width=&quot;52&quot; height=&quot;44&quot; rx=&quot;5&quot;/&gt;
+&lt;rect class=&quot;box&quot;  x=&quot;442&quot; y=&quot;60&quot; width=&quot;52&quot; height=&quot;44&quot; rx=&quot;5&quot;/&gt;
+&lt;rect class=&quot;zero&quot; x=&quot;506&quot; y=&quot;60&quot; width=&quot;52&quot; height=&quot;44&quot; rx=&quot;5&quot;/&gt;
+&lt;text class=&quot;val&quot;  x=&quot;276&quot; y=&quot;88&quot; text-anchor=&quot;middle&quot;&gt;11&lt;/text&gt;
+&lt;text class=&quot;val&quot;  x=&quot;340&quot; y=&quot;88&quot; text-anchor=&quot;middle&quot;&gt;22&lt;/text&gt;
+&lt;text class=&quot;valz&quot; x=&quot;404&quot; y=&quot;88&quot; text-anchor=&quot;middle&quot;&gt;00&lt;/text&gt;
+&lt;text class=&quot;val&quot;  x=&quot;468&quot; y=&quot;88&quot; text-anchor=&quot;middle&quot;&gt;33&lt;/text&gt;
+&lt;text class=&quot;valz&quot; x=&quot;532&quot; y=&quot;88&quot; text-anchor=&quot;middle&quot;&gt;00&lt;/text&gt;
+&lt;path class=&quot;arc&quot; d=&quot;M196,152 C196,120 388,120 388,152&quot; marker-end=&quot;url(#cobs-aa)&quot;/&gt;
+&lt;path class=&quot;arc&quot; d=&quot;M388,152 C388,124 516,124 516,152&quot; marker-end=&quot;url(#cobs-aa)&quot;/&gt;
+&lt;path class=&quot;arc&quot; d=&quot;M516,152 C516,128 580,128 580,152&quot; marker-end=&quot;url(#cobs-aa)&quot;/&gt;
+&lt;text class=&quot;num&quot; x=&quot;292&quot; y=&quot;116&quot; text-anchor=&quot;middle&quot;&gt;3&lt;/text&gt;
+&lt;text class=&quot;num&quot; x=&quot;452&quot; y=&quot;120&quot; text-anchor=&quot;middle&quot;&gt;2&lt;/text&gt;
+&lt;text class=&quot;num&quot; x=&quot;548&quot; y=&quot;126&quot; text-anchor=&quot;middle&quot;&gt;1&lt;/text&gt;
+&lt;text class=&quot;lab&quot; x=&quot;44&quot; y=&quot;180&quot; text-anchor=&quot;start&quot;&gt;encoded&lt;/text&gt;
+&lt;rect class=&quot;code&quot;  x=&quot;170&quot; y=&quot;154&quot; width=&quot;52&quot; height=&quot;44&quot; rx=&quot;5&quot;/&gt;
+&lt;rect class=&quot;box&quot;   x=&quot;234&quot; y=&quot;154&quot; width=&quot;52&quot; height=&quot;44&quot; rx=&quot;5&quot;/&gt;
+&lt;rect class=&quot;box&quot;   x=&quot;298&quot; y=&quot;154&quot; width=&quot;52&quot; height=&quot;44&quot; rx=&quot;5&quot;/&gt;
+&lt;rect class=&quot;code&quot;  x=&quot;362&quot; y=&quot;154&quot; width=&quot;52&quot; height=&quot;44&quot; rx=&quot;5&quot;/&gt;
+&lt;rect class=&quot;box&quot;   x=&quot;426&quot; y=&quot;154&quot; width=&quot;52&quot; height=&quot;44&quot; rx=&quot;5&quot;/&gt;
+&lt;rect class=&quot;code&quot;  x=&quot;490&quot; y=&quot;154&quot; width=&quot;52&quot; height=&quot;44&quot; rx=&quot;5&quot;/&gt;
+&lt;rect class=&quot;delim&quot; x=&quot;554&quot; y=&quot;154&quot; width=&quot;52&quot; height=&quot;44&quot; rx=&quot;5&quot;/&gt;
+&lt;text class=&quot;val&quot; x=&quot;196&quot; y=&quot;182&quot; text-anchor=&quot;middle&quot;&gt;03&lt;/text&gt;
+&lt;text class=&quot;val&quot; x=&quot;260&quot; y=&quot;182&quot; text-anchor=&quot;middle&quot;&gt;11&lt;/text&gt;
+&lt;text class=&quot;val&quot; x=&quot;324&quot; y=&quot;182&quot; text-anchor=&quot;middle&quot;&gt;22&lt;/text&gt;
+&lt;text class=&quot;val&quot; x=&quot;388&quot; y=&quot;182&quot; text-anchor=&quot;middle&quot;&gt;02&lt;/text&gt;
+&lt;text class=&quot;val&quot; x=&quot;452&quot; y=&quot;182&quot; text-anchor=&quot;middle&quot;&gt;33&lt;/text&gt;
+&lt;text class=&quot;val&quot; x=&quot;516&quot; y=&quot;182&quot; text-anchor=&quot;middle&quot;&gt;01&lt;/text&gt;
+&lt;text class=&quot;valz&quot; x=&quot;580&quot; y=&quot;182&quot; text-anchor=&quot;middle&quot;&gt;00&lt;/text&gt;
+&lt;text class=&quot;lab&quot; x=&quot;196&quot; y=&quot;222&quot; text-anchor=&quot;middle&quot;&gt;code = length + 1&lt;/text&gt;
+&lt;text class=&quot;lab&quot; x=&quot;580&quot; y=&quot;222&quot; text-anchor=&quot;middle&quot;&gt;delimiter&lt;/text&gt;
+&lt;/svg&gt;
+&lt;figcaption style=&quot;text-align:center;color:var(--fg-dim);font-size:.9rem;margin-top:.85rem;font-family:var(--sans)&quot;&gt;COBS on the payload &lt;code&gt;11 22 00 33 00&lt;/code&gt;. It splits at the zeros into groups &lt;code&gt;[11 22]&lt;/code&gt;, &lt;code&gt;[33]&lt;/code&gt;, and a trailing empty group, and prefixes each with a code byte equal to its length plus one: &lt;code&gt;03 11 22&lt;/code&gt;, &lt;code&gt;02 33&lt;/code&gt;, &lt;code&gt;01&lt;/code&gt;. Each code is the distance (accent arcs) to the next code byte — the spot the zero used to occupy — so the decoder can re-insert every zero by following the chain. The encoded stream holds no &lt;code&gt;0x00&lt;/code&gt;, which frees the single trailing &lt;code&gt;0x00&lt;/code&gt; to mean, unambiguously, &lt;em&gt;end of frame&lt;/em&gt;.&lt;/figcaption&gt;
+&lt;/figure&gt;
+&lt;p&gt;Two details in that picture are the entire reason both step functions are more
+than ten lines long, so let us name them now and meet them again in the code.&lt;/p&gt;
+&lt;p&gt;The first is the &lt;strong&gt;final group&lt;/strong&gt;. Count the groups above: &lt;code&gt;[11 22]&lt;/code&gt;, &lt;code&gt;[33]&lt;/code&gt;, and
+then an &lt;em&gt;empty&lt;/em&gt; one, &lt;code&gt;01&lt;/code&gt;. A payload with &lt;em&gt;k&lt;/em&gt; zeros always encodes to &lt;em&gt;k + 1&lt;/em&gt;
+groups, because every zero marks a boundary &lt;em&gt;between&lt;/em&gt; two groups — and a payload
+that ends in a zero, like this one, leaves an empty run after that last zero,
+which becomes the trailing empty group. On decode a zero is re-inserted after
+every group &lt;em&gt;but the last&lt;/em&gt;; the final group is closed by the frame delimiter
+instead. So the decoder owes exactly &lt;em&gt;k&lt;/em&gt; zeros across &lt;em&gt;k + 1&lt;/em&gt; groups — one after
+each group except the final one — and getting that off-by-one asymmetry right is
+where its trickiest line lives.&lt;/p&gt;
+&lt;p&gt;The second is the &lt;strong&gt;full group&lt;/strong&gt;. A group holds at most 254 bytes because the
+code caps at &lt;code&gt;0xFF&lt;/code&gt;. What happens to a run of, say, 300 non-zero bytes with no
+zero to break it? COBS emits a full group — code &lt;code&gt;0xFF&lt;/code&gt;, 254 bytes — and then
+simply &lt;em&gt;continues&lt;/em&gt; the run in the next group. Crucially, that &lt;code&gt;0xFF&lt;/code&gt; group is a
+&lt;strong&gt;continuation&lt;/strong&gt;: unlike every code from &lt;code&gt;0x01&lt;/code&gt; to &lt;code&gt;0xFE&lt;/code&gt;, it does &lt;em&gt;not&lt;/em&gt; stand in
+for a zero, because there was no zero — the run was just too long. “Is this code
+&lt;code&gt;0xFF&lt;/code&gt;?” is therefore the question that decides whether a zero gets re-inserted,
+and it is exactly the &lt;code&gt;dFull&lt;/code&gt; flag in the decoder and the &lt;code&gt;eFill == 254&lt;/code&gt; test in
+the encoder.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-consistent-1&quot;&gt;&lt;a href=&quot;https://balbi.sh/posts/tamal-loader-cobs/#fn-consistent&quot;&gt;[2]&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;p&gt;With those two facts in hand the code reads like prose. We take the decoder
+first, as promised, because it is the shorter of the two.&lt;/p&gt;
+&lt;h2 id=&quot;cobsdecodestep-decoding-a-byte&quot;&gt;&lt;code&gt;cobsDecodeStep&lt;/code&gt;: decoding a byte&lt;/h2&gt;
+&lt;p&gt;The decoder’s job is to invert the picture: bytes of a delimiter-stripped COBS
+frame go in, the original payload comes out, and any structural nonsense is
+flagged. Start, as always, with the type.&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;cobsDecodeStep&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; DecSt&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Maybe&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bool&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;DecSt&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Maybe&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bool&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bool&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Read against the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-haskell-primer/&quot;&gt;primer&lt;/a&gt;’s &lt;code&gt;s -&amp;gt; i -&amp;gt; (s, o)&lt;/code&gt;: the state is &lt;code&gt;DecSt&lt;/code&gt;, the
+input is &lt;code&gt;(Maybe (BitVector 8), Bool)&lt;/code&gt;, and the output is &lt;code&gt;(Maybe (BitVector 8), Bool, Bool)&lt;/code&gt;. Name the parts and the contract appears. The input is a maybe-byte
+— &lt;code&gt;Just b&lt;/code&gt; when the UART handed the loader a byte this cycle, &lt;code&gt;Nothing&lt;/code&gt;
+otherwise — paired with a &lt;code&gt;frameEnd&lt;/code&gt; flag the loader pulses the instant it sees
+the &lt;code&gt;0x00&lt;/code&gt; delimiter on the wire. The output triple is a maybe-decoded-byte, a
+&lt;code&gt;done&lt;/code&gt; pulse, and a &lt;code&gt;malformed&lt;/code&gt; flag. The decoder is a valve: bytes trickle in,
+decoded bytes trickle out, and two one-bit signals announce the end of the frame
+and whether it held together.&lt;/p&gt;
+&lt;p&gt;The body is three guarded cases. Take them in the order the hardware does.&lt;/p&gt;
+&lt;h3 id=&quot;frame-end-reset-and-the-malformed-law&quot;&gt;Frame end: reset, and the malformed law&lt;/h3&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span&gt; frameEnd &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;initDec&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; True&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; not &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;dGot s&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ||&lt;/span&gt;&lt;span&gt; dCnt s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;/=&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;When the loader pulses &lt;code&gt;frameEnd&lt;/code&gt;, the current frame is over regardless of what
+the decoder was in the middle of. The next state is &lt;code&gt;initDec&lt;/code&gt; — a hard reset, so
+the following frame starts clean — the output byte is &lt;code&gt;Nothing&lt;/code&gt;, and &lt;code&gt;done&lt;/code&gt; is
+&lt;code&gt;True&lt;/code&gt;. The interesting part is the last field, the &lt;code&gt;malformed&lt;/code&gt; verdict:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;A frame is malformed if no byte ever arrived, or if a group was still owed data
+when the delimiter cut it off.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;&lt;code&gt;not (dGot s)&lt;/code&gt; catches the empty frame: two delimiters back to back, nothing
+between them, &lt;code&gt;dGot&lt;/code&gt; never set. &lt;code&gt;dCnt s /= 0&lt;/code&gt; catches the truncated group: a code
+byte promised &lt;code&gt;n&lt;/code&gt; data bytes, the delimiter arrived before all &lt;code&gt;n&lt;/code&gt; did, and the
+counter never wound back to zero. Both are exactly the failures the pure
+reference rejects — an empty list, or a code byte “demanding more bytes than
+remain” — checked here in a single cheap disjunction at the one moment the whole
+frame is known to be complete.&lt;/p&gt;
+&lt;h3 id=&quot;no-byte-this-cycle-hold&quot;&gt;No byte this cycle: hold&lt;/h3&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;      Nothing&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;s&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;If the loader has no byte for the decoder this cycle — the UART is mid-bit,
+say — the decoder does nothing at all: state unchanged, no output, no pulses. A
+valve with nothing flowing through it. This is the overwhelmingly common case,
+and it is one line.&lt;/p&gt;
+&lt;h3 id=&quot;a-byte-arrives-code-byte-or-data-byte&quot;&gt;A byte arrives: code byte, or data byte?&lt;/h3&gt;
+&lt;p&gt;Everything real happens when &lt;code&gt;Just b&lt;/code&gt; arrives, and the split is the &lt;code&gt;dCnt s == 0&lt;/code&gt;
+guard, which is precisely the question &lt;em&gt;is the next byte a code byte?&lt;/em&gt;&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;      Just&lt;/span&gt;&lt;span&gt; b&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;        |&lt;/span&gt;&lt;span&gt; dCnt s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;            let&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;out&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; s1&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;                  if&lt;/span&gt;&lt;span&gt; dPend s&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;                    then&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Just&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; s&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;dPend&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dGot&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; True&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;                    else&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; s&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;dGot&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; True&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;                s2 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; startGroup s1 b&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;             in&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;s2&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;out&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;When &lt;code&gt;dCnt&lt;/code&gt; is zero we are between groups, so &lt;code&gt;b&lt;/code&gt; is a code byte — but before we
+interpret it, we settle a debt. If &lt;code&gt;dPend&lt;/code&gt; is set, the &lt;em&gt;previous&lt;/em&gt; group ended
+owing an implied zero, and this is the moment to pay it: &lt;code&gt;out = Just 0&lt;/code&gt;. That
+timing is the subtle heart of the decoder, so let me state it plainly.&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;The zero between two groups is emitted lazily — not when the group ends, but
+when the &lt;em&gt;next&lt;/em&gt; code byte arrives.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;Why lazily? Because the zero only exists if there &lt;em&gt;is&lt;/em&gt; a next group. A group that
+turns out to be the frame’s last is followed by the delimiter, not by another
+code byte, and its implied zero is not part of the payload — it is the boundary
+itself. By deferring the zero until the next code byte, the decoder gets this for
+free: if the next thing is a code byte, the zero was real and we emit it; if the
+next thing is &lt;code&gt;frameEnd&lt;/code&gt;, we reset and the pending zero evaporates, un-emitted,
+exactly as it should. The &lt;code&gt;03 11 22 02 33 01&lt;/code&gt; trace below shows both halves of
+that bargain.&lt;/p&gt;
+&lt;p&gt;Once the debt is settled, &lt;code&gt;startGroup&lt;/code&gt; interprets the code byte:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  startGroup st c &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    let&lt;/span&gt;&lt;span&gt; full &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; c &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 255&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        n &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;unpack c &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Unsigned&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; c is 1..255 (never 0), so n is 0..254&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;     in&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; if&lt;/span&gt;&lt;span&gt; n &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;          then&lt;/span&gt;&lt;span&gt; st&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;dCnt&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dFull&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; full&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dPend&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; not full&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;          else&lt;/span&gt;&lt;span&gt; st&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;dCnt&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; n&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dFull&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; full&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;n = c - 1&lt;/code&gt; is the group’s data-byte count, undoing the encoder’s &lt;code&gt;L + 1&lt;/code&gt;. &lt;code&gt;full = c == 255&lt;/code&gt; records the continuation case. Then a fork on &lt;code&gt;n&lt;/code&gt;:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;n == 0&lt;/code&gt; — the code was &lt;code&gt;0x01&lt;/code&gt;, an &lt;strong&gt;empty group&lt;/strong&gt;. There is no data to wait
+for, so &lt;code&gt;dCnt&lt;/code&gt; stays &lt;code&gt;0&lt;/code&gt; (the very next byte is again a code byte), and we set
+&lt;code&gt;dPend = not full&lt;/code&gt;. For &lt;code&gt;0x01&lt;/code&gt;, &lt;code&gt;full&lt;/code&gt; is &lt;code&gt;False&lt;/code&gt;, so &lt;code&gt;dPend&lt;/code&gt; becomes &lt;code&gt;True&lt;/code&gt;:
+an empty group &lt;em&gt;is&lt;/em&gt; a lone zero, and it owes one. (&lt;code&gt;0x01&lt;/code&gt; is the only way &lt;code&gt;n&lt;/code&gt;
+is zero; &lt;code&gt;full&lt;/code&gt; is a formality here, always &lt;code&gt;False&lt;/code&gt;, but writing &lt;code&gt;not full&lt;/code&gt;
+keeps the rule uniform.)&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;n /= 0&lt;/code&gt; — a normal group. Arm the counter, &lt;code&gt;dCnt = n&lt;/code&gt;, and remember whether
+it was full. The implied zero, if any, will be decided when the counter hits
+bottom, in the other arm.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id=&quot;inside-a-group-pass-the-byte-count-down&quot;&gt;Inside a group: pass the byte, count down&lt;/h3&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;        |&lt;/span&gt;&lt;span&gt; otherwise &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;            let&lt;/span&gt;&lt;span&gt; cnt&amp;#39; &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; dCnt s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;                s&amp;#39; &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;                  s&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;                    {&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dCnt&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; cnt&amp;#39;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;                    ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dGot&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; True&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;                    ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dPend&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;                        if&lt;/span&gt;&lt;span&gt; cnt&amp;#39; &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;                          then&lt;/span&gt;&lt;span&gt; not &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;dFull s&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;                          else&lt;/span&gt;&lt;span&gt; dPend s&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;                    }&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;             in&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;s&amp;#39;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Just&lt;/span&gt;&lt;span&gt; b&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;When &lt;code&gt;dCnt&lt;/code&gt; is non-zero, &lt;code&gt;b&lt;/code&gt; is a data byte, and data bytes are transparent:
+&lt;code&gt;out = Just b&lt;/code&gt;, passed straight through unchanged (they were never touched by the
+encoder — COBS only ever &lt;em&gt;removed&lt;/em&gt; the zeros, never disturbed the rest).
+Decrement the counter to &lt;code&gt;cnt&#39;&lt;/code&gt;. And here is the mirror image of &lt;code&gt;startGroup&lt;/code&gt;’s
+pending logic: the instant the group empties, &lt;code&gt;cnt&#39; == 0&lt;/code&gt;, we set &lt;code&gt;dPend = not (dFull s)&lt;/code&gt;. A normal group just ended and owes its implied zero; a full (&lt;code&gt;0xFF&lt;/code&gt;)
+group ends owing nothing, because it was a continuation. That single &lt;code&gt;not dFull&lt;/code&gt;
+is the &lt;code&gt;0xFF&lt;/code&gt;-is-special rule from the concept section, written once, doing all
+its work.&lt;/p&gt;
+&lt;h3 id=&quot;watching-it-run&quot;&gt;Watching it run&lt;/h3&gt;
+&lt;p&gt;Take the frame from the figure, &lt;code&gt;03 11 22 02 33 01&lt;/code&gt;, and feed it in byte by byte,
+capped with &lt;code&gt;frameEnd&lt;/code&gt;. The decoder should hand back &lt;code&gt;11 22 00 33 00&lt;/code&gt;.&lt;/p&gt;
+&lt;figure class=&quot;cdec-fig&quot; style=&quot;margin:2rem 0&quot;&gt;
+&lt;svg class=&quot;cdec&quot; viewBox=&quot;0 0 760 250&quot; role=&quot;img&quot; aria-labelledby=&quot;cdec-t cdec-d&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot;&gt;
+&lt;title id=&quot;cdec-t&quot;&gt;Decoding 03 11 22 02 33 01 back into 11 22 00 33 00&lt;/title&gt;
+&lt;desc id=&quot;cdec-d&quot;&gt;The top row is the COBS input 03 11 22 02 33 01 followed by a dashed 00 delimiter. The bottom row is the decoded output 11 22 00 33 00, column-aligned beneath the input. Data bytes 11, 22 and 33 drop straight down to the output. The code byte 03 arms a counter and produces no output. The code bytes 02 and 01 each manufacture an accent-highlighted zero in the output — the implied zero of the group that just ended — before re-arming. The delimiter produces done and drops the final group&#39;s still-pending zero.&lt;/desc&gt;
+&lt;style&gt;
+.cdec{max-width:760px;width:100%;height:auto;display:block;margin:0 auto}
+.cdec .box{fill:var(--bg-dim);stroke:var(--fg-main);stroke-width:2}
+.cdec .code{fill:var(--bg-dim);stroke:var(--accent);stroke-width:2.5}
+.cdec .delim{fill:none;stroke:var(--accent);stroke-width:2;stroke-dasharray:5 4}
+.cdec .zout{fill:var(--accent);opacity:0.16;stroke:var(--accent);stroke-width:2}
+.cdec .thru{stroke:var(--fg-main);stroke-width:2;fill:none}
+.cdec .mk{stroke:var(--accent);stroke-width:2;fill:none}
+.cdec text{font-family:var(--sans)}
+.cdec .val{fill:var(--fg-main);font-family:var(--mono);font-size:15px}
+.cdec .valz{fill:var(--accent);font-family:var(--mono);font-size:15px}
+.cdec .lab{fill:var(--fg-dim);font-size:12px}
+.cdec .note{fill:var(--accent);font-size:11.5px}
+.cdec .ah{fill:var(--fg-main)}
+.cdec .ahA{fill:var(--accent)}
+&lt;/style&gt;
+&lt;defs&gt;
+&lt;marker id=&quot;cdec-a&quot; markerWidth=&quot;8&quot; markerHeight=&quot;6&quot; refX=&quot;6&quot; refY=&quot;3&quot; orient=&quot;auto&quot;&gt;&lt;path d=&quot;M0,0 L6,3 L0,6 Z&quot; class=&quot;ah&quot;/&gt;&lt;/marker&gt;
+&lt;marker id=&quot;cdec-aa&quot; markerWidth=&quot;8&quot; markerHeight=&quot;6&quot; refX=&quot;6&quot; refY=&quot;3&quot; orient=&quot;auto&quot;&gt;&lt;path d=&quot;M0,0 L6,3 L0,6 Z&quot; class=&quot;ahA&quot;/&gt;&lt;/marker&gt;
+&lt;/defs&gt;
+&lt;text class=&quot;lab&quot; x=&quot;34&quot; y=&quot;60&quot; text-anchor=&quot;start&quot;&gt;COBS in&lt;/text&gt;
+&lt;rect class=&quot;code&quot;  x=&quot;110&quot; y=&quot;40&quot; width=&quot;60&quot; height=&quot;42&quot; rx=&quot;5&quot;/&gt;
+&lt;rect class=&quot;box&quot;   x=&quot;192&quot; y=&quot;40&quot; width=&quot;60&quot; height=&quot;42&quot; rx=&quot;5&quot;/&gt;
+&lt;rect class=&quot;box&quot;   x=&quot;274&quot; y=&quot;40&quot; width=&quot;60&quot; height=&quot;42&quot; rx=&quot;5&quot;/&gt;
+&lt;rect class=&quot;code&quot;  x=&quot;356&quot; y=&quot;40&quot; width=&quot;60&quot; height=&quot;42&quot; rx=&quot;5&quot;/&gt;
+&lt;rect class=&quot;box&quot;   x=&quot;438&quot; y=&quot;40&quot; width=&quot;60&quot; height=&quot;42&quot; rx=&quot;5&quot;/&gt;
+&lt;rect class=&quot;code&quot;  x=&quot;520&quot; y=&quot;40&quot; width=&quot;60&quot; height=&quot;42&quot; rx=&quot;5&quot;/&gt;
+&lt;rect class=&quot;delim&quot; x=&quot;602&quot; y=&quot;40&quot; width=&quot;60&quot; height=&quot;42&quot; rx=&quot;5&quot;/&gt;
+&lt;text class=&quot;val&quot; x=&quot;140&quot; y=&quot;67&quot; text-anchor=&quot;middle&quot;&gt;03&lt;/text&gt;
+&lt;text class=&quot;val&quot; x=&quot;222&quot; y=&quot;67&quot; text-anchor=&quot;middle&quot;&gt;11&lt;/text&gt;
+&lt;text class=&quot;val&quot; x=&quot;304&quot; y=&quot;67&quot; text-anchor=&quot;middle&quot;&gt;22&lt;/text&gt;
+&lt;text class=&quot;val&quot; x=&quot;386&quot; y=&quot;67&quot; text-anchor=&quot;middle&quot;&gt;02&lt;/text&gt;
+&lt;text class=&quot;val&quot; x=&quot;468&quot; y=&quot;67&quot; text-anchor=&quot;middle&quot;&gt;33&lt;/text&gt;
+&lt;text class=&quot;val&quot; x=&quot;550&quot; y=&quot;67&quot; text-anchor=&quot;middle&quot;&gt;01&lt;/text&gt;
+&lt;text class=&quot;valz&quot; x=&quot;632&quot; y=&quot;67&quot; text-anchor=&quot;middle&quot;&gt;00&lt;/text&gt;
+&lt;line class=&quot;thru&quot; x1=&quot;222&quot; y1=&quot;82&quot; x2=&quot;222&quot; y2=&quot;168&quot; marker-end=&quot;url(#cdec-a)&quot;/&gt;
+&lt;line class=&quot;thru&quot; x1=&quot;304&quot; y1=&quot;82&quot; x2=&quot;304&quot; y2=&quot;168&quot; marker-end=&quot;url(#cdec-a)&quot;/&gt;
+&lt;line class=&quot;thru&quot; x1=&quot;468&quot; y1=&quot;82&quot; x2=&quot;468&quot; y2=&quot;168&quot; marker-end=&quot;url(#cdec-a)&quot;/&gt;
+&lt;path class=&quot;mk&quot; d=&quot;M386,82 C386,120 386,132 386,168&quot; marker-end=&quot;url(#cdec-aa)&quot;/&gt;
+&lt;path class=&quot;mk&quot; d=&quot;M550,82 C550,120 550,132 550,168&quot; marker-end=&quot;url(#cdec-aa)&quot;/&gt;
+&lt;line class=&quot;mk&quot; x1=&quot;140&quot; y1=&quot;82&quot; x2=&quot;140&quot; y2=&quot;120&quot;/&gt;
+&lt;text class=&quot;note&quot; x=&quot;140&quot; y=&quot;136&quot; text-anchor=&quot;middle&quot;&gt;arm 2 · no out&lt;/text&gt;
+&lt;line class=&quot;mk&quot; x1=&quot;632&quot; y1=&quot;82&quot; x2=&quot;632&quot; y2=&quot;120&quot;/&gt;
+&lt;text class=&quot;note&quot; x=&quot;632&quot; y=&quot;132&quot; text-anchor=&quot;middle&quot;&gt;done ·&lt;/text&gt;
+&lt;text class=&quot;note&quot; x=&quot;632&quot; y=&quot;147&quot; text-anchor=&quot;middle&quot;&gt;drop pending 0&lt;/text&gt;
+&lt;text class=&quot;lab&quot; x=&quot;34&quot; y=&quot;196&quot; text-anchor=&quot;start&quot;&gt;bytes out&lt;/text&gt;
+&lt;rect class=&quot;box&quot;  x=&quot;192&quot; y=&quot;172&quot; width=&quot;60&quot; height=&quot;42&quot; rx=&quot;5&quot;/&gt;
+&lt;rect class=&quot;box&quot;  x=&quot;274&quot; y=&quot;172&quot; width=&quot;60&quot; height=&quot;42&quot; rx=&quot;5&quot;/&gt;
+&lt;rect class=&quot;zout&quot; x=&quot;356&quot; y=&quot;172&quot; width=&quot;60&quot; height=&quot;42&quot; rx=&quot;5&quot;/&gt;
+&lt;rect class=&quot;box&quot;  x=&quot;438&quot; y=&quot;172&quot; width=&quot;60&quot; height=&quot;42&quot; rx=&quot;5&quot;/&gt;
+&lt;rect class=&quot;zout&quot; x=&quot;520&quot; y=&quot;172&quot; width=&quot;60&quot; height=&quot;42&quot; rx=&quot;5&quot;/&gt;
+&lt;text class=&quot;val&quot;  x=&quot;222&quot; y=&quot;199&quot; text-anchor=&quot;middle&quot;&gt;11&lt;/text&gt;
+&lt;text class=&quot;val&quot;  x=&quot;304&quot; y=&quot;199&quot; text-anchor=&quot;middle&quot;&gt;22&lt;/text&gt;
+&lt;text class=&quot;valz&quot; x=&quot;386&quot; y=&quot;199&quot; text-anchor=&quot;middle&quot;&gt;00&lt;/text&gt;
+&lt;text class=&quot;val&quot;  x=&quot;468&quot; y=&quot;199&quot; text-anchor=&quot;middle&quot;&gt;33&lt;/text&gt;
+&lt;text class=&quot;valz&quot; x=&quot;550&quot; y=&quot;199&quot; text-anchor=&quot;middle&quot;&gt;00&lt;/text&gt;
+&lt;text class=&quot;note&quot; x=&quot;468&quot; y=&quot;238&quot; text-anchor=&quot;middle&quot;&gt;accent zeros — manufactured when the next code byte arrives&lt;/text&gt;
+&lt;/svg&gt;
+&lt;figcaption style=&quot;text-align:center;color:var(--fg-dim);font-size:.9rem;margin-top:.85rem;font-family:var(--sans)&quot;&gt;One decode, column-aligned. Data bytes (&lt;code&gt;11&lt;/code&gt;, &lt;code&gt;22&lt;/code&gt;, &lt;code&gt;33&lt;/code&gt;) fall straight through. The first code byte &lt;code&gt;03&lt;/code&gt; only arms the counter — no output. Each later code byte (&lt;code&gt;02&lt;/code&gt;, &lt;code&gt;01&lt;/code&gt;) first pays the previous group&#39;s debt, manufacturing the accent &lt;code&gt;00&lt;/code&gt;, then re-arms: the implied zero is born &lt;em&gt;at the next code byte&lt;/em&gt;, not when its group ended. The delimiter raises &lt;code&gt;done&lt;/code&gt; and drops the final group&#39;s still-pending zero — which is why &lt;code&gt;01&lt;/code&gt;&#39;s zero never appears, and the output ends at &lt;code&gt;33 00&lt;/code&gt;, the original payload exactly.&lt;/figcaption&gt;
+&lt;/figure&gt;
+&lt;p&gt;Trace it against the state:&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;03&lt;/code&gt;&lt;/strong&gt; — &lt;code&gt;dCnt&lt;/code&gt; is &lt;code&gt;0&lt;/code&gt;, &lt;code&gt;dPend&lt;/code&gt; is &lt;code&gt;False&lt;/code&gt;, so no output; &lt;code&gt;startGroup&lt;/code&gt;
+reads &lt;code&gt;n = 2&lt;/code&gt;, sets &lt;code&gt;dCnt = 2&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;11&lt;/code&gt;&lt;/strong&gt; — inside a group; emit &lt;code&gt;11&lt;/code&gt;, &lt;code&gt;dCnt&lt;/code&gt; falls to &lt;code&gt;1&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;22&lt;/code&gt;&lt;/strong&gt; — emit &lt;code&gt;22&lt;/code&gt;, &lt;code&gt;dCnt&lt;/code&gt; falls to &lt;code&gt;0&lt;/code&gt;; the group is done, so &lt;code&gt;dPend = not dFull = True&lt;/code&gt;. &lt;em&gt;Debt incurred.&lt;/em&gt;&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;02&lt;/code&gt;&lt;/strong&gt; — &lt;code&gt;dCnt&lt;/code&gt; is &lt;code&gt;0&lt;/code&gt; and &lt;code&gt;dPend&lt;/code&gt; is set, so emit the owed &lt;code&gt;0&lt;/code&gt;; then
+&lt;code&gt;startGroup&lt;/code&gt; reads &lt;code&gt;n = 1&lt;/code&gt;, &lt;code&gt;dCnt = 1&lt;/code&gt;. Output so far: &lt;code&gt;11 22 00&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;33&lt;/code&gt;&lt;/strong&gt; — emit &lt;code&gt;33&lt;/code&gt;, &lt;code&gt;dCnt&lt;/code&gt; falls to &lt;code&gt;0&lt;/code&gt;, &lt;code&gt;dPend = True&lt;/code&gt; again.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;01&lt;/code&gt;&lt;/strong&gt; — &lt;code&gt;dPend&lt;/code&gt; set, emit the owed &lt;code&gt;0&lt;/code&gt;; &lt;code&gt;startGroup&lt;/code&gt; reads &lt;code&gt;n = 0&lt;/code&gt;, an
+empty group, &lt;code&gt;dCnt = 0&lt;/code&gt;, &lt;code&gt;dPend = True&lt;/code&gt;. Output: &lt;code&gt;11 22 00 33 00&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;frameEnd&lt;/code&gt;&lt;/strong&gt; — reset. &lt;code&gt;dGot&lt;/code&gt; is &lt;code&gt;True&lt;/code&gt; and &lt;code&gt;dCnt&lt;/code&gt; is &lt;code&gt;0&lt;/code&gt;, so &lt;code&gt;malformed&lt;/code&gt;
+is &lt;code&gt;False&lt;/code&gt;. The &lt;code&gt;dPend&lt;/code&gt; left set by step 6 is simply discarded.&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;The output is &lt;code&gt;11 22 00 33 00&lt;/code&gt; — the payload we started from. Notice the whole
+drama is in that last &lt;code&gt;dPend&lt;/code&gt;: step 6 dutifully set it, and step 7 threw it away,
+which is exactly right, because the final group’s zero was the frame boundary,
+not a byte. Emit it and we would have handed back &lt;code&gt;11 22 00 33 00 00&lt;/code&gt;, one zero
+too many. The lazy timing is what makes the difference free.&lt;/p&gt;
+&lt;p&gt;And the malformed cases fall straight out of the same law. Feed &lt;code&gt;05 11&lt;/code&gt; then
+&lt;code&gt;frameEnd&lt;/code&gt;: the code &lt;code&gt;0x05&lt;/code&gt; arms &lt;code&gt;dCnt = 4&lt;/code&gt;, one data byte arrives, and the
+delimiter finds &lt;code&gt;dCnt = 3 /= 0&lt;/code&gt; — truncated, malformed. Feed nothing between two
+delimiters: &lt;code&gt;dGot&lt;/code&gt; is &lt;code&gt;False&lt;/code&gt; — empty, malformed. Feed a lone &lt;code&gt;03&lt;/code&gt;: &lt;code&gt;dGot&lt;/code&gt; is
+set but &lt;code&gt;dCnt = 2&lt;/code&gt; still owes two bytes — malformed. The decoder never has to
+reach for a special error path; the verdict is a one-line consequence of the
+state it was already keeping.&lt;/p&gt;
+&lt;h2 id=&quot;cobsencodestep-encoding-a-byte&quot;&gt;&lt;code&gt;cobsEncodeStep&lt;/code&gt;: encoding a byte&lt;/h2&gt;
+&lt;p&gt;Encoding is the harder direction, and the reason is timing. The decoder could act
+on each byte the instant it arrived, because a code byte tells it everything up
+front. The encoder cannot: to emit a group’s code byte it must first know the
+group’s &lt;em&gt;length&lt;/em&gt;, and it cannot know the length until it has seen the zero (or
+the 254th byte, or the end of input) that closes the group. So the encoder is a
+two-beat machine — &lt;strong&gt;fill&lt;/strong&gt; a buffer, then &lt;strong&gt;emit&lt;/strong&gt; what it holds — and the
+whole function is a &lt;code&gt;case&lt;/code&gt; on which beat we are in.&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;cobsEncodeStep&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; EncSt&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Maybe&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bool&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bool&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;EncSt&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Bool&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Maybe&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bool&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The input is a maybe-&lt;code&gt;(byte, is-last)&lt;/code&gt; paired with &lt;code&gt;dsReady&lt;/code&gt;, the downstream
+ready line. The &lt;code&gt;is-last&lt;/code&gt; flag rides along with each byte because, again, the
+encoder needs to know when the stream ends to close the final group. &lt;code&gt;dsReady&lt;/code&gt; is
+back-pressure from whatever consumes the COBS bytes (the transmitter, via the
+loader): the encoder may only push a byte on a cycle the consumer can take one.
+The output is &lt;code&gt;(readyIn, mOut, done)&lt;/code&gt; — a ready line &lt;em&gt;back&lt;/em&gt; toward the source,
+the maybe-COBS-byte, and a &lt;code&gt;done&lt;/code&gt; pulse when the frame is fully emitted. Two
+ready lines, pointing opposite ways, because the encoder sits in the middle of a
+pipeline and must talk to both ends.&lt;/p&gt;
+&lt;h3 id=&quot;filling-buffer-a-group-and-the-load-bearing-order&quot;&gt;Filling: buffer a group, and the load-bearing order&lt;/h3&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  EFilling&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; case&lt;/span&gt;&lt;span&gt; mIn &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;of&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;    Nothing&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;s&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;True&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;    Just&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;b&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; lst&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;      |&lt;/span&gt;&lt;span&gt; eFill s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 254&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;          (&lt;/span&gt;&lt;span&gt;s&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;eMode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; EEmitting&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eIx&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; ePend&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Just&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;b&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; lst&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;True&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;      |&lt;/span&gt;&lt;span&gt; b &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;          (&lt;/span&gt;&lt;span&gt;s&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;eMode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; EEmitting&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eIx&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eFinal&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; lst&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eLast&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; lst&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;True&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;      |&lt;/span&gt;&lt;span&gt; lst &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;          (&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;store s b&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;eMode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; EEmitting&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eIx&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eLast&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; True&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eFinal&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;True&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;      |&lt;/span&gt;&lt;span&gt; otherwise &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;          (&lt;/span&gt;&lt;span&gt;store s b&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;True&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Throughout &lt;code&gt;EFilling&lt;/code&gt;, &lt;code&gt;readyIn&lt;/code&gt; is &lt;code&gt;True&lt;/code&gt;: this is the one mode that consumes
+input, so it is the one mode that says “keep them coming.” With no byte offered
+(&lt;code&gt;Nothing&lt;/code&gt;) it idles, ready. With a byte &lt;code&gt;(b, lst)&lt;/code&gt; in hand, four guards decide
+its fate, and &lt;em&gt;their order is load-bearing&lt;/em&gt; — this is the single most important
+thing in the encoder, so we take the guards in order and dwell on the first.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;&lt;code&gt;eFill == 254&lt;/code&gt; comes first, before even the zero check.&lt;/strong&gt; If the buffer already
+holds 254 bytes, the group is full and must flush as a &lt;code&gt;0xFF&lt;/code&gt; continuation —
+&lt;em&gt;whatever &lt;code&gt;b&lt;/code&gt; is&lt;/em&gt;. We switch to &lt;code&gt;EEmitting&lt;/code&gt;, reset the emit cursor, and stash &lt;code&gt;b&lt;/code&gt;
+(with its &lt;code&gt;lst&lt;/code&gt;) in &lt;code&gt;ePend&lt;/code&gt; to be reprocessed into a fresh group after the flush.
+Why must this outrank &lt;code&gt;b == 0&lt;/code&gt;? Because a &lt;code&gt;0xFF&lt;/code&gt; group carries no implied zero, so
+if we let a zero landing on a full buffer fold &lt;em&gt;into&lt;/em&gt; the full group, that zero
+would simply vanish on decode. The comment in the source is blunt about it, and
+it deserves quoting in full:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;A 254-byte group flushes as a &lt;code&gt;0xFF&lt;/code&gt; continuation (no implied zero), then &lt;code&gt;b&lt;/code&gt; is
+reprocessed via &lt;code&gt;ePend&lt;/code&gt;. A zero landing here must terminate a &lt;em&gt;fresh&lt;/em&gt; empty
+group, not fold into the full group.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;So a zero arriving on a full buffer produces &lt;code&gt;…FF,&amp;lt;254&amp;gt;&lt;/code&gt; and &lt;em&gt;then&lt;/em&gt; &lt;code&gt;01&lt;/code&gt; — the
+full group, then a fresh empty group for the zero — never a single &lt;code&gt;0xFF&lt;/code&gt; that
+quietly eats it. Get the guard order wrong and the encoder loses data on exactly
+the inputs a naive test suite is least likely to try. (We will see the regression
+test that pins this down.)&lt;/p&gt;
+&lt;p&gt;The remaining three guards are the ordinary closes:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;b == 0&lt;/code&gt;&lt;/strong&gt; — the zero terminates the current group. Switch to &lt;code&gt;EEmitting&lt;/code&gt; to
+flush what we have; the zero itself contributes no byte to the buffer (it is
+implied). Record &lt;code&gt;eFinal = lst&lt;/code&gt; and &lt;code&gt;eLast = lst&lt;/code&gt;: if this terminating zero was
+the stream’s last byte, we will owe a final empty group after the flush, and
+the stream has ended.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;lst&lt;/code&gt;&lt;/strong&gt; — a non-zero last byte. &lt;code&gt;store&lt;/code&gt; it, then switch to emit. &lt;code&gt;eLast = True&lt;/code&gt; (the stream is over) but &lt;code&gt;eFinal = False&lt;/code&gt; (a non-zero last byte owes no
+trailing group; the final group is the one this very byte is in).&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;otherwise&lt;/strong&gt; — an ordinary non-zero, non-last byte. &lt;code&gt;store&lt;/code&gt; it and stay in
+&lt;code&gt;EFilling&lt;/code&gt;, ready for more. &lt;code&gt;store&lt;/code&gt; writes &lt;code&gt;b&lt;/code&gt; at index &lt;code&gt;eFill&lt;/code&gt; and bumps the
+count: &lt;code&gt;st{eBuf = replace (eFill st) b (eBuf st), eFill = eFill st + 1}&lt;/code&gt;.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id=&quot;emitting-drive-code-then-data-then-whatever-is-owed&quot;&gt;Emitting: drive code, then data, then whatever is owed&lt;/h3&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  EEmitting&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    |&lt;/span&gt;&lt;span&gt; not dsReady &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;s&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;False&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    |&lt;/span&gt;&lt;span&gt; eIx s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;=&lt;/span&gt;&lt;span&gt; eFill s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;        let&lt;/span&gt;&lt;span&gt; out &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;            out &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; if&lt;/span&gt;&lt;span&gt; eIx s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; then&lt;/span&gt;&lt;span&gt; fromIntegral &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;eFill s&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; +&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; else&lt;/span&gt;&lt;span&gt; eBuf s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;!!&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;eIx s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;         in&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;s&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;eIx&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; eIx s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;+&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;False&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Just&lt;/span&gt;&lt;span&gt; out&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;In &lt;code&gt;EEmitting&lt;/code&gt;, &lt;code&gt;readyIn&lt;/code&gt; is &lt;code&gt;False&lt;/code&gt; throughout — the encoder is draining its
+buffer, not accepting input. The first guard is the back-pressure gate: if
+&lt;code&gt;dsReady&lt;/code&gt; is low the consumer cannot take a byte, so we stall, holding all state,
+emitting nothing. Nothing moves until downstream is ready.&lt;/p&gt;
+&lt;p&gt;When it is ready, the &lt;code&gt;eIx &amp;lt;= eFill&lt;/code&gt; guard walks the group out. &lt;code&gt;eIx == 0&lt;/code&gt; emits
+the &lt;strong&gt;code byte&lt;/strong&gt;, computed right here as &lt;code&gt;eFill + 1&lt;/code&gt; — the group’s length plus
+one, the encoder’s half of the &lt;code&gt;L + 1&lt;/code&gt; the decoder undoes. Every later index emits
+a data byte, &lt;code&gt;eBuf !! (eIx - 1)&lt;/code&gt;, and the cursor advances. So a group of &lt;code&gt;eFill&lt;/code&gt;
+bytes takes &lt;code&gt;eFill + 1&lt;/code&gt; emit cycles: one code, then the data. Straightforward
+tape-out of &lt;code&gt;code ++ group&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;The interesting question is what happens &lt;em&gt;after&lt;/em&gt; the cursor runs past the data,
+and the answer is a little cascade of owed work, tried in a deliberate order.&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    |&lt;/span&gt;&lt;span&gt; eFinal s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        (&lt;/span&gt;&lt;span&gt;s&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;eFill&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eIx&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eFinal&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;False&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    |&lt;/span&gt;&lt;span&gt; otherwise &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; case&lt;/span&gt;&lt;span&gt; ePend s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;of&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;        Just&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;pb&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; pl&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;          |&lt;/span&gt;&lt;span&gt; pb &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;              (&lt;/span&gt;&lt;span&gt;s&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;eMode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; EEmitting&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eFill&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eIx&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; ePend&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eFinal&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; pl&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eLast&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; pl&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;False&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;          |&lt;/span&gt;&lt;span&gt; pl &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;              (&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;store s&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;eFill&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;span&gt; pb&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;eMode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; EEmitting&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eIx&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; ePend&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eLast&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; True&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;False&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;          |&lt;/span&gt;&lt;span&gt; otherwise &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;              (&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;store s&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;eFill&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;span&gt; pb&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;eMode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; EFilling&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; ePend&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;False&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;        Nothing&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;          |&lt;/span&gt;&lt;span&gt; eLast s &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;initEnc&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;False&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; True&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;          |&lt;/span&gt;&lt;span&gt; otherwise &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;s&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;eMode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; EFilling&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; eFill&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;False&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;strong&gt;&lt;code&gt;eFinal&lt;/code&gt; first.&lt;/strong&gt; If a final empty group is owed — because the last input byte
+was a zero — clear &lt;code&gt;eFill&lt;/code&gt; to &lt;code&gt;0&lt;/code&gt; and loop back through &lt;code&gt;EEmitting&lt;/code&gt;, which will
+emit the &lt;code&gt;0x01&lt;/code&gt; of an empty group (&lt;code&gt;eFill + 1 = 1&lt;/code&gt;) and then fall through here
+again with &lt;code&gt;eFinal&lt;/code&gt; now &lt;code&gt;False&lt;/code&gt;. This is the trailing-empty-group from the
+concept section, made concrete: a payload ending in a zero needs one last &lt;code&gt;01&lt;/code&gt;,
+and this is where it comes from.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Then &lt;code&gt;ePend&lt;/code&gt;.&lt;/strong&gt; A stashed byte means we just flushed a full 254-group and must
+fold that byte into a fresh group. Three sub-cases, mirroring the fill guards:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;pb == 0&lt;/code&gt;&lt;/strong&gt; — the stashed byte was a zero. The full group already flushed as
+&lt;code&gt;0xFF&lt;/code&gt; (no implied zero); now the zero gets its &lt;em&gt;own&lt;/em&gt; fresh empty group. Reset
+&lt;code&gt;eFill&lt;/code&gt;, stay emitting, and set &lt;code&gt;eFinal&lt;/code&gt;/&lt;code&gt;eLast&lt;/code&gt; from &lt;code&gt;pl&lt;/code&gt; — if that zero was
+the last input byte, we still owe the final empty group after it. This is the
+&lt;code&gt;…FF,&amp;lt;254&amp;gt;,01,01&lt;/code&gt; path in the flesh, and the reason the guard order upstream
+had to put &lt;code&gt;eFill == 254&lt;/code&gt; first.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;pl&lt;/code&gt;&lt;/strong&gt; — the stashed byte is non-zero and last. &lt;code&gt;store&lt;/code&gt; it in a fresh buffer
+and emit that one-byte group, marking &lt;code&gt;eLast&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;otherwise&lt;/strong&gt; — a non-zero, non-last stashed byte. &lt;code&gt;store&lt;/code&gt; it into a fresh group
+and return to &lt;code&gt;EFilling&lt;/code&gt; to keep accumulating from there.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;strong&gt;Finally &lt;code&gt;Nothing&lt;/code&gt;.&lt;/strong&gt; No stash, so the group we just emitted was clean. If
+&lt;code&gt;eLast&lt;/code&gt; is set the whole frame is done: reset to &lt;code&gt;initEnc&lt;/code&gt; and pulse &lt;code&gt;done&lt;/code&gt;.
+Otherwise there is more payload coming, so drop back to &lt;code&gt;EFilling&lt;/code&gt; with an empty
+buffer.&lt;/p&gt;
+&lt;h3 id=&quot;watching-it-run-1&quot;&gt;Watching it run&lt;/h3&gt;
+&lt;p&gt;Run the payload &lt;code&gt;11 22 00 33 00&lt;/code&gt; through, &lt;code&gt;is-last&lt;/code&gt; on the final zero, &lt;code&gt;dsReady&lt;/code&gt;
+always high. It should produce &lt;code&gt;03 11 22 02 33 01&lt;/code&gt; — the figure’s encoding, now
+built rather than read.&lt;/p&gt;
+&lt;figure class=&quot;cenc-fig&quot; style=&quot;margin:2rem 0&quot;&gt;
+&lt;svg class=&quot;cenc&quot; viewBox=&quot;0 0 760 288&quot; role=&quot;img&quot; aria-labelledby=&quot;cenc-t cenc-d&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot;&gt;
+&lt;title id=&quot;cenc-t&quot;&gt;The encoder&#39;s two modes and the work owed between them&lt;/title&gt;
+&lt;desc id=&quot;cenc-d&quot;&gt;Two large state boxes: EFilling on the left, buffer a group, and EEmitting on the right, drive code then data. EFilling has a self-loop labelled store non-zero byte. An accent arrow from EFilling to EEmitting is labelled with three triggers: b equals zero, last byte, or group full at 254; a note says the full case stashes the byte in ePend. EEmitting has a self-loop labelled emit code then data, gated on downstream ready. A lower arrow returns from EEmitting to EFilling labelled more input, group drained. A short accent arrow from EEmitting reaches a done terminal on the right labelled input ended, nothing owed. Below EEmitting a bracket lists the work owed before returning: eFinal for a final empty group, and ePend to reprocess a stashed byte.&lt;/desc&gt;
+&lt;style&gt;
+.cenc{max-width:760px;width:100%;height:auto;display:block;margin:0 auto}
+.cenc .st{fill:var(--bg-dim);stroke:var(--fg-main);stroke-width:2}
+.cenc .term{fill:var(--bg-main);stroke:var(--fg-main);stroke-width:2}
+.cenc .wire{stroke:var(--fg-main);stroke-width:2;fill:none}
+.cenc .hot{stroke:var(--accent);stroke-width:2.5;fill:none}
+.cenc .loop{stroke:var(--fg-main);stroke-width:2;fill:none}
+.cenc .bracket{stroke:var(--fg-dim);stroke-width:1.5;fill:none}
+.cenc text{font-family:var(--sans)}
+.cenc .name{fill:var(--fg-main);font-family:var(--mono);font-size:15px}
+.cenc .sub{fill:var(--fg-dim);font-size:12px}
+.cenc .lab{fill:var(--fg-main);font-size:12px}
+.cenc .labA{fill:var(--accent);font-size:12px}
+.cenc .dim{fill:var(--fg-dim);font-size:11.5px}
+.cenc .ah{fill:var(--fg-main)}
+.cenc .ahA{fill:var(--accent)}
+&lt;/style&gt;
+&lt;defs&gt;
+&lt;marker id=&quot;cenc-a&quot; markerWidth=&quot;8&quot; markerHeight=&quot;6&quot; refX=&quot;6&quot; refY=&quot;3&quot; orient=&quot;auto&quot;&gt;&lt;path d=&quot;M0,0 L6,3 L0,6 Z&quot; class=&quot;ah&quot;/&gt;&lt;/marker&gt;
+&lt;marker id=&quot;cenc-aa&quot; markerWidth=&quot;8&quot; markerHeight=&quot;6&quot; refX=&quot;6&quot; refY=&quot;3&quot; orient=&quot;auto&quot;&gt;&lt;path d=&quot;M0,0 L6,3 L0,6 Z&quot; class=&quot;ahA&quot;/&gt;&lt;/marker&gt;
+&lt;/defs&gt;
+&lt;rect class=&quot;st&quot; x=&quot;70&quot; y=&quot;118&quot; width=&quot;176&quot; height=&quot;64&quot; rx=&quot;8&quot;/&gt;
+&lt;rect class=&quot;st&quot; x=&quot;430&quot; y=&quot;118&quot; width=&quot;196&quot; height=&quot;64&quot; rx=&quot;8&quot;/&gt;
+&lt;circle class=&quot;term&quot; cx=&quot;700&quot; cy=&quot;150&quot; r=&quot;20&quot;/&gt;
+&lt;circle class=&quot;term&quot; cx=&quot;700&quot; cy=&quot;150&quot; r=&quot;14&quot;/&gt;
+&lt;path class=&quot;loop&quot; d=&quot;M120,118 C114,80 202,80 196,118&quot; marker-end=&quot;url(#cenc-a)&quot;/&gt;
+&lt;path class=&quot;hot&quot; d=&quot;M246,138 C330,120 350,120 428,138&quot; marker-end=&quot;url(#cenc-aa)&quot;/&gt;
+&lt;path class=&quot;loop&quot; d=&quot;M470,118 C464,80 592,80 586,118&quot; marker-end=&quot;url(#cenc-a)&quot;/&gt;
+&lt;path class=&quot;wire&quot; d=&quot;M428,168 C350,196 330,196 248,172&quot; marker-end=&quot;url(#cenc-a)&quot;/&gt;
+&lt;line class=&quot;hot&quot; x1=&quot;626&quot; y1=&quot;150&quot; x2=&quot;678&quot; y2=&quot;150&quot; marker-end=&quot;url(#cenc-aa)&quot;/&gt;
+&lt;text class=&quot;name&quot; x=&quot;158&quot; y=&quot;150&quot; text-anchor=&quot;middle&quot;&gt;EFilling&lt;/text&gt;
+&lt;text class=&quot;sub&quot;  x=&quot;158&quot; y=&quot;169&quot; text-anchor=&quot;middle&quot;&gt;buffer a group&lt;/text&gt;
+&lt;text class=&quot;name&quot; x=&quot;528&quot; y=&quot;150&quot; text-anchor=&quot;middle&quot;&gt;EEmitting&lt;/text&gt;
+&lt;text class=&quot;sub&quot;  x=&quot;528&quot; y=&quot;169&quot; text-anchor=&quot;middle&quot;&gt;drive code + data&lt;/text&gt;
+&lt;text class=&quot;dim&quot;  x=&quot;158&quot; y=&quot;72&quot; text-anchor=&quot;middle&quot;&gt;store non-zero byte&lt;/text&gt;
+&lt;text class=&quot;labA&quot; x=&quot;337&quot; y=&quot;103&quot; text-anchor=&quot;middle&quot;&gt;b = 0 · last · full(254)&lt;/text&gt;
+&lt;text class=&quot;dim&quot;  x=&quot;337&quot; y=&quot;212&quot; text-anchor=&quot;middle&quot;&gt;more input, group drained&lt;/text&gt;
+&lt;text class=&quot;dim&quot;  x=&quot;528&quot; y=&quot;72&quot; text-anchor=&quot;middle&quot;&gt;emit code, then data (if dsReady)&lt;/text&gt;
+&lt;text class=&quot;dim&quot;  x=&quot;700&quot; y=&quot;196&quot; text-anchor=&quot;middle&quot;&gt;input ended,&lt;/text&gt;
+&lt;text class=&quot;dim&quot;  x=&quot;700&quot; y=&quot;210&quot; text-anchor=&quot;middle&quot;&gt;nothing owed&lt;/text&gt;
+&lt;path class=&quot;bracket&quot; d=&quot;M436,196 V204 H620 V196&quot;/&gt;
+&lt;text class=&quot;dim&quot;  x=&quot;528&quot; y=&quot;224&quot; text-anchor=&quot;middle&quot;&gt;owed before returning:&lt;/text&gt;
+&lt;text class=&quot;labA&quot; x=&quot;528&quot; y=&quot;240&quot; text-anchor=&quot;middle&quot;&gt;eFinal (final empty group) · ePend (reprocess stashed byte)&lt;/text&gt;
+&lt;/svg&gt;
+&lt;figcaption style=&quot;text-align:center;color:var(--fg-dim);font-size:.9rem;margin-top:.85rem;font-family:var(--sans)&quot;&gt;The encoder as a two-beat machine. &lt;code&gt;EFilling&lt;/code&gt; buffers non-zero bytes (self-loop) until a byte closes the group (accent): a zero, the last byte, or the 254th byte — the last of which stashes the offending byte in &lt;code&gt;ePend&lt;/code&gt;. &lt;code&gt;EEmitting&lt;/code&gt; drives &lt;code&gt;code ++ group&lt;/code&gt; out one byte per ready cycle, then settles any owed work before it leaves: &lt;code&gt;eFinal&lt;/code&gt; emits the trailing empty group a payload-ending zero requires, and &lt;code&gt;ePend&lt;/code&gt; folds a stashed byte into a fresh group. Only with nothing owed and the input ended does it reset and pulse &lt;code&gt;done&lt;/code&gt;.&lt;/figcaption&gt;
+&lt;/figure&gt;
+&lt;p&gt;Every emitted byte gets its own cycle, so the trace is longer than the decode,
+but it breaks into three clean groups:&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;11&lt;/code&gt;, &lt;code&gt;22&lt;/code&gt;&lt;/strong&gt; (fill) — non-zero, not last: &lt;code&gt;store&lt;/code&gt; each; &lt;code&gt;eFill&lt;/code&gt; climbs to
+&lt;code&gt;2&lt;/code&gt;, and we stay in &lt;code&gt;EFilling&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;00&lt;/code&gt;&lt;/strong&gt; (fill) — the zero closes the group &lt;code&gt;[11 22]&lt;/code&gt;; switch to &lt;code&gt;EEmitting&lt;/code&gt;.
+&lt;code&gt;eFinal&lt;/code&gt; and &lt;code&gt;eLast&lt;/code&gt; stay &lt;code&gt;False&lt;/code&gt;: this zero is not the last byte.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;emit&lt;/strong&gt; — &lt;code&gt;eIx 0&lt;/code&gt;: code &lt;code&gt;= eFill + 1 = 03&lt;/code&gt;; then data &lt;code&gt;11&lt;/code&gt;, then &lt;code&gt;22&lt;/code&gt;. The
+cursor runs past the data with nothing owed (&lt;code&gt;eFinal&lt;/code&gt; false, &lt;code&gt;ePend&lt;/code&gt; none,
+&lt;code&gt;eLast&lt;/code&gt; false), so back to &lt;code&gt;EFilling&lt;/code&gt;. Out: &lt;code&gt;03 11 22&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;33&lt;/code&gt;&lt;/strong&gt; (fill) — &lt;code&gt;store&lt;/code&gt;, &lt;code&gt;eFill = 1&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;00&lt;/code&gt;&lt;/strong&gt; (fill, last) — the zero closes the group &lt;code&gt;[33]&lt;/code&gt;, and it is the last
+byte, so set &lt;code&gt;eFinal = eLast = True&lt;/code&gt;. Switch to emit.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;emit&lt;/strong&gt; — &lt;code&gt;eIx 0&lt;/code&gt;: code &lt;code&gt;= eFill + 1 = 02&lt;/code&gt;; then data &lt;code&gt;33&lt;/code&gt;. Out:
+&lt;code&gt;03 11 22 02 33&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;emit&lt;/strong&gt; — cursor past the data; now &lt;code&gt;eFinal&lt;/code&gt; fires, clearing &lt;code&gt;eFill&lt;/code&gt; for one
+&lt;em&gt;more&lt;/em&gt; empty group and looping.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;emit&lt;/strong&gt; — code &lt;code&gt;= 0 + 1 = 01&lt;/code&gt; for that final empty group. Then &lt;code&gt;ePend&lt;/code&gt; is
+&lt;code&gt;Nothing&lt;/code&gt; and &lt;code&gt;eLast&lt;/code&gt; is &lt;code&gt;True&lt;/code&gt;, so reset to &lt;code&gt;initEnc&lt;/code&gt; and pulse &lt;code&gt;done&lt;/code&gt;. Out:
+&lt;code&gt;03 11 22 02 33 01&lt;/code&gt;.&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;Five bytes of payload became six on the wire, and steps 7–8 are where the extra
+one is minted: &lt;code&gt;eFinal&lt;/code&gt; adds the trailing &lt;code&gt;01&lt;/code&gt; that a payload ending in a zero
+always owes. That single byte &lt;em&gt;is&lt;/em&gt; the “consistent overhead” — the final group
+has no zero in the payload to pay for its code byte, so it costs one, flat, and
+COBS never charges more than one such byte per 254.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-overhead-1&quot;&gt;&lt;a href=&quot;https://balbi.sh/posts/tamal-loader-cobs/#fn-overhead&quot;&gt;[3]&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;h3 id=&quot;the-254-boundary-where-the-encoder-earns-its-length&quot;&gt;The 254 boundary, where the encoder earns its length&lt;/h3&gt;
+&lt;p&gt;Everything genuinely hard about the encoder lives at the full-group boundary, and
+three vectors from the test suite map it exactly. All three feed non-zero runs
+around the 254-byte cap; watch how the guard order pays off.&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;254 non-zero bytes, &lt;code&gt;[1..254]&lt;/code&gt;&lt;/strong&gt;, the last flagged. The 254th byte arrives
+while &lt;code&gt;eFill&lt;/code&gt; is still &lt;code&gt;253&lt;/code&gt;, so &lt;code&gt;eFill == 254&lt;/code&gt; does &lt;em&gt;not&lt;/em&gt; fire — the &lt;code&gt;lst&lt;/code&gt;
+guard does. &lt;code&gt;store&lt;/code&gt; fills the buffer to exactly 254 and emits one full group,
+code &lt;code&gt;0xFF&lt;/code&gt; then the 254 bytes: &lt;code&gt;FF,&amp;lt;254&amp;gt;&lt;/code&gt;. No trailing anything, because a
+non-zero last byte owes no final group. One full group, and done.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;255 non-zero bytes, &lt;code&gt;[1..255]&lt;/code&gt;&lt;/strong&gt;. Now the 255th byte (&lt;code&gt;lst&lt;/code&gt;) arrives with
+&lt;code&gt;eFill&lt;/code&gt; already at &lt;code&gt;254&lt;/code&gt;, so &lt;code&gt;eFill == 254&lt;/code&gt; fires &lt;em&gt;first&lt;/em&gt;: flush &lt;code&gt;FF,&amp;lt;254&amp;gt;&lt;/code&gt; and
+stash byte 255 in &lt;code&gt;ePend&lt;/code&gt;. After the flush, &lt;code&gt;ePend&lt;/code&gt;’s &lt;code&gt;pl&lt;/code&gt; case stores it into a
+fresh group and emits &lt;code&gt;02,255&lt;/code&gt;. Result: &lt;code&gt;FF,&amp;lt;254&amp;gt;&lt;/code&gt; then &lt;code&gt;02,255&lt;/code&gt;. The run split
+across the cap, exactly as a continuation should.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;254 non-zero bytes then a &lt;code&gt;0x00&lt;/code&gt;&lt;/strong&gt;, the zero flagged last. The 254 fill the
+buffer; the zero arrives with &lt;code&gt;eFill == 254&lt;/code&gt;, so — and this is the whole point
+of the guard order — &lt;code&gt;eFill == 254&lt;/code&gt; fires &lt;em&gt;before&lt;/em&gt; &lt;code&gt;b == 0&lt;/code&gt;: flush &lt;code&gt;FF,&amp;lt;254&amp;gt;&lt;/code&gt;
+and stash the zero in &lt;code&gt;ePend&lt;/code&gt;. After the flush, &lt;code&gt;ePend&lt;/code&gt;’s &lt;code&gt;pb == 0&lt;/code&gt; case emits a
+fresh empty group &lt;code&gt;01&lt;/code&gt; for the zero and, because it was last, sets &lt;code&gt;eFinal&lt;/code&gt;,
+which adds the final &lt;code&gt;01&lt;/code&gt;. Result: &lt;code&gt;FF,&amp;lt;254&amp;gt;,01,01&lt;/code&gt;. The zero survived as its
+own group instead of being swallowed by the &lt;code&gt;0xFF&lt;/code&gt; — the bug the guard order
+exists to prevent.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Three vectors, three faces of one boundary, and the encoder handles them with a
+stash register and a carefully ranked &lt;code&gt;case&lt;/code&gt;. That is what those extra fields and
+that extra mode buy: an encoder that never drops a byte at the seam.&lt;/p&gt;
+&lt;h2 id=&quot;the-tests&quot;&gt;The tests&lt;/h2&gt;
+&lt;p&gt;The module is under a hundred lines of logic, and its tests pin it down the same
+way the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-crc/&quot;&gt;CRC&lt;/a&gt;’s did — from more than one direction at once — but with a
+tool the CRC only hinted at: a &lt;strong&gt;pure reference model&lt;/strong&gt; standing in as an oracle.&lt;/p&gt;
+&lt;p&gt;There are, in fact, &lt;em&gt;two&lt;/em&gt; COBS implementations in Tamal. The one we just read,
+&lt;code&gt;Tamal.Loader.Cobs&lt;/code&gt;, is the streaming, one-byte-at-a-time form the hardware runs
+(the spec calls it §9). Beside it lives &lt;code&gt;Tamal.Wire.Cobs&lt;/code&gt; (spec §5), a pure
+list-to-list reference:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;cobsEncode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;cobsDecode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Maybe&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;cobsEncode&lt;/code&gt; is COBS written the easy way — fold over a list, accumulate a group,
+&lt;code&gt;emit&lt;/code&gt; it at each zero — with no state machine, no back-pressure, no &lt;code&gt;is-last&lt;/code&gt;
+flag, nothing but the algorithm. It is short enough to read and trust at a glance,
+and &lt;em&gt;that&lt;/em&gt; is its job: it is the specification made executable. The streaming
+steps are the optimised, clocked implementation of the very same function, and
+the tests weld the two together:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;testProperty &lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;streaming decode of cobsEncode x reconstructs x&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; $&lt;/span&gt;&lt;span&gt; property &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; do&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  x &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;-&lt;/span&gt;&lt;span&gt; forAll &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Gen.&lt;/span&gt;&lt;span&gt;list &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Range.&lt;/span&gt;&lt;span&gt;linear &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 300&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; genByteZeros&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  let&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;dec&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; bad&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; decDrive &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;cobsEncode x&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  dec &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;===&lt;/span&gt;&lt;span&gt; x&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  bad &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;===&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; False&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;testProperty &lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;streaming encode equals cobsEncode (non-empty)&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; $&lt;/span&gt;&lt;span&gt; property &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; do&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  x &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;-&lt;/span&gt;&lt;span&gt; forAll &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Gen.&lt;/span&gt;&lt;span&gt;list &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Range.&lt;/span&gt;&lt;span&gt;linear &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 300&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; genByteZeros&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  encDrive x &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;===&lt;/span&gt;&lt;span&gt; cobsEncode x&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The first drives the streaming decoder over &lt;code&gt;cobsEncode x&lt;/code&gt; — the oracle’s output
+— and demands the original &lt;code&gt;x&lt;/code&gt; back, un-mangled and not malformed. The second is
+the sharper claim: the streaming encoder, byte for byte, produces &lt;em&gt;exactly&lt;/em&gt; what
+the pure &lt;code&gt;cobsEncode&lt;/code&gt; produces, for hundreds of random payloads. &lt;a rel=&quot;external&quot; href=&quot;https://hedgehog.qa&quot;&gt;Hedgehog&lt;/a&gt;
+manufactures the payloads with &lt;code&gt;genByteZeros&lt;/code&gt;, a generator deliberately about
+one-quarter zeros so that group boundaries — the whole point of COBS — come up
+constantly rather than by luck.&lt;/p&gt;
+&lt;p&gt;But &lt;code&gt;genByteZeros&lt;/code&gt; has a blind spot, and the suite knows it: a random
+quarter-zero list almost never contains a 254-byte run of non-zeros, so it never
+reaches the full-group machinery we spent so long on. So there is a second
+generator, &lt;code&gt;genRuns&lt;/code&gt;, that builds concatenated runs of up to 260 non-zero bytes
+each — straddling the cap on purpose — and the same equivalence is asserted over
+&lt;em&gt;it&lt;/em&gt;:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;testProperty &lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;streaming encode equals cobsEncode (boundary runs)&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; $&lt;/span&gt;&lt;span&gt; property &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; do&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  x &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;-&lt;/span&gt;&lt;span&gt; forAll &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Gen.&lt;/span&gt;&lt;span&gt;filter &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;not &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; L.&lt;/span&gt;&lt;span&gt;null&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; genRuns&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  encDrive x &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;===&lt;/span&gt;&lt;span&gt; cobsEncode x&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Then the round-trips, both directions streaming, over both generators —
+&lt;code&gt;decDrive (encDrive x) === (x, False)&lt;/code&gt; — and, nailing the corner the guard order
+turns on, the explicit regression:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;testCase &lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;encode 254 non-zero then 0x00 == FF,&amp;lt;254&amp;gt;,01,01&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  $&lt;/span&gt;&lt;span&gt; encDrive &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;L.&lt;/span&gt;&lt;span&gt;map fromIntegral &lt;/span&gt;&lt;span&gt;[&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ..&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 254&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Int&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;lt;&amp;gt;&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0x00&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  @?=&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0xFF&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; :&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; L.&lt;/span&gt;&lt;span&gt;map fromIntegral &lt;/span&gt;&lt;span&gt;[&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ..&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 254&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Int&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;lt;&amp;gt;&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0x01&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0x01&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;That last one is the guardrail bolted directly over the trap: if some future edit
+ever lets a zero fold into a full group, this line goes red before the property
+tests even get their turn. It is the same move the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-crc/&quot;&gt;CRC post&lt;/a&gt; admired — a
+hand-derived witness bolted to the workbench beside the sweeping property — here
+guarding the one input a random generator is least likely to stumble onto.&lt;/p&gt;
+&lt;p&gt;The shape of the whole suite is worth stepping back for. The pure model is the
+&lt;em&gt;meaning&lt;/em&gt; of COBS; the streaming steps are its &lt;em&gt;hardware&lt;/em&gt;; and the property tests
+are the proof that the hardware means what the model says, checked against a fresh
+shower of payloads every run, with the awkward boundary explicitly seeded so it is
+never left to chance. You get to write the algorithm twice — once for clarity,
+once for the clock — and let the machine hold the two versions to each
+other.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-purestream-1&quot;&gt;&lt;a href=&quot;https://balbi.sh/posts/tamal-loader-cobs/#fn-purestream&quot;&gt;[4]&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;h2 id=&quot;what-we-read&quot;&gt;What we read&lt;/h2&gt;
+&lt;p&gt;Two pure step functions, no clock between them, and underneath them a whole
+framing layer: a decoder that walks a COBS stream a group at a time and
+manufactures each implied zero &lt;em&gt;lazily&lt;/em&gt; — at the next code byte, so the last
+group’s phantom zero falls away at the delimiter for free — and an encoder that
+buffers a group, flushes &lt;code&gt;code ++ group&lt;/code&gt;, and guards the 254-byte seam so
+carefully that a zero landing on a full group becomes its own honest little group
+instead of vanishing. Beside them a pure reference model that is the same
+algorithm written for people, and a property suite that welds the fast version to
+the readable one.&lt;/p&gt;
+&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-uart-tx/&quot;&gt;transmitter&lt;/a&gt; and &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-uart-rx/&quot;&gt;receiver&lt;/a&gt; gave us a byte pipe; the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-uart-top/&quot;&gt;top&lt;/a&gt;
+sealed it; and today the pipe became a &lt;strong&gt;protocol&lt;/strong&gt; — a stream with a reserved
+delimiter and a codec that honours it in both directions. What is still missing is
+the little machine that &lt;em&gt;drives&lt;/em&gt; these steps: the loader proper, the &lt;code&gt;mealy&lt;/code&gt; that
+catches &lt;code&gt;rxByte&lt;/code&gt; strobes and clocks &lt;code&gt;cobsDecodeStep&lt;/code&gt;, writes decoded words into
+instruction memory, and runs &lt;code&gt;cobsEncodeStep&lt;/code&gt; in reverse to drain the engine’s
+results back out while &lt;code&gt;txReady&lt;/code&gt; is high. It wears the silhouette we have now read
+five times — a sum for its phase, a record for the rest, a step function beside a
+&lt;code&gt;mealy&lt;/code&gt; — and it is where these two codecs finally get their clock. That is the
+next thing we read. And past it, at last, the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-introducing/&quot;&gt;Engine&lt;/a&gt; the whole project
+has been circling.&lt;/p&gt;
+&lt;section class=&quot;footnotes&quot;&gt;
+&lt;ol class=&quot;footnotes-list&quot;&gt;
+&lt;li id=&quot;fn-postcard&quot;&gt;
+&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https://github.com/jamesmunns/postcard-rpc&quot;&gt;postcard-rpc&lt;/a&gt; sits on top of &lt;code&gt;postcard&lt;/code&gt;, a &lt;code&gt;serde&lt;/code&gt;
+serializer for the embedded world that encodes Rust types into a compact,
+&lt;code&gt;no_std&lt;/code&gt;-friendly wire format. COBS is the framing underneath it — the layer that
+turns &lt;code&gt;postcard&lt;/code&gt;’s byte blobs into delimited messages a receiver can find the
+edges of. Meeting COBS there, in anger, doing a real job on a real link, is a
+better teacher than any diagram: you internalise very quickly that a byte stream
+is not a message stream until something draws the borders. &lt;a href=&quot;https://balbi.sh/posts/tamal-loader-cobs/#fr-postcard-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id=&quot;fn-consistent&quot;&gt;
+&lt;p&gt;The “consistent” in Consistent Overhead Byte Stuffing is a promise
+about the &lt;em&gt;worst case&lt;/em&gt;. Older byte-stuffing schemes — the escape-character trick
+SLIP uses, say — have overhead that depends on the data: a payload full of the
+reserved byte can &lt;em&gt;double&lt;/em&gt; in size, because every occurrence becomes two bytes.
+COBS refuses that variance. Its overhead is at most one byte per 254 bytes of
+payload, roughly 0.4%, no matter what the data is — and, just as importantly, it
+is &lt;em&gt;bounded and predictable&lt;/em&gt;, which is what lets a fixed-size buffer on the far
+end be sized with confidence. You pay a small, flat tax rather than an occasional
+ruinous one. That flatness is the property the name is bragging about. &lt;a href=&quot;https://balbi.sh/posts/tamal-loader-cobs/#fr-consistent-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id=&quot;fn-overhead&quot;&gt;
+&lt;p&gt;Where does the “+1” go in the happy case? A payload with &lt;em&gt;no&lt;/em&gt; zeros
+and under 255 bytes encodes to a single group: one code byte, then the payload
+verbatim. That is one byte of overhead for the whole frame — the code byte the
+delimiter cannot be. Every additional group (born at each zero, or at each 254-byte
+cap) costs one more code byte, but &lt;em&gt;buys back&lt;/em&gt; the zero it replaces, so a
+zero-dense payload is close to break-even and a zero-free one pays the flat
+one-per-254. The delimiter itself is the only byte that is pure tax, and it buys
+the thing the whole scheme exists for. &lt;a href=&quot;https://balbi.sh/posts/tamal-loader-cobs/#fr-overhead-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id=&quot;fn-purestream&quot;&gt;
+&lt;p&gt;The two-implementations pattern — a pure list model beside a
+streaming, clocked one, proven equal — is not unique to COBS in Tamal; it is
+becoming the house style. The pure model is where you &lt;em&gt;think&lt;/em&gt;, unencumbered by
+back-pressure and cycle timing; the streaming model is where you &lt;em&gt;ship&lt;/em&gt;, and it
+has to survive a consumer that stalls and a producer that dribbles. Keeping both
+and testing one against the other means the gnarly version is never the only place
+the algorithm is written down — there is always a clean copy to check it against,
+and to read when the clocked one stops making sense. &lt;a href=&quot;https://balbi.sh/posts/tamal-loader-cobs/#fr-purestream-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/section&gt;
+</content:encoded>
+    </item>
+    
+  </channel>
+</rss>

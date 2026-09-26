@@ -1,0 +1,849 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"
+     xmlns:atom="http://www.w3.org/2005/Atom"
+     xmlns:content="http://purl.org/rss/1.0/modules/content/"
+     xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Felipe Balbi</title>
+    <link>https://balbi.sh</link>
+    <description>Notes on embedded systems, Rust, and the craft of writing software.</description>
+    <generator>Zola</generator>
+    <language>en</language>
+    <lastBuildDate>Wed, 23 Sep 2026 09:00:00 +0000</lastBuildDate>
+    <atom:link href="https://balbi.sh/tags/ina4230/rss.xml" rel="self" type="application/rss+xml"/>
+    
+    <item>
+      <title>Six Entries, and the One I Argued Away</title>
+      <link>https://balbi.sh/posts/six-entries/</link>
+      <guid isPermaLink="true">https://balbi.sh/posts/six-entries/</guid>
+      <pubDate>Wed, 23 Sep 2026 09:00:00 +0000</pubDate>
+      <dc:creator>Felipe Balbi</dc:creator>
+      <description>&lt;p&gt;Most driver crates do not have a heading in the README that says
+&lt;strong&gt;Not yet implemented&lt;/strong&gt;. The ones that do usually grew it after
+somebody filed an issue.&lt;/p&gt;
+&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/ina4230&quot;&gt;&lt;code&gt;ina4230&lt;/code&gt;&lt;/a&gt; crate had one from the day the driver was
+restructured, before anybody had asked for anything, because the
+restructuring involved reading the whole datasheet and it seemed
+dishonest to finish that and write down only the parts I had done.&lt;/p&gt;
+&lt;p&gt;Three days later — at the time of writing — the list is one entry
+long, and it has gained a second heading underneath it for the item
+that turned out never to have been a gap in the first place.&lt;/p&gt;</description>
+      
+      <content:encoded>&lt;p&gt;Most driver crates do not have a heading in the README that says
+&lt;strong&gt;Not yet implemented&lt;/strong&gt;. The ones that do usually grew it after
+somebody filed an issue.&lt;/p&gt;
+&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/ina4230&quot;&gt;&lt;code&gt;ina4230&lt;/code&gt;&lt;/a&gt; crate had one from the day the driver was
+restructured, before anybody had asked for anything, because the
+restructuring involved reading the whole datasheet and it seemed
+dishonest to finish that and write down only the parts I had done.&lt;/p&gt;
+&lt;p&gt;Three days later — at the time of writing — the list is one entry
+long, and it has gained a second heading underneath it for the item
+that turned out never to have been a gap in the first place.&lt;/p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;/span&gt;&lt;h2 id=&quot;what-a-completeness-ledger-is&quot;&gt;What a completeness ledger is&lt;/h2&gt;
+&lt;p&gt;The heading went in with six entries. Each one names the registers,
+gives their addresses, and — this is the part that turned out to
+matter — says why it is not done yet.&lt;/p&gt;
+&lt;p&gt;Here is the entry for alert limits, verbatim, from the first version
+of the list:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;&lt;strong&gt;Alert limits&lt;/strong&gt; (&lt;code&gt;ALERT_LIMIT1..4&lt;/code&gt;, addresses &lt;code&gt;0x06&lt;/code&gt;, &lt;code&gt;0x0E&lt;/code&gt;,
+&lt;code&gt;0x16&lt;/code&gt;, &lt;code&gt;0x1E&lt;/code&gt;). The format follows the result register the
+selected alert function refers to: signed 16-bit for shunt limits,
+unsigned 15-bit for bus limits (bit 15 reserved), and unsigned
+16-bit for power limits. Representing that reinterpretation safely
+is the interesting part of the design, and the reason these are not
+simply exposed as a &lt;code&gt;u16&lt;/code&gt; setter.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;That last sentence is the whole difference between a ledger and a
+backlog. A backlog item says &lt;em&gt;this is missing&lt;/em&gt;. This says what the
+work actually is, why the obvious implementation is the wrong one,
+and therefore what a reader should expect when it lands. Six months
+from now, when I have forgotten all of it, that paragraph is the
+thing that lets me start rather than re-derive.&lt;/p&gt;
+&lt;p&gt;It also has a less comfortable property. Having written down that a
+&lt;code&gt;u16&lt;/code&gt; setter would be wrong, I could no longer ship a &lt;code&gt;u16&lt;/code&gt; setter
+and call it progress.&lt;/p&gt;
+&lt;h2 id=&quot;three-things-the-documentation-did-not-say&quot;&gt;Three things the documentation did not say&lt;/h2&gt;
+&lt;p&gt;Once the list existed, the obvious next move was to check it — not
+the code against the datasheet, which the restructuring had already
+done, but the &lt;em&gt;documentation&lt;/em&gt; against the datasheet. Where does
+&lt;a rel=&quot;external&quot; href=&quot;https://www.ti.com/lit/ds/symlink/ina4230.pdf&quot;&gt;SBOSAD4&lt;/a&gt; describe behaviour this crate exposes and the prose
+does not explain?&lt;/p&gt;
+&lt;p&gt;Most of it came back clean. The register map, the signedness of every
+measurement type, the LSB constants, the &lt;code&gt;CONFIG1&lt;/code&gt; reset decode, and
+the power and energy equations all checked out. That is worth saying
+out loud, because an audit that finds nothing in five places and
+something in three is a great deal more believable than one that
+finds problems everywhere it looks.&lt;/p&gt;
+&lt;p&gt;Three things were missing, and the most interesting of them was not a
+missing fact.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;The first was two facts that had never been introduced to each
+other.&lt;/strong&gt; The README said, in one place, that the energy overflow bit
+clears only through &lt;code&gt;CONFIG2.ACC_RST&lt;/code&gt;. It said, in a different place,
+that &lt;code&gt;ACC_RST&lt;/code&gt; was not implemented. Both true, both written down, and
+the conclusion — &lt;em&gt;therefore an energy overflow is unrecoverable
+through this crate&lt;/em&gt; — appeared nowhere, because no single paragraph
+contained both halves.&lt;/p&gt;
+&lt;p&gt;Meanwhile the README’s own worked example told the reader to check
+&lt;code&gt;any_energy_overflow()&lt;/code&gt; and act on it, and then offered no way to act.&lt;/p&gt;
+&lt;p&gt;That is the most expensive kind of documentation bug I know of. Every
+individual sentence passes review. Nothing is factually wrong. A
+reader with the whole document in their head could derive the
+consequence, and no reader has the whole document in their head —
+that is what the document is &lt;em&gt;for&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;The second was a caveat that could not yet bite.&lt;/strong&gt; The device
+compares each alert limit against every conversion rather than
+against the averaged result that reaches the output registers
+(§6.3.5). So with averaging enabled, a limit flag can report an
+excursion that appears in no value the crate can read back. A flag
+disagreeing with the measurement registers is correct behaviour, and
+somebody debugging that at two in the morning deserves to be told.&lt;/p&gt;
+&lt;p&gt;The note that went in recorded the caveat &lt;em&gt;and the conditions under
+which it becomes reachable&lt;/em&gt;:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;It cannot arise through this crate today, because &lt;code&gt;AVG&lt;/code&gt; is not
+configurable here and the power-on default is a single sample, but
+it can if another controller on the bus has programmed &lt;code&gt;CONFIG1&lt;/code&gt;.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;Hold onto that one. It comes back.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;The third was silence, and silence turned out not to be neutral.&lt;/strong&gt;
+High-speed I²C (§6.5.3) appeared nowhere in the repository. That
+would be unremarkable except that the “Not yet implemented” list
+deliberately enumerates the other two bus-level protocols the
+datasheet describes — SMBus Alert Response and General Call reset.&lt;/p&gt;
+&lt;p&gt;So a reader auditing the crate against the datasheet finds two of the
+three bus protocols accounted for, and nothing at all about the
+third. Having made a completeness claim, I had created an obligation
+I did not know I had taken on: on a list that says what is missing,
+an omission is indistinguishable from a gap nobody noticed.&lt;/p&gt;
+&lt;h2 id=&quot;the-entry-that-was-a-functional-hole&quot;&gt;The entry that was a functional hole&lt;/h2&gt;
+&lt;p&gt;Of the six entries, one was not a missing convenience. From the
+commit that closed it:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;This was a functional hole rather than a convenience gap.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;&lt;code&gt;CONFIG2.ACC_RST&lt;/code&gt; resets a channel’s energy accumulator and clears
+its overflow flag. Without it, the trap closes like this. The
+overflow bit is not read-to-clear. &lt;code&gt;ACC_RST&lt;/code&gt; is the only thing that
+clears it. So once a channel’s accumulator wrapped, the flag was
+stuck and the energy readings stayed wrong for the life of the
+driver.&lt;/p&gt;
+&lt;p&gt;The only escape was &lt;code&gt;reset()&lt;/code&gt;, which restores every register to its
+default — including &lt;code&gt;SHUNT_CAL&lt;/code&gt;. And a channel with a zero
+calibration register reports exactly zero current, indefinitely
+(§8.1.2). So the recovery path for one channel’s accumulator was: reset
+the whole device, then recalibrate all four channels, or quietly
+start reading zeros.&lt;/p&gt;
+&lt;p&gt;A full device reset and a four-channel recalibration, to clear
+something the hardware clears in a single write.&lt;/p&gt;
+&lt;p&gt;The fix is one method:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;pub&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; async&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; fn&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; reset_energy_accumulators&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    &amp;amp;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;mut&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; self&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;    channels&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;amp;&lt;/span&gt;&lt;span&gt;[&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Channel&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Result&lt;/span&gt;&lt;span&gt;&amp;lt;&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Ina4230Error&lt;/span&gt;&lt;span&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;E&lt;/span&gt;&lt;span&gt;&amp;gt;&lt;/span&gt;&lt;span&gt;&amp;gt;&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;A slice rather than a single &lt;code&gt;Channel&lt;/code&gt;, because &lt;code&gt;ACC_RST&lt;/code&gt; is a
+four-bit mask and clearing three accumulators should be one bus write
+rather than three. Duplicates fold together harmlessly. An empty
+slice is an explicit no-op that does not touch the bus at all. And
+there is deliberately no getter, because the bits self-clear — this
+is a command, not a setting, and a getter would only ever return
+zero.&lt;/p&gt;
+&lt;p&gt;But the part worth stealing is not the method. It is what else had to
+change in the same commit.&lt;/p&gt;
+&lt;p&gt;Three documentation claims became false the instant that code landed:
+the rustdoc on &lt;code&gt;Flags::energy_overflow&lt;/code&gt;, the rustdoc on &lt;code&gt;read_flags&lt;/code&gt;,
+and the README’s “Reading flags” section all described energy
+overflow as unrecoverable, or recoverable only through a full reset.
+&lt;code&gt;examples/energy.rs&lt;/code&gt; went further — it &lt;em&gt;documented the dead end&lt;/em&gt; as
+part of the example, and now demonstrates the recovery instead,
+invalidating its cached previous reading after the reset.&lt;/p&gt;
+&lt;p&gt;A ledger entry does not get deleted. It has edges. Everything that
+referred to the gap has to stop referring to it in the same change,
+or you have swapped a documented hole for an undocumented lie, which
+is strictly worse than where you started.&lt;/p&gt;
+&lt;p&gt;The docs also picked up the arithmetic for avoiding the wrap in the
+first place, since the answer depends on calibration. &lt;code&gt;ENERGY&lt;/code&gt; is an
+unsigned 32-bit accumulator whose LSB is $32 \times \mathrm{CURRENT_LSB}$
+joules. For a rail that can pull 2 A at 48 V and has to run for a
+day, there are two independent floors — one from the run time, one
+from the current range — and you take the larger and round up:&lt;/p&gt;
+&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Constraint&lt;/th&gt;&lt;th&gt;Floor&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;
+&lt;tr&gt;&lt;td&gt;24 h at 96 W&lt;/td&gt;&lt;td&gt;60,350 nA/LSB&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;2 A full scale&lt;/td&gt;&lt;td&gt;61,036 nA/LSB&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;chosen&lt;/td&gt;&lt;td&gt;&lt;strong&gt;62,500 nA/LSB&lt;/strong&gt;&lt;/td&gt;&lt;/tr&gt;
+&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;which buys 24.8551 hours before the accumulator wraps, and a maximum
+current of 2.0479375 A. Both numbers are in the crate documentation,
+because “size &lt;code&gt;CurrentLsb&lt;/code&gt; appropriately” is not advice, it is a
+homework assignment.&lt;/p&gt;
+&lt;h2 id=&quot;the-caveat-that-predicted-its-own-activation&quot;&gt;The caveat that predicted its own activation&lt;/h2&gt;
+&lt;p&gt;Remember the note about limit alerts disagreeing with averaged
+readings — the one that could not bite yet, because &lt;code&gt;AVG&lt;/code&gt; was not
+configurable.&lt;/p&gt;
+&lt;p&gt;Two entries later, &lt;code&gt;AVG&lt;/code&gt; became configurable.&lt;/p&gt;
+&lt;p&gt;From that commit:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;&lt;code&gt;Flags::limit_alerts&lt;/code&gt; documented that caveat as unreachable
+precisely because &lt;code&gt;AVG&lt;/code&gt; was pinned at one sample. Making &lt;code&gt;AVG&lt;/code&gt;
+configurable makes it live.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;So the rustdoc and the matching README passage were rewritten in the
+same change that made them wrong, and not because anyone remembered
+they existed. They were found because the original note had recorded
+&lt;em&gt;why&lt;/em&gt; the caveat was dormant. The condition was written down next to
+the consequence, so making the condition false pointed straight at
+the text that needed to change.&lt;/p&gt;
+&lt;p&gt;This is the argument for citations in documentation, and it is not
+the argument I expected to be making. Citing §6.3.5 is not about
+looking rigorous. It is that a note carrying its own activation
+condition is greppable, and a note that says “note: averaging may
+affect alerts” is not. A &lt;code&gt;// TODO&lt;/code&gt; would have done nothing at all
+here: it names no condition, so nothing can ever make it fire.&lt;/p&gt;
+&lt;h2 id=&quot;the-one-i-argued-away&quot;&gt;The one I argued away&lt;/h2&gt;
+&lt;p&gt;The most interesting entry on a completeness ledger is the one you
+take off it without implementing anything.&lt;/p&gt;
+&lt;p&gt;High-speed I²C is the third bus-level protocol in the datasheet, and
+the natural move — having listed the other two — is to list it as
+a third gap and feel thorough. That would have been wrong.&lt;/p&gt;
+&lt;p&gt;The device enters high-speed mode when a controller sends the reserved
+master code &lt;code&gt;0b00001xxx&lt;/code&gt;, and leaves it on the next stop
+condition. Nothing in that sequence is addressed to the INA4230. The
+part writes no register to participate. It switches its input filters
+and gets on with it.&lt;/p&gt;
+&lt;p&gt;Which means participation is a property of whichever
+&lt;code&gt;embedded-hal-async&lt;/code&gt; implementation gets handed to &lt;code&gt;Ina4230::new&lt;/code&gt;, and
+not of this crate at all:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;It is a property of the bus, and therefore of whichever
+&lt;code&gt;embedded-hal-async&lt;/code&gt; I²C implementation is passed to &lt;code&gt;Ina4230::new&lt;/code&gt;
+— not something this crate can offer or withhold.  If the
+controller supports 2.94 MHz operation, this driver already works
+over it.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;So it went under a new heading, &lt;strong&gt;Out of scope&lt;/strong&gt;, which is the
+accurate statement rather than a pending one.&lt;/p&gt;
+&lt;p&gt;The contrast is what makes this worth a section. SMBus Alert Response
+and General Call reset stayed on the “Not yet implemented” list,
+because those genuinely &lt;em&gt;are&lt;/em&gt; this crate’s to offer — they are
+addressed transactions the driver could issue and currently does not.
+High-speed I²C is not. Three protocols, same datasheet chapter, same
+apparent shape, and one of them belongs in a different category
+entirely.&lt;/p&gt;
+&lt;p&gt;From the outside, “not implemented” and “not ours” look identical:
+both are a feature you cannot call. A ledger that does not tell them
+apart is just a list of things that make the crate look incomplete,
+and it will accumulate items forever, because the set of things a
+crate does not do is unbounded.&lt;/p&gt;
+&lt;p&gt;Telling them apart takes an argument each time. There is no rule. You
+have to work out, for that specific feature, whether the crate is the
+thing standing between the user and the capability — and then write
+the argument down, so the next person auditing against the datasheet
+does not have to rediscover it and quietly re-add the entry.&lt;/p&gt;
+&lt;h2 id=&quot;done-is-a-shape-not-a-number&quot;&gt;Done is a shape, not a number&lt;/h2&gt;
+&lt;p&gt;The list today: one entry, holding the two bus protocols. Plus the
+“Out of scope” section, holding its one argued-away item.&lt;/p&gt;
+&lt;p&gt;I do not think the value was in getting the number down. It was in
+three other things.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;It is a map, and mostly for me.&lt;/strong&gt; Every entry that got closed was
+closed starting from a paragraph explaining what the work was. The
+alert-limits entry had already identified the hard part — the
+reinterpreting limit register — which meant the design work started
+from a real problem statement rather than from re-reading Table 7-8 to
+find out why I had skipped it.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;It turns “is this crate any good” into a diff.&lt;/strong&gt; Without the list,
+that question is answered by vibes: how does the README feel, how many
+downloads, is the author responsive. With it, the question is
+mechanical. Take the datasheet, take the list, and see whether they
+agree. That is checkable by someone who does not trust me, which is
+the only kind of checkable that counts.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;It ends.&lt;/strong&gt; This is the part I did not anticipate and value most. A
+backlog is unbounded, because features are unbounded. A datasheet is
+finite. There is a last register, a last table, a last protocol, and
+when you have accounted for all of them you are not “done” in any
+grand sense but you are done &lt;em&gt;with that question&lt;/em&gt;, and the question
+stops consuming attention.&lt;/p&gt;
+&lt;p&gt;The honest limits, since this post has been fairly pleased with
+itself. The ledger is exactly as good as the reading that produced it,
+and it is a claim that I found everything — checked against a
+document that has its own errors, which is not a hypothetical
+concern.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-rev-1&quot;&gt;&lt;a href=&quot;https://balbi.sh/posts/six-entries/#fn-rev&quot;&gt;[1]&lt;/a&gt;&lt;/sup&gt; An audit against one revision of a datasheet says
+nothing whatsoever about the next. And a list of gaps is not a list of
+bugs: everything on it was, by construction, something I knew
+about. The failures that hurt are the ones where the code and the
+datasheet disagree and I read straight past it.&lt;/p&gt;
+&lt;p&gt;A datasheet is finite. Almost nothing else in this job is, and it is
+worth taking the win.&lt;/p&gt;
+&lt;section class=&quot;footnotes&quot;&gt;
+&lt;ol class=&quot;footnotes-list&quot;&gt;
+&lt;li id=&quot;fn-rev&quot;&gt;
+&lt;p&gt;The driver before this one had been decoding the TMP108
+datasheet’s own stated power-on value into a temperature the part
+cannot produce, for about a year, which is the subject of &lt;a href=&quot;https://balbi.sh/posts/thirty-six-registers/&quot;&gt;the
+previous post&lt;/a&gt;. An audit
+against a document is not an audit against reality. It is just
+considerably cheaper than the alternative, and it is the one you can
+do on a Sunday. &lt;a href=&quot;https://balbi.sh/posts/six-entries/#fr-rev-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/section&gt;
+</content:encoded>
+    </item>
+    
+    <item>
+      <title>Thirty-Six Registers, Described Twelve Times</title>
+      <link>https://balbi.sh/posts/thirty-six-registers/</link>
+      <guid isPermaLink="true">https://balbi.sh/posts/thirty-six-registers/</guid>
+      <pubDate>Wed, 16 Sep 2026 09:00:00 +0000</pubDate>
+      <dc:creator>Felipe Balbi</dc:creator>
+      <description>&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;AddressPins&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; a0&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; AddrPinState&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Gnd&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; a1&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; AddrPinState&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Sda&lt;/span&gt;&lt;span&gt; }&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;That selects &lt;code&gt;0x48&lt;/code&gt;. Swap the two fields and you get &lt;code&gt;0x42&lt;/code&gt;. Both are addresses
+an &lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/ina4230&quot;&gt;INA4230&lt;/a&gt; will answer to, given the right strapping. Both fields have
+the same type, so the compiler has nothing to say about it, and a reviewer
+reading the line has nothing to check it against except &lt;a rel=&quot;external&quot; href=&quot;https://www.ti.com/lit/ds/symlink/ina4230.pdf&quot;&gt;the datasheet&lt;/a&gt;. Get
+it wrong and the part does not complain. It simply never acknowledges, and you
+spend the afternoon looking at your pull-ups.&lt;/p&gt;
+&lt;p&gt;That is the argument from &lt;a href=&quot;https://balbi.sh/posts/making-smaller-things/&quot;&gt;the last post&lt;/a&gt;, arriving again. What is new is
+that this part offers three separate opportunities to make it — channels,
+alert slots, and address pins — and I only caught the second one because the
+first had already given me trouble.&lt;/p&gt;</description>
+      
+      <content:encoded>&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;AddressPins&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; a0&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; AddrPinState&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Gnd&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; a1&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; AddrPinState&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Sda&lt;/span&gt;&lt;span&gt; }&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;That selects &lt;code&gt;0x48&lt;/code&gt;. Swap the two fields and you get &lt;code&gt;0x42&lt;/code&gt;. Both are addresses
+an &lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/ina4230&quot;&gt;INA4230&lt;/a&gt; will answer to, given the right strapping. Both fields have
+the same type, so the compiler has nothing to say about it, and a reviewer
+reading the line has nothing to check it against except &lt;a rel=&quot;external&quot; href=&quot;https://www.ti.com/lit/ds/symlink/ina4230.pdf&quot;&gt;the datasheet&lt;/a&gt;. Get
+it wrong and the part does not complain. It simply never acknowledges, and you
+spend the afternoon looking at your pull-ups.&lt;/p&gt;
+&lt;p&gt;That is the argument from &lt;a href=&quot;https://balbi.sh/posts/making-smaller-things/&quot;&gt;the last post&lt;/a&gt;, arriving again. What is new is
+that this part offers three separate opportunities to make it — channels,
+alert slots, and address pins — and I only caught the second one because the
+first had already given me trouble.&lt;/p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;/span&gt;&lt;h2 id=&quot;the-first-driver&quot;&gt;The first driver&lt;/h2&gt;
+&lt;p&gt;&lt;a href=&quot;https://balbi.sh/posts/making-smaller-things/&quot;&gt;Making Smaller Things&lt;/a&gt; argued its case against a fictitious part with two
+registers and one quantity. That is the easy case — designed like that for the
+sole purpose of making the argument easy to follow —, and a reader is entitled
+to ask whether any of it survives contact with a part that fights back. A part
+available to order from your favorite parts distributor.&lt;/p&gt;
+&lt;p&gt;The first answer arrived two days after that post went up.  &lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/tmp108&quot;&gt;&lt;code&gt;tmp108&lt;/code&gt;&lt;/a&gt; is a
+driver I have been maintaining since 2024. It’s currently shipping on real
+products users can pay real money. On 4 September its temperature API stopped
+being &lt;code&gt;f32&lt;/code&gt; and started being &lt;code&gt;Celsius&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;The count is the same shape as the one in the last post. The TMP108 is a
+twelve-bit part with a 1/16 °C LSB: &lt;strong&gt;4,096&lt;/strong&gt; representable temperatures, evenly
+spaced between −128.0 °C and +127.9375 °C. &lt;code&gt;f32&lt;/code&gt; admits roughly &lt;strong&gt;4.3 billion&lt;/strong&gt;,
+including &lt;code&gt;NaN&lt;/code&gt;, both infinities, and −400 °C.&lt;/p&gt;
+&lt;p&gt;But the newtype is not the interesting part. The interesting part is what
+writing it down &lt;em&gt;found&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;Making the decode total surfaced two bugs in a driver that worked, had users,
+and had been on crates.io for a year.&lt;/p&gt;
+&lt;p&gt;The first is small. Encoding a temperature truncated toward zero where it should
+have rounded half away from zero, so a value landing exactly between two codes
+went to the wrong one. Nobody would ever notice, and it is wrong.&lt;/p&gt;
+&lt;p&gt;The second is not small. Decoding scaled by 1/256 instead of arithmetic-shifting
+right by four. Those are the same operation only if the low nibble is zero —
+and the low nibble is reserved, which means the part is entitled to put anything
+there and you are obliged to discard it. Scaling folds it in instead.&lt;/p&gt;
+&lt;p&gt;Chase that and it leads somewhere uncomfortable. The datasheet gives the
+power-on value of &lt;code&gt;T_HIGH&lt;/code&gt; as &lt;code&gt;0x7FF8&lt;/code&gt;. That word has a stray bit 3 set, inside
+the reserved nibble. The old decode folded it in and produced 127.96875 °C.&lt;/p&gt;
+&lt;p&gt;The TMP108 cannot report 127.96875 °C. Its maximum is 127.9375 °C, which is
+$2047/16$, one LSB below 128 — the same lopsided ceiling the last post pointed
+at in a different part. The driver had been decoding the datasheet’s own stated
+reset value into a temperature the silicon is incapable of producing, and nobody
+noticed for a year, because &lt;code&gt;f32&lt;/code&gt; will hold anything you hand it and never ask
+why.&lt;/p&gt;
+&lt;p&gt;Writing down the type caught the datasheet.&lt;/p&gt;
+&lt;p&gt;So the technique works. But TMP108 is four registers and one quantity, and all
+of that is still the easy case. The rest of this post is about a part that is
+not.&lt;/p&gt;
+&lt;h2 id=&quot;three-small-integers-that-must-never-be-transposed&quot;&gt;Three small integers that must never be transposed&lt;/h2&gt;
+&lt;p&gt;The INA4230 is a 48 V quad-channel current, voltage, power and energy
+monitor. Four independent shunts, each with its own resistor, its own current
+scale, and its own calibration. Thirty-six addressable registers. Four alert
+slots. Sixteen possible I²C addresses. A calibration equation with a decimal
+constant in it.&lt;/p&gt;
+&lt;p&gt;It also hands you three separate indices, and all three of them are the integers
+0, 1, 2 and 3.&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;Channel&lt;/code&gt; says which shunt. &lt;code&gt;AlertSlot&lt;/code&gt; says which of the four
+comparators. &lt;code&gt;AddrPinState&lt;/code&gt; says what a strap pin is tied to, and there are two
+such pins, so sixteen addresses. Three meanings, one set of numbers, and a bus
+that cannot tell them apart.&lt;/p&gt;
+&lt;p&gt;Table 6-1 of &lt;a rel=&quot;external&quot; href=&quot;https://www.ti.com/lit/ds/symlink/ina4230.pdf&quot;&gt;the datasheet&lt;/a&gt; gives the address encoding, and it is perfectly
+regular. Every table, equation and section number in this post refers to that
+document — SBOSAD4, June 2024:&lt;/p&gt;
+&lt;p&gt;$$\mathrm{addr} = \mathtt{0x40} \mathrel{|} (A_1 \ll 2) \mathrel{|} A_0
+\qquad \mathrm{GND}=0,\ \mathrm{V_S}=1,\ \mathrm{SDA}=2,\ \mathrm{SCL}=3$$&lt;/p&gt;
+&lt;p&gt;Regular, and not symmetric. &lt;code&gt;A1 = SDA, A0 = GND&lt;/code&gt; is &lt;code&gt;0x48&lt;/code&gt;. Reverse them and it
+is &lt;code&gt;0x42&lt;/code&gt;. So &lt;code&gt;AddressPins&lt;/code&gt; takes named fields rather than two positional
+arguments, the table in the crate documentation is transcribed with A1 in the
+first column because that is the order the datasheet uses, and there is a test
+whose entire job is to guard the swap:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;#&lt;/span&gt;&lt;span&gt;[&lt;/span&gt;&lt;span&gt;test&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;fn&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; address_pin_order_is_not_symmetric&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; /*&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; ... &lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;*/&lt;/span&gt;&lt;span&gt; }&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Two companions sit next to it. &lt;code&gt;address_is_injective&lt;/code&gt; says no two strappings
+collide, and &lt;code&gt;address_covers_exactly_the_reachable_range&lt;/code&gt; says the sixteen of
+them land on sixteen consecutive addresses with no gaps and nothing outside
+&lt;code&gt;0x40..=0x4F&lt;/code&gt;. Sixteen cases. The test walks all of them, which is the entire
+domain, which means those two are not samples of a property but statements of
+fact.&lt;/p&gt;
+&lt;p&gt;I wrote the first of the three in the same change that introduced the type. It
+felt slightly paranoid at the time.&lt;/p&gt;
+&lt;p&gt;Nine days later the alert registers came up for implementation, and
+the paranoia paid.&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;ALERT_LIMIT&lt;/code&gt; sits at &lt;code&gt;0x06&lt;/code&gt;, &lt;code&gt;0x0E&lt;/code&gt;, &lt;code&gt;0x16&lt;/code&gt; and &lt;code&gt;0x1E&lt;/code&gt;. &lt;code&gt;ALERT_CONFIG&lt;/code&gt; sits at
+&lt;code&gt;0x07&lt;/code&gt;, &lt;code&gt;0x0F&lt;/code&gt;, &lt;code&gt;0x17&lt;/code&gt; and &lt;code&gt;0x1F&lt;/code&gt;. Stride eight — which is also the stride of
+the per-channel measurement bank. So the register description had them nested
+inside the channel block, and the generated accessor was reached as:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;channel_regs&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;channel&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;alert_config&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Every register address that call produces is correct. The arithmetic is right,
+the tests pass, the part answers appropriately.&lt;/p&gt;
+&lt;p&gt;And it is &lt;em&gt;wrong&lt;/em&gt;, because Table 7-20 describes each limit flag as “independent
+of channel”, and Table 7-8 gives &lt;code&gt;ALERT_CONFIG&lt;/code&gt; its own &lt;code&gt;CHANNEL&lt;/code&gt; field in bits
+4:3. &lt;strong&gt;Alert slot 2 can watch channel 4.&lt;/strong&gt;  The index was never a channel. It
+was a slot that happened to be spelled with the same four numbers, at the same
+stride, inside the same address space.&lt;/p&gt;
+&lt;p&gt;From the design note for that change:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;That names an alert slot a channel and invites exactly the transposition class
+of bug already fixed once in this driver for the I2C address table.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;The fix moves nothing. &lt;code&gt;alert-regs[alert-slot stride 8]&lt;/code&gt;, same base addresses,
+same stride, byte-identical register access. It is purely a change to what the
+index is &lt;em&gt;called&lt;/em&gt;, and therefore to what the type system will let you put there.&lt;/p&gt;
+&lt;p&gt;This is the last post’s lesson with a harder edge on it. That post said three
+interchangeable &lt;code&gt;u8&lt;/code&gt;s carry no information at the call site. This says something
+worse: two small integers with the same range and the same stride are not
+&lt;em&gt;necessarily&lt;/em&gt; the same index, and &lt;strong&gt;the register map cannot tell you which&lt;/strong&gt;,
+because the address arithmetic comes out identical either way. The only thing
+that distinguishes them is a sentence of prose in a different table.&lt;/p&gt;
+&lt;p&gt;The guard, in the end, looks a lot like the first one:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;#&lt;/span&gt;&lt;span&gt;[&lt;/span&gt;&lt;span&gt;tokio&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span&gt;test&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;async&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; fn&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; limit_alert_is_indexed_by_slot&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; /*&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; ... &lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;*/&lt;/span&gt;&lt;span&gt; }&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;which the design note calls, accurately, “the
+&lt;code&gt;address_pin_order_is_not_symmetric&lt;/code&gt; of this feature.”&lt;/p&gt;
+&lt;h2 id=&quot;the-smallest-thing-was-not-the-code&quot;&gt;The smallest thing was not the code&lt;/h2&gt;
+&lt;p&gt;Sandi Metz’s advice is about programs. The most valuable place I applied it in
+this driver was not the program.&lt;/p&gt;
+&lt;p&gt;The four per-channel register banks are laid out contiguously with an eight-byte
+stride (Table 7-1). So thirty-two hand-written register definitions were, in
+fact, one bank written out four times. Saying so in the register description
+language collapses it:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;plain&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;block channel-regs[channel stride 8] {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    register shunt-voltage { address: 0x00, /* ... */ }&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    register bus-voltage   { address: 0x01, /* ... */ }&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    register current       { address: 0x02, /* ... */ }&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    register power         { address: 0x03, /* ... */ }&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    register energy        { address: 0x04, /* ... */ }&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    register calibration   { address: 0x05, /* ... */ }&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Six definitions, indexed four ways. The addresses written down are the channel-1
+addresses; the other twenty-four are arithmetic.&lt;/p&gt;
+&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;&lt;/th&gt;&lt;th&gt;before&lt;/th&gt;&lt;th&gt;after&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;INA4230.ddsl&lt;/code&gt;&lt;/td&gt;&lt;td&gt;512 lines&lt;/td&gt;&lt;td&gt;285&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;generated &lt;code&gt;src/device.rs&lt;/code&gt;&lt;/td&gt;&lt;td&gt;5,632 lines&lt;/td&gt;&lt;td&gt;2,540&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;per-channel &lt;code&gt;match&lt;/code&gt; blocks in the shell&lt;/td&gt;&lt;td&gt;5 blocks, 20 arms&lt;/td&gt;&lt;td&gt;one call&lt;/td&gt;&lt;/tr&gt;
+&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;The last row is the one that shows up while you are working. Reading a
+measurement used to mean selecting a register by channel, which meant a five-arm
+&lt;code&gt;match&lt;/code&gt;, five times over, once per quantity. All twenty arms were correct. All
+twenty were also transcription, and transcription is where the third copy goes
+wrong.&lt;/p&gt;
+&lt;svg class=&quot;bankmap&quot; viewBox=&quot;0 0 700 268&quot; role=&quot;img&quot; aria-labelledby=&quot;bm-t bm-d&quot; shape-rendering=&quot;crispEdges&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot;&gt;
+  &lt;title id=&quot;bm-t&quot;&gt;The INA4230 register map as a repeated bank&lt;/title&gt;
+  &lt;desc id=&quot;bm-d&quot;&gt;An eight-column by four-row grid. Columns are byte offsets plus zero through plus seven within a stride of eight; rows are the base addresses 0x00, 0x08, 0x10 and 0x18. Offsets plus zero through plus five hold the per-channel registers SHUNT, BUS, CURRENT, POWER, ENERGY and CALIBRATION, described once as a block indexed by channel. Offsets plus six and plus seven hold ALERT_LIMIT and ALERT_CONFIG, described once as a separate block indexed by alert slot. The row index therefore means a channel for the first six cells and an alert slot for the last two. Below the grid sit the four global registers: CONFIG1 at 0x20, CONFIG2 at 0x21, FLAGS at 0x22 and MANUFACTURER_ID at 0x7E. Thirty-six addressable registers in total, described by twelve definitions.&lt;/desc&gt;
+  &lt;style&gt;
+    .bankmap{width:100%;height:auto;max-width:44rem;display:block;margin:1.75rem 0;font-family:var(--sans)}
+    .bankmap .c{fill:var(--bg-dim);stroke:var(--border)}
+    .bankmap .a{fill:none;stroke:var(--fg-alt);stroke-width:1.5}
+    .bankmap text{shape-rendering:auto}
+    .bankmap .n{fill:var(--fg-main);font-size:11px;font-weight:600}
+    .bankmap .s{fill:var(--fg-dim);font-size:10px;font-family:var(--mono-code,ui-monospace,monospace)}
+    .bankmap .k{fill:var(--fg-alt);font:700 11.5px var(--mono-code,ui-monospace,monospace)}
+    .bankmap .d{fill:var(--fg-dim);font-size:11px;font-style:italic}
+    .bankmap .br{fill:none;stroke:var(--fg-alt);stroke-width:1.2}
+  &lt;/style&gt;
+  &lt;text class=&quot;k&quot; x=&quot;260&quot; y=&quot;11&quot; text-anchor=&quot;middle&quot;&gt;channel-regs[channel stride 8]&lt;/text&gt;
+  &lt;path class=&quot;br&quot; d=&quot;M50 16 v6 H470 v-6&quot;/&gt;
+  &lt;text class=&quot;k&quot; x=&quot;540&quot; y=&quot;11&quot; text-anchor=&quot;middle&quot;&gt;alert-regs[alert-slot stride 8]&lt;/text&gt;
+  &lt;path class=&quot;br&quot; d=&quot;M470 16 v6 H610 v-6&quot;/&gt;
+  &lt;text class=&quot;s&quot; x=&quot;85&quot; y=&quot;40&quot; text-anchor=&quot;middle&quot;&gt;+0&lt;/text&gt;
+  &lt;text class=&quot;s&quot; x=&quot;155&quot; y=&quot;40&quot; text-anchor=&quot;middle&quot;&gt;+1&lt;/text&gt;
+  &lt;text class=&quot;s&quot; x=&quot;225&quot; y=&quot;40&quot; text-anchor=&quot;middle&quot;&gt;+2&lt;/text&gt;
+  &lt;text class=&quot;s&quot; x=&quot;295&quot; y=&quot;40&quot; text-anchor=&quot;middle&quot;&gt;+3&lt;/text&gt;
+  &lt;text class=&quot;s&quot; x=&quot;365&quot; y=&quot;40&quot; text-anchor=&quot;middle&quot;&gt;+4&lt;/text&gt;
+  &lt;text class=&quot;s&quot; x=&quot;435&quot; y=&quot;40&quot; text-anchor=&quot;middle&quot;&gt;+5&lt;/text&gt;
+  &lt;text class=&quot;s&quot; x=&quot;505&quot; y=&quot;40&quot; text-anchor=&quot;middle&quot;&gt;+6&lt;/text&gt;
+  &lt;text class=&quot;s&quot; x=&quot;575&quot; y=&quot;40&quot; text-anchor=&quot;middle&quot;&gt;+7&lt;/text&gt;
+  &lt;text class=&quot;s&quot; x=&quot;44&quot; y=&quot;66&quot; text-anchor=&quot;end&quot;&gt;0x00&lt;/text&gt;
+  &lt;rect class=&quot;c&quot; x=&quot;50&quot; y=&quot;48&quot; width=&quot;70&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;85&quot; y=&quot;65&quot; text-anchor=&quot;middle&quot;&gt;SHUNT&lt;/text&gt;
+  &lt;rect class=&quot;c&quot; x=&quot;120&quot; y=&quot;48&quot; width=&quot;70&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;155&quot; y=&quot;65&quot; text-anchor=&quot;middle&quot;&gt;BUS&lt;/text&gt;
+  &lt;rect class=&quot;c&quot; x=&quot;190&quot; y=&quot;48&quot; width=&quot;70&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;225&quot; y=&quot;65&quot; text-anchor=&quot;middle&quot;&gt;CURR&lt;/text&gt;
+  &lt;rect class=&quot;c&quot; x=&quot;260&quot; y=&quot;48&quot; width=&quot;70&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;295&quot; y=&quot;65&quot; text-anchor=&quot;middle&quot;&gt;PWR&lt;/text&gt;
+  &lt;rect class=&quot;c&quot; x=&quot;330&quot; y=&quot;48&quot; width=&quot;70&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;365&quot; y=&quot;65&quot; text-anchor=&quot;middle&quot;&gt;NRG&lt;/text&gt;
+  &lt;rect class=&quot;c&quot; x=&quot;400&quot; y=&quot;48&quot; width=&quot;70&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;435&quot; y=&quot;65&quot; text-anchor=&quot;middle&quot;&gt;CAL&lt;/text&gt;
+  &lt;rect class=&quot;a&quot; x=&quot;470&quot; y=&quot;48&quot; width=&quot;70&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;505&quot; y=&quot;65&quot; text-anchor=&quot;middle&quot;&gt;LIMIT&lt;/text&gt;
+  &lt;rect class=&quot;a&quot; x=&quot;540&quot; y=&quot;48&quot; width=&quot;70&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;575&quot; y=&quot;65&quot; text-anchor=&quot;middle&quot;&gt;CFG&lt;/text&gt;
+  &lt;text class=&quot;k&quot; x=&quot;620&quot; y=&quot;66&quot;&gt;1&lt;/text&gt;
+  &lt;text class=&quot;s&quot; x=&quot;44&quot; y=&quot;94&quot; text-anchor=&quot;end&quot;&gt;0x08&lt;/text&gt;
+  &lt;rect class=&quot;c&quot; x=&quot;50&quot; y=&quot;76&quot; width=&quot;70&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;85&quot; y=&quot;93&quot; text-anchor=&quot;middle&quot;&gt;SHUNT&lt;/text&gt;
+  &lt;rect class=&quot;c&quot; x=&quot;120&quot; y=&quot;76&quot; width=&quot;70&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;155&quot; y=&quot;93&quot; text-anchor=&quot;middle&quot;&gt;BUS&lt;/text&gt;
+  &lt;rect class=&quot;c&quot; x=&quot;190&quot; y=&quot;76&quot; width=&quot;70&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;225&quot; y=&quot;93&quot; text-anchor=&quot;middle&quot;&gt;CURR&lt;/text&gt;
+  &lt;rect class=&quot;c&quot; x=&quot;260&quot; y=&quot;76&quot; width=&quot;70&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;295&quot; y=&quot;93&quot; text-anchor=&quot;middle&quot;&gt;PWR&lt;/text&gt;
+  &lt;rect class=&quot;c&quot; x=&quot;330&quot; y=&quot;76&quot; width=&quot;70&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;365&quot; y=&quot;93&quot; text-anchor=&quot;middle&quot;&gt;NRG&lt;/text&gt;
+  &lt;rect class=&quot;c&quot; x=&quot;400&quot; y=&quot;76&quot; width=&quot;70&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;435&quot; y=&quot;93&quot; text-anchor=&quot;middle&quot;&gt;CAL&lt;/text&gt;
+  &lt;rect class=&quot;a&quot; x=&quot;470&quot; y=&quot;76&quot; width=&quot;70&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;505&quot; y=&quot;93&quot; text-anchor=&quot;middle&quot;&gt;LIMIT&lt;/text&gt;
+  &lt;rect class=&quot;a&quot; x=&quot;540&quot; y=&quot;76&quot; width=&quot;70&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;575&quot; y=&quot;93&quot; text-anchor=&quot;middle&quot;&gt;CFG&lt;/text&gt;
+  &lt;text class=&quot;k&quot; x=&quot;620&quot; y=&quot;94&quot;&gt;2&lt;/text&gt;
+  &lt;text class=&quot;s&quot; x=&quot;44&quot; y=&quot;122&quot; text-anchor=&quot;end&quot;&gt;0x10&lt;/text&gt;
+  &lt;rect class=&quot;c&quot; x=&quot;50&quot; y=&quot;104&quot; width=&quot;70&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;85&quot; y=&quot;121&quot; text-anchor=&quot;middle&quot;&gt;SHUNT&lt;/text&gt;
+  &lt;rect class=&quot;c&quot; x=&quot;120&quot; y=&quot;104&quot; width=&quot;70&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;155&quot; y=&quot;121&quot; text-anchor=&quot;middle&quot;&gt;BUS&lt;/text&gt;
+  &lt;rect class=&quot;c&quot; x=&quot;190&quot; y=&quot;104&quot; width=&quot;70&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;225&quot; y=&quot;121&quot; text-anchor=&quot;middle&quot;&gt;CURR&lt;/text&gt;
+  &lt;rect class=&quot;c&quot; x=&quot;260&quot; y=&quot;104&quot; width=&quot;70&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;295&quot; y=&quot;121&quot; text-anchor=&quot;middle&quot;&gt;PWR&lt;/text&gt;
+  &lt;rect class=&quot;c&quot; x=&quot;330&quot; y=&quot;104&quot; width=&quot;70&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;365&quot; y=&quot;121&quot; text-anchor=&quot;middle&quot;&gt;NRG&lt;/text&gt;
+  &lt;rect class=&quot;c&quot; x=&quot;400&quot; y=&quot;104&quot; width=&quot;70&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;435&quot; y=&quot;121&quot; text-anchor=&quot;middle&quot;&gt;CAL&lt;/text&gt;
+  &lt;rect class=&quot;a&quot; x=&quot;470&quot; y=&quot;104&quot; width=&quot;70&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;505&quot; y=&quot;121&quot; text-anchor=&quot;middle&quot;&gt;LIMIT&lt;/text&gt;
+  &lt;rect class=&quot;a&quot; x=&quot;540&quot; y=&quot;104&quot; width=&quot;70&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;575&quot; y=&quot;121&quot; text-anchor=&quot;middle&quot;&gt;CFG&lt;/text&gt;
+  &lt;text class=&quot;k&quot; x=&quot;620&quot; y=&quot;122&quot;&gt;3&lt;/text&gt;
+  &lt;text class=&quot;s&quot; x=&quot;44&quot; y=&quot;150&quot; text-anchor=&quot;end&quot;&gt;0x18&lt;/text&gt;
+  &lt;rect class=&quot;c&quot; x=&quot;50&quot; y=&quot;132&quot; width=&quot;70&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;85&quot; y=&quot;149&quot; text-anchor=&quot;middle&quot;&gt;SHUNT&lt;/text&gt;
+  &lt;rect class=&quot;c&quot; x=&quot;120&quot; y=&quot;132&quot; width=&quot;70&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;155&quot; y=&quot;149&quot; text-anchor=&quot;middle&quot;&gt;BUS&lt;/text&gt;
+  &lt;rect class=&quot;c&quot; x=&quot;190&quot; y=&quot;132&quot; width=&quot;70&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;225&quot; y=&quot;149&quot; text-anchor=&quot;middle&quot;&gt;CURR&lt;/text&gt;
+  &lt;rect class=&quot;c&quot; x=&quot;260&quot; y=&quot;132&quot; width=&quot;70&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;295&quot; y=&quot;149&quot; text-anchor=&quot;middle&quot;&gt;PWR&lt;/text&gt;
+  &lt;rect class=&quot;c&quot; x=&quot;330&quot; y=&quot;132&quot; width=&quot;70&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;365&quot; y=&quot;149&quot; text-anchor=&quot;middle&quot;&gt;NRG&lt;/text&gt;
+  &lt;rect class=&quot;c&quot; x=&quot;400&quot; y=&quot;132&quot; width=&quot;70&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;435&quot; y=&quot;149&quot; text-anchor=&quot;middle&quot;&gt;CAL&lt;/text&gt;
+  &lt;rect class=&quot;a&quot; x=&quot;470&quot; y=&quot;132&quot; width=&quot;70&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;505&quot; y=&quot;149&quot; text-anchor=&quot;middle&quot;&gt;LIMIT&lt;/text&gt;
+  &lt;rect class=&quot;a&quot; x=&quot;540&quot; y=&quot;132&quot; width=&quot;70&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;575&quot; y=&quot;149&quot; text-anchor=&quot;middle&quot;&gt;CFG&lt;/text&gt;
+  &lt;text class=&quot;k&quot; x=&quot;620&quot; y=&quot;150&quot;&gt;4&lt;/text&gt;
+  &lt;text class=&quot;d&quot; x=&quot;50&quot; y=&quot;176&quot;&gt;the same row index is a channel on the left and a slot on the right&lt;/text&gt;
+  &lt;rect class=&quot;c&quot; x=&quot;50&quot; y=&quot;196&quot; width=&quot;100&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;100&quot; y=&quot;213&quot; text-anchor=&quot;middle&quot;&gt;CONFIG1&lt;/text&gt;
+  &lt;text class=&quot;s&quot; x=&quot;100&quot; y=&quot;234&quot; text-anchor=&quot;middle&quot;&gt;0x20&lt;/text&gt;
+  &lt;rect class=&quot;c&quot; x=&quot;158&quot; y=&quot;196&quot; width=&quot;100&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;208&quot; y=&quot;213&quot; text-anchor=&quot;middle&quot;&gt;CONFIG2&lt;/text&gt;
+  &lt;text class=&quot;s&quot; x=&quot;208&quot; y=&quot;234&quot; text-anchor=&quot;middle&quot;&gt;0x21&lt;/text&gt;
+  &lt;rect class=&quot;c&quot; x=&quot;266&quot; y=&quot;196&quot; width=&quot;100&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;316&quot; y=&quot;213&quot; text-anchor=&quot;middle&quot;&gt;FLAGS&lt;/text&gt;
+  &lt;text class=&quot;s&quot; x=&quot;316&quot; y=&quot;234&quot; text-anchor=&quot;middle&quot;&gt;0x22&lt;/text&gt;
+  &lt;rect class=&quot;c&quot; x=&quot;374&quot; y=&quot;196&quot; width=&quot;100&quot; height=&quot;26&quot;/&gt;&lt;text class=&quot;n&quot; x=&quot;424&quot; y=&quot;213&quot; text-anchor=&quot;middle&quot;&gt;MFR_ID&lt;/text&gt;
+  &lt;text class=&quot;s&quot; x=&quot;424&quot; y=&quot;234&quot; text-anchor=&quot;middle&quot;&gt;0x7E&lt;/text&gt;
+  &lt;text class=&quot;k&quot; x=&quot;610&quot; y=&quot;258&quot; text-anchor=&quot;end&quot;&gt;36 registers &amp;#183; 12 definitions&lt;/text&gt;
+&lt;/svg&gt;
+&lt;p&gt;Two smaller moves rode along in the same change, and both are deletions achieved
+by declaration rather than by editing.&lt;/p&gt;
+&lt;p&gt;Marking the two’s-complement fields as signed made the generator emit &lt;code&gt;i16&lt;/code&gt;
+directly. That removed two &lt;code&gt;as i16&lt;/code&gt; casts and the two
+&lt;code&gt;#[allow(clippy::cast_possible_wrap)]&lt;/code&gt; attributes that had been apologising for
+them. And making the reserved &lt;code&gt;ALERT_MASK&lt;/code&gt; encodings 6 and 7 &lt;em&gt;fallible&lt;/em&gt; rather
+than naming them means a reserved encoding never acquires a name — the last
+post’s argument about &lt;code&gt;Mode&lt;/code&gt; and its reserved &lt;code&gt;3&lt;/code&gt;, arriving one layer down, at
+the generator.&lt;/p&gt;
+&lt;p&gt;The best evidence that the duplication had already been charging rent:
+collapsing the four banks caused &lt;code&gt;ALERT_CONFIG&lt;/code&gt; on channels 2, 3 and 4 to pick
+up enumerations that until then only channel 1 had. Three of the four copies had
+quietly drifted. Nobody noticed, because they were copies, and nobody reads the
+third copy.&lt;/p&gt;
+&lt;p&gt;One thing worth saying, because “regenerate and see if it compiles” is not a
+verification strategy. The mock tests that already existed assert literal
+addresses — &lt;code&gt;0x01&lt;/code&gt;, &lt;code&gt;0x09&lt;/code&gt;, &lt;code&gt;0x11&lt;/code&gt;, &lt;code&gt;0x19&lt;/code&gt; for bus voltage; &lt;code&gt;0x05&lt;/code&gt;, &lt;code&gt;0x0D&lt;/code&gt;,
+&lt;code&gt;0x15&lt;/code&gt;, &lt;code&gt;0x1D&lt;/code&gt; for calibration — and they still passed. That checks the
+block’s address arithmetic against the datasheet rather than against the
+generator that produced it.&lt;/p&gt;
+&lt;p&gt;A code generator moves where “smaller” pays. In hand-written code, deleting
+three thousand lines is a refactor somebody has to review.  Here it was a
+consequence of writing down, once, that the part repeats itself.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-ddsl-1&quot;&gt;&lt;a href=&quot;https://balbi.sh/posts/thirty-six-registers/#fn-ddsl&quot;&gt;[1]&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;h2 id=&quot;pick-the-unit-that-makes-the-arithmetic-exact&quot;&gt;Pick the unit that makes the arithmetic exact&lt;/h2&gt;
+&lt;p&gt;The last post had one quantity and one newtype: &lt;code&gt;Celsius(i16)&lt;/code&gt;, holding the
+part’s own units, with the division by 128 pushed out to a rendering
+method. This part has five quantities, each with a different LSB, and the choice
+of unit stops being a matter of taste.&lt;/p&gt;
+&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Type&lt;/th&gt;&lt;th&gt;Unit&lt;/th&gt;&lt;th&gt;Why that one&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;ShuntVoltage&lt;/code&gt;&lt;/td&gt;&lt;td&gt;nV&lt;/td&gt;&lt;td&gt;both LSBs, 2500 and 625, are whole nanovolts&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;BusVoltage&lt;/code&gt;&lt;/td&gt;&lt;td&gt;µV&lt;/td&gt;&lt;td&gt;the LSB is 1600&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;Current&lt;/code&gt;&lt;/td&gt;&lt;td&gt;nA&lt;/td&gt;&lt;td&gt;derives from &lt;code&gt;CURRENT_LSB&lt;/code&gt;&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;Power&lt;/code&gt;&lt;/td&gt;&lt;td&gt;nW&lt;/td&gt;&lt;td&gt;&lt;code&gt;32 × CURRENT_LSB&lt;/code&gt;&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;Energy&lt;/code&gt;&lt;/td&gt;&lt;td&gt;nJ&lt;/td&gt;&lt;td&gt;&lt;code&gt;32 × CURRENT_LSB&lt;/code&gt;, accumulated&lt;/td&gt;&lt;/tr&gt;
+&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;The rule that picks each row is the same: use whichever unit makes the
+conversion from the raw register &lt;em&gt;exact&lt;/em&gt;. Not approximately exact. Exact, in
+integers, with no rounding step to reason about.&lt;/p&gt;
+&lt;p&gt;Which brings up the constant. Datasheet Equation 1 computes the calibration
+register, and it has &lt;code&gt;0.00512&lt;/code&gt; in it. A decimal constant in a datasheet equation
+reads like a demand for floating point, and I took it that way for about a day.&lt;/p&gt;
+&lt;p&gt;It is not. That constant is a unit artifact — it is what the coefficient looks
+like when you write the equation in amps and ohms.  Write it in nanoamps and
+microohms instead and it becomes $5.12 \times 10^{12}$, which is an integer, and
+the whole calculation follows it:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;SHUNT_CAL&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 5_120_000_000_000&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; /&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;lsb_na&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; *&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; shunt_uohm&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; *&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; divisor&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;No floats. Rounds to nearest rather than truncating. And two more things fall
+out of the types around it.&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;CurrentLsb&lt;/code&gt; and &lt;code&gt;ShuntResistance&lt;/code&gt; are &lt;code&gt;NonZeroU32&lt;/code&gt;, so that division cannot
+divide by zero, and the compiler knows it without an &lt;code&gt;if&lt;/code&gt; saying so — the same
+move as the last post’s observation that &lt;code&gt;self.averaging as u16&lt;/code&gt; cannot exceed
+3.&lt;/p&gt;
+&lt;p&gt;And a &lt;code&gt;SHUNT_CAL&lt;/code&gt; of zero is rejected outright rather than clamped, because a
+device with a zero calibration register reports zero current indefinitely
+(§8.1.2). An out-of-range calibration returns &lt;code&gt;ShuntCalOverflow&lt;/code&gt; or
+&lt;code&gt;ShuntCalUnderflow&lt;/code&gt;. It does not quietly pick the nearest legal value and let
+you ship it.&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;f32&lt;/code&gt; survives in exactly the place it survived last time: the &lt;code&gt;to_*&lt;/code&gt; methods,
+at the point where a number is about to be read by a human.&lt;/p&gt;
+&lt;p&gt;There is one wrinkle the last post did not have to deal with, and it is worth
+saying it explicitly because it is the kind of thing that silently ruins a
+measurement. Each type offers a base-unit accessor — &lt;code&gt;as_nanovolts&lt;/code&gt;,
+&lt;code&gt;as_nanoamps&lt;/code&gt;, &lt;code&gt;as_nanowatts&lt;/code&gt; — which is exactly the stored value and
+therefore lossless. It also offers coarser ones, &lt;code&gt;as_microamps&lt;/code&gt; and friends,
+because most callers do not want to think in nanoamps.&lt;/p&gt;
+&lt;p&gt;Those divide. Dividing integers truncates. So &lt;code&gt;as_microamps&lt;/code&gt; is a lossy accessor
+on a type whose entire justification is that it is not lossy, and the only
+defence available is to say so in the documentation and put the lossless ones
+first. I would rather have found a type-level answer to that. I did not, and
+pretending otherwise would undercut everything above: a newtype narrows what a
+value can be, and it does not stop you from writing a method that throws part of
+it away.&lt;/p&gt;
+&lt;h2 id=&quot;a-small-type-that-still-means-the-wrong-thing&quot;&gt;A small type that still means the wrong thing&lt;/h2&gt;
+&lt;p&gt;Here is the one I did not see coming, and it is the reason this post exists
+rather than being a footnote on the last one.&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;Celsius(i16)&lt;/code&gt; is self-describing. Twenty-four and a quarter degrees is
+twenty-four and a quarter degrees, and it will still mean that tomorrow, on a
+different part, in a different program.  &lt;code&gt;ShuntVoltage&lt;/code&gt; is the same: forty
+million nanovolts is forty millivolts, permanently.&lt;/p&gt;
+&lt;p&gt;An alert &lt;em&gt;threshold&lt;/em&gt; is not like that. It is a count in &lt;code&gt;ALERT_LIMIT&lt;/code&gt;, and what
+the count means comes from the target channel’s &lt;code&gt;AdcRange&lt;/code&gt; and &lt;code&gt;CurrentLsb&lt;/code&gt; —
+state that lives in a different register and can change after the threshold is
+armed.&lt;/p&gt;
+&lt;p&gt;The typing still does real work. Each variant carries its threshold in the unit
+that variant implies:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;pub&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; enum&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Alert&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;    ShuntOver&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;ShuntVoltage&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;    ShuntUnder&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;ShuntVoltage&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;    BusOver&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;BusVoltage&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;    BusUnder&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;BusVoltage&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;    PowerOver&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Power&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;so a bus threshold cannot be paired with a shunt comparison. There is no way to
+spell it. That was the whole reason alerts had been deferred: the limit register
+reinterprets its format according to the function it is paired with, and a &lt;code&gt;u16&lt;/code&gt;
+setter would have made the mismatch a runtime error instead of an
+unrepresentable one.&lt;/p&gt;
+&lt;p&gt;But the types are not sufficient, and three consequences follow.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Encoding became the fallible direction.&lt;/strong&gt; The last post had &lt;code&gt;encode&lt;/code&gt; total and
+&lt;code&gt;decode&lt;/code&gt; partial, because a reserved &lt;code&gt;Mode&lt;/code&gt; encoding could come back off the
+bus. Here it inverts. Decoding a measurement is total — every bit pattern the
+part produces is a real quantity. Encoding a &lt;em&gt;threshold&lt;/em&gt; can fail, because a
+caller can ask for one the register cannot hold. The module that had been
+documented as “pure and total” had to give up half that claim, and the note
+recording why is the most useful sentence in the change:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Totality was a consequence of every function being a decode, not a goal.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;&lt;strong&gt;Failure happens before the bus does.&lt;/strong&gt; A shunt or power threshold on a channel
+that has never been calibrated cannot be encoded at all, so it returns
+&lt;code&gt;NotCalibrated&lt;/code&gt; without issuing a single transaction:
+&lt;code&gt;shunt_and_power_alerts_on_an_uncalibrated_channel_do_not_touch_the_bus&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Recalibration silently rescales anything already armed.&lt;/strong&gt; The two ADC ranges
+differ by a factor of four. Arm a threshold under &lt;code&gt;Range0&lt;/code&gt;, recalibrate to
+&lt;code&gt;Range1&lt;/code&gt;, and the device is now enforcing a number that means something else —
+quietly, correctly, and not what anybody asked for. Nothing in the silicon
+couples them.&lt;/p&gt;
+&lt;p&gt;So &lt;code&gt;calibrate&lt;/code&gt; disarms the affected slots, and the ordering carries the weight:
+disarm &lt;em&gt;before&lt;/em&gt; writing &lt;code&gt;CONFIG2.RANGE&lt;/code&gt;, because between a range change and a
+later disarm there is a window in which the part enforces the old threshold
+against the new scale. Bus thresholds are absolutely scaled and are left
+alone. And if a disarm write fails, the operation returns before &lt;code&gt;RANGE&lt;/code&gt; is
+touched at all, so a slot that is still armed is still armed against the scale
+it was programmed for:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;#&lt;/span&gt;&lt;span&gt;[&lt;/span&gt;&lt;span&gt;tokio&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span&gt;test&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;async&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; fn&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; a_failed_disarm_aborts_before_the_range_is_rewritten&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; /*&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; ... &lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;*/&lt;/span&gt;&lt;span&gt; }&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Which forces a correction to the last post. “The value is parsed once at the
+edge, and nothing downstream re-checks it” is true of values.  It is not true of
+values whose &lt;em&gt;scale&lt;/em&gt; is mutable state somewhere else in the system. For those,
+making the type smaller does not help at all. What helps is making the operation
+that moves the scale responsible for everything that depended on it — which is
+not a type-system property. It is an ordering property, and you get it by
+writing it down and testing it.&lt;/p&gt;
+&lt;p&gt;One more asymmetry falls out, and I like it because it is a cache that lies in a
+useful direction. Thresholds round to the nearest LSB on the way into the
+register, so the count the device holds is usually not the number you asked
+for. Reading a slot back through &lt;code&gt;Ina4230::alert&lt;/code&gt; returns the value you
+supplied, not the value the part is enforcing — because the driver kept your
+version and never asks the device.&lt;/p&gt;
+&lt;p&gt;That is arguably wrong. It is also the only answer that lets a caller compare
+what they configured against what they meant, rather than against a rounded
+count they would have to un-scale by hand. The honest version is to document
+which of the two you are getting, which the crate does. There was no answer here
+that was true in both directions at once, and noticing that is most of the work.&lt;/p&gt;
+&lt;h2 id=&quot;the-shell-grew-state&quot;&gt;The shell grew state&lt;/h2&gt;
+&lt;p&gt;The last post ended a section with a line I liked well enough to repeat here:
+&lt;em&gt;the shell has no logic; the core has no dependencies.&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;Exactly half of that survived.&lt;/p&gt;
+&lt;p&gt;The core half held completely. &lt;code&gt;units&lt;/code&gt; and &lt;code&gt;convert&lt;/code&gt; have no bus, no &lt;code&gt;async&lt;/code&gt;, no
+HAL, and no floating point. They build for the host as readily as for the
+target, and every test worth running runs against them in milliseconds.&lt;/p&gt;
+&lt;p&gt;The shell did not stay dumb. It carries two caches — &lt;code&gt;[Option&amp;lt;Calibration&amp;gt;; 4]&lt;/code&gt; and &lt;code&gt;[Option&amp;lt;(Channel, Alert)&amp;gt;; 4]&lt;/code&gt; — and both are required, not only
+convenient.&lt;/p&gt;
+&lt;p&gt;Calibration is needed to scale every measurement the part produces, and a bus
+round-trip per reading is the wrong price. The alert cache is required for a
+subtler reason: invalidation has to know which slots point at the channel being
+recalibrated and which of those are shunt or power alerts. Without the cache,
+that question costs four register reads on every &lt;code&gt;calibrate&lt;/code&gt; call — on a path
+that is otherwise two writes. That is, this is optimization trick because the
+real world is, well, complex.&lt;/p&gt;
+&lt;p&gt;What fell out of arguing about it is a rule I plan to keep for the foreseeable
+future:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Cache only what another operation needs in order to be correct.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;That is why &lt;code&gt;AlertPinConfig&lt;/code&gt; — polarity, latching, and the two mask bits —
+is deliberately &lt;em&gt;not&lt;/em&gt; cached. It is never needed to interpret a reading, so a
+cache would buy nothing, and it would inherit a coherence problem for free.&lt;/p&gt;
+&lt;p&gt;Because the coherence problem is real, and the honest thing is to write it down
+rather than hope. A cache is a claim about a device you do not control. This one
+records only the driver’s own successful writes. It cannot see a power cycle, an
+EN-pin toggle, a General Call reset, or a second controller on the bus doing
+whatever it likes.&lt;/p&gt;
+&lt;p&gt;State was not the only thing that crept in. &lt;code&gt;CONFIG2&lt;/code&gt; holds the ADC range in
+bits 3:0, the alert-pin behaviour in bits 7:4, and the energy accumulator resets
+in bits 11:8 — three unrelated concerns that three different methods each need
+to touch without disturbing the other two. So every one of them is a
+read-modify-write, and each carries an argument about why that is safe: bit 15
+is &lt;code&gt;RST&lt;/code&gt; and bits 11:8 are &lt;code&gt;ACC_RST&lt;/code&gt;, both write-one-self-clearing, both reading
+back zero, so writing back what you read cannot retrigger a device reset or
+silently zero somebody’s energy total.&lt;/p&gt;
+&lt;p&gt;That reasoning is not in the type system, and it cannot be. It is a paragraph of
+prose attached to three methods, and if it is wrong the symptom is that
+calibration quietly stops meaning anything. There is one small consolation:
+&lt;code&gt;AlertPinConfig&lt;/code&gt;’s &lt;code&gt;Default&lt;/code&gt; maps exactly onto the &lt;code&gt;CONFIG2&lt;/code&gt; reset value of
+&lt;code&gt;0x0000&lt;/code&gt;, so the default is the literal power-on state of the silicon rather
+than a convention somebody invented and will later have to remember.&lt;/p&gt;
+&lt;p&gt;The last post buried a footnote about this moment — that when an erratum
+workaround lands in the shell, “the shell does have logic in it, does need
+tests, and they are the expensive kind.” This is that moment, arriving with no
+erratum involved at all. Ordinary device state was enough. And the tests are
+correspondingly less pleasant to write:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;async&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; fn&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; reset_clears_cache_even_when_the_write_fails&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; /*&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; ... &lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;*/&lt;/span&gt;&lt;span&gt; }&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;async&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; fn&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; a_failed_reset_keeps_the_alert_cache_so_a_later_calibrate_still_disarms&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; /*&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; ... &lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;*/&lt;/span&gt;&lt;span&gt; }&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;async&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; fn&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; calibrate_all_invalidates_the_channels_it_did_not_reach&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; /*&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; ... &lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;*/&lt;/span&gt;&lt;span&gt; }&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Every one of those names is a sentence about a partial failure. That is what it
+costs to put state in the shell, and it is worth paying only when something else
+needs the state in order to be correct.&lt;/p&gt;
+&lt;h2 id=&quot;when-you-stop-being-able-to-count&quot;&gt;When you stop being able to count&lt;/h2&gt;
+&lt;p&gt;The last post ended on arithmetic, and it was the part I was most pleased with:
+$(u8, u8, u8)$ is $16{,}777{,}216$ reachable states of which 96 are legal, and
+$(\mathtt{Averaging}, \mathtt{ConversionCycle}, \mathtt{Mode})$ is 96 reachable
+states, all legal. The illegal region gone, not guarded.&lt;/p&gt;
+&lt;p&gt;Try that sum on this part and it does not terminate.&lt;/p&gt;
+&lt;p&gt;Whether &lt;code&gt;Alert::ShuntOver(ShuntVoltage::from_nanovolts(n))&lt;/code&gt; is legal depends on
+the target channel’s &lt;code&gt;AdcRange&lt;/code&gt;, which is runtime state in another register. And
+&lt;code&gt;Calibration::new&lt;/code&gt; takes two &lt;code&gt;NonZeroU32&lt;/code&gt;s and an &lt;code&gt;AdcRange&lt;/code&gt;, where the legal
+subset is not an enumeration at all but an inequality — &lt;code&gt;SHUNT_CAL&lt;/code&gt; has to
+land in $[1, 65535]$ after rounding. There is no smaller type to reach for. The
+constraint is arithmetic, not structural.&lt;/p&gt;
+&lt;p&gt;So the illegal region cannot be deleted here, and three things replace counting
+it. Which one applies is decided by the size of the domain, and nothing else.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Walk it, where it is walkable.&lt;/strong&gt; All 65,536 bus voltage codes. All 131,072
+shunt voltage codes, across both ADC ranges. All 65,536 threshold round-trips
+per range. All 2,048 channel-mask operations.  All 16 address strappings. On the
+host, natively, in well under a second, with a real panic message when something
+breaks. The last post’s line about proof by exhaustion that runs in microseconds
+survives a part with nine times the registers and five quantities instead of
+one.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Reach for &lt;code&gt;proptest&lt;/code&gt; only where you cannot.&lt;/strong&gt; Calibration, where the input
+space is genuinely too large. And with the property &lt;em&gt;shape&lt;/em&gt; from the last post,
+not merely the tool — &lt;code&gt;calibration_fails_only_on_range&lt;/code&gt; asserts that range
+violations are the &lt;strong&gt;only&lt;/strong&gt; way the function fails. Not that bad input is
+rejected; that nothing else is. Any future edit that teaches it a new failure
+mode breaks that test immediately.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Borrow the datasheet’s own numbers.&lt;/strong&gt; This is the leg the last post did not
+have, and could not have, because a part with a 1/128 °C LSB has no worked
+example to offer. This one does. TI computes a &lt;code&gt;SHUNT_CAL&lt;/code&gt; of 1280 in §8.2.2.3,
+and a shunt limit of $-80,\mathrm{mV} / 2.5,\mathrm{µV} = 32000 =
+\mathtt{0x8300}$ in §7.1.6, and a minimum &lt;code&gt;CURRENT_LSB&lt;/code&gt; from Equation 2. All
+three are tests. The reasoning, from the commit that added them:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;A test transcribed from the code it tests proves only self-consistency.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;There is one more counting question hiding in the API, and it is the one
+&lt;code&gt;#[non_exhaustive]&lt;/code&gt; exists to answer: &lt;em&gt;can this domain grow?&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;Ina4230Error&lt;/code&gt; is marked. Its domain is open — not because the part can
+develop new failure modes, but because I can discover them, and this driver has
+added one per feature so far. Marking it costs a single breaking change instead
+of one for every variant I have not thought of yet.&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;Alert&lt;/code&gt;, &lt;code&gt;AlertPinConfig&lt;/code&gt;, &lt;code&gt;AlertLatch&lt;/code&gt; and &lt;code&gt;AlertPolarity&lt;/code&gt; are deliberately
+&lt;em&gt;not&lt;/em&gt; marked, and the reason is the most satisfying sentence in the whole
+design: their domains are closed by the silicon. &lt;code&gt;ALERT_MASK&lt;/code&gt; has exactly five
+usable encodings. &lt;code&gt;CONFIG2&lt;/code&gt; has exactly four alert bits. Neither can ever grow a
+fifth, because the die is fixed and the datasheet is finished. Marking them
+would be actively harmful — on a struct it forbids construction with
+&lt;code&gt;..Default::default()&lt;/code&gt;, and on an enum it forces a wildcard arm in every
+external &lt;code&gt;match&lt;/code&gt;, suppressing exactly the missed-variant error that makes an
+enum worth having.&lt;/p&gt;
+&lt;p&gt;So the attribute is not a stylistic default. It is a claim about whether a set
+can gain members, and for a device driver that claim usually has a physical
+answer.&lt;/p&gt;
+&lt;p&gt;Which leaves the thesis needing a repair, and it is a small one.&lt;/p&gt;
+&lt;p&gt;For &lt;em&gt;configuration&lt;/em&gt; — &lt;code&gt;Mode&lt;/code&gt;, &lt;code&gt;Averaging&lt;/code&gt;, &lt;code&gt;OperatingMode&lt;/code&gt;, &lt;code&gt;AlertPolarity&lt;/code&gt;,
+&lt;code&gt;AlertLatch&lt;/code&gt;, every field where the silicon enumerates its own options —
+“illegal states are unrepresentable” is still literally, arithmetically
+true. That is most of the API surface, and it is the part where the last post’s
+argument needs no qualification at all.&lt;/p&gt;
+&lt;p&gt;For &lt;em&gt;quantities&lt;/em&gt;, the illegal region cannot be deleted. It can only be
+concentrated. &lt;code&gt;Calibration::new&lt;/code&gt; is the single fallible step in configuring this
+part. &lt;code&gt;Celsius::try_from_degrees&lt;/code&gt; was the single fallible step in the one before
+it. Both drivers have exactly one place where a legal-looking input is turned
+away, and everything downstream of that place holds something that cannot be
+wrong.&lt;/p&gt;
+&lt;p&gt;So the number worth counting stopped being reachable states somewhere between
+two registers and thirty-six. What replaced it is smaller and easier to check:
+how many functions can say &lt;code&gt;Err&lt;/code&gt;.&lt;/p&gt;
+&lt;h2 id=&quot;what-i-would-not-claim&quot;&gt;What I would not claim&lt;/h2&gt;
+&lt;p&gt;Three things, because the rest of this post has been arguing in one direction.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;The caches are the weak point, and documenting them is not the same as fixing
+them.&lt;/strong&gt; I can write down that a cache cannot observe a power cycle, an EN-pin
+toggle, a General Call reset, or another controller on the bus. I have written
+it down. Someone will still put two controllers on that bus, and the driver will
+be confidently wrong. That is a genuine regression against the first driver,
+which had no state and therefore nothing to be stale.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;The alert paths are mock-tested more thoroughly than they are bench-tested.&lt;/strong&gt;
+The examples run against a real INA4230 from a laptop over a &lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/pico-de-gallo&quot;&gt;Pico de
+Gallo&lt;/a&gt; bridge,&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-bench-1&quot;&gt;&lt;a href=&quot;https://balbi.sh/posts/thirty-six-registers/#fn-bench&quot;&gt;[2]&lt;/a&gt;&lt;/sup&gt; which is enough to prove the registers do what the
+datasheet says. Provoking a genuine overcurrent excursion on demand, repeatedly,
+is different work and I have not done it. Some of the alert section is argued
+rather than demonstrated, and you should read it that way.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;All of this was affordable because it happened before 1.0.&lt;/strong&gt; The last post’s
+closing advice was to spend the design budget on exactly those invariants you
+are willing to still be defending at &lt;code&gt;1.0&lt;/code&gt;.  Restructuring the alert registers
+was a breaking change; &lt;code&gt;cargo-semver-checks&lt;/code&gt; flagged it on the release pull
+request, which is the expected and correct outcome, and it cost a bump from 0.1
+to 0.2.  Six months from now the same change costs somebody else a migration,
+and I would probably not make it.&lt;/p&gt;
+&lt;p&gt;Make smaller things. Then count how many of them can still say &lt;code&gt;Err&lt;/code&gt;.&lt;/p&gt;
+&lt;section class=&quot;footnotes&quot;&gt;
+&lt;ol class=&quot;footnotes-list&quot;&gt;
+&lt;li id=&quot;fn-ddsl&quot;&gt;
+&lt;p&gt;Both drivers describe their registers in a small declarative
+language and generate the register access layer with
+&lt;a rel=&quot;external&quot; href=&quot;https://github.com/diondokter/device-driver&quot;&gt;&lt;code&gt;device-driver&lt;/code&gt;&lt;/a&gt;. It is
+worth being precise about where that sits, because it is not the
+functional core. The generated layer is a typed spelling of the
+address map and nothing more — it knows that &lt;code&gt;SHUNT_VOLTAGE&lt;/code&gt; on
+channel 3 lives at &lt;code&gt;0x11&lt;/code&gt; and is signed sixteen bits, and it knows
+nothing about nanovolts. The core sits above it and turns bit
+patterns into quantities; the shell sits above that and moves bytes.
+Three layers, and the generated one is the only one I do not have to
+review. &lt;a href=&quot;https://balbi.sh/posts/thirty-six-registers/#fr-ddsl-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id=&quot;fn-bench&quot;&gt;
+&lt;p&gt;The five examples in the crate drive a real part from a host
+machine, which is a habit from two earlier posts —
+&lt;a href=&quot;https://balbi.sh/posts/writing-embedded-drivers-without-an-mcu/&quot;&gt;Writing embedded drivers without an MCU&lt;/a&gt;
+and &lt;a href=&quot;https://balbi.sh/posts/examples-that-run/&quot;&gt;Examples that run&lt;/a&gt;. Worth
+repeating here only because it is what makes the division of labour in
+this post practical: the exhaustive tests answer arithmetic questions
+on a laptop in milliseconds, and the part on the bench is left to
+answer the one question it is uniquely qualified for, which is whether
+the silicon agrees with its own datasheet. &lt;a href=&quot;https://balbi.sh/posts/thirty-six-registers/#fr-bench-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/section&gt;
+</content:encoded>
+    </item>
+    
+  </channel>
+</rss>
