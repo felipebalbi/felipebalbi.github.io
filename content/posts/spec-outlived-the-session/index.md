@@ -1,7 +1,7 @@
 +++
 title = "The Spec Outlived the Session"
 date = 2026-09-30T09:00:00
-draft = true
+draft = false
 description = "More than half the lines in a recent driver change were the design document and the implementation plan, not the Rust. What that bought: a later commit, in a later session with no memory of the first, could say 'the shape is as approved' and mean something checkable. Also the two things the agent got wrong, the attribution trailer OpenDevicePartnership requires, and why an agent is forbidden from signing off."
 [taxonomies]
 tags = ["rust", "embedded", "drivers", "agents", "documentation", "process", "ina4230"]
