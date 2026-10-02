@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+  <title>Felipe Balbi</title>
+  <subtitle>Notes on embedded systems, Rust, and the craft of writing software.</subtitle>
+  <link href="https://balbi.sh/tags/meta/atom.xml" rel="self" type="application/atom+xml"/>
+  <link href="https://balbi.sh"/>
+  <generator uri="https://www.getzola.org/">Zola</generator>
+  <updated>2026-06-10T08:00:00+00:00</updated>
+  <id>https://balbi.sh/tags/meta/atom.xml</id>
+  
+  <entry xml:lang="en">
+    <title>Hello, world</title>
+    <published>2026-06-10T08:00:00+00:00</published>
+    <updated>2026-06-10T08:00:00+00:00</updated>
+    <author><name>Felipe Balbi</name></author>
+    <link rel="alternate" href="https://balbi.sh/posts/hello-world/" type="text/html"/>
+    <id>https://balbi.sh/posts/hello-world/</id>
+    <summary type="html">&lt;p&gt;This is the first post on the new version of &lt;a href=&quot;/&quot;&gt;balbi.sh&lt;/a&gt;. The
+previous incarnation was a single HTML file with one link; this one is
+built with &lt;a rel=&quot;external&quot; href=&quot;https://www.getzola.org/&quot;&gt;Zola&lt;/a&gt; and styled after
+&lt;a rel=&quot;external&quot; href=&quot;https://github.com/protesilaos/ef-themes&quot;&gt;ef-melissa-light&lt;/a&gt; — a warm,
+legible Emacs theme by Protesilaos Stavrou. Body text is set in
+&lt;strong&gt;Aporetic Serif&lt;/strong&gt;, headings and UI in &lt;strong&gt;Aporetic Sans&lt;/strong&gt;, and code in
+&lt;strong&gt;Aporetic Sans Mono&lt;/strong&gt; — all from the same author as the colour
+palette.&lt;/p&gt;</summary>
+    
+    <content type="html">&lt;p&gt;This is the first post on the new version of &lt;a href=&quot;/&quot;&gt;balbi.sh&lt;/a&gt;. The
+previous incarnation was a single HTML file with one link; this one is
+built with &lt;a rel=&quot;external&quot; href=&quot;https://www.getzola.org/&quot;&gt;Zola&lt;/a&gt; and styled after
+&lt;a rel=&quot;external&quot; href=&quot;https://github.com/protesilaos/ef-themes&quot;&gt;ef-melissa-light&lt;/a&gt; — a warm,
+legible Emacs theme by Protesilaos Stavrou. Body text is set in
+&lt;strong&gt;Aporetic Serif&lt;/strong&gt;, headings and UI in &lt;strong&gt;Aporetic Sans&lt;/strong&gt;, and code in
+&lt;strong&gt;Aporetic Sans Mono&lt;/strong&gt; — all from the same author as the colour
+palette.&lt;/p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;/span&gt;&lt;h2 id=&quot;why-now&quot;&gt;Why now&lt;/h2&gt;
+&lt;p&gt;I want a place to keep working notes — short writeups about the things
+I run into while building firmware. The bar for publishing here is low
+on purpose. If a problem took me more than an hour to figure out, it
+probably deserves a post so I (or you) don’t have to figure it out
+again next time.&lt;/p&gt;
+&lt;h2 id=&quot;what-to-expect&quot;&gt;What to expect&lt;/h2&gt;
+&lt;p&gt;Mostly:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;Embedded Rust&lt;/strong&gt; — Embassy, &lt;code&gt;embedded-hal&lt;/code&gt;, async on tiny chips.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Bare-metal C&lt;/strong&gt; — when Rust isn’t an option, which is more often
+than I’d like.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Tooling&lt;/strong&gt; — probe-rs, defmt, the linker, the assembler, the things
+that quietly hold everything together.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Occasional rants&lt;/strong&gt; about debugging hardware at 2am.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;If you want to follow along, there’s an &lt;a href=&quot;/atom.xml&quot;&gt;Atom feed&lt;/a&gt;.&lt;/p&gt;
+&lt;h2 id=&quot;code-by-the-way&quot;&gt;Code, by the way&lt;/h2&gt;
+&lt;p&gt;It looks like this:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;#&lt;/span&gt;&lt;span&gt;[&lt;/span&gt;&lt;span&gt;embassy_executor&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span&gt;task&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;async&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; fn&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; blinky&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;mut&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; led&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Output&lt;/span&gt;&lt;span&gt;&amp;lt;&lt;/span&gt;&lt;span&gt;&amp;#39;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;static&lt;/span&gt;&lt;span&gt;&amp;gt;&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    loop&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;        led&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;toggle&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;        Timer&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;after_millis&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;500&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;await&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;That’s all for now. More soon.&lt;/p&gt;
+</content>
+  </entry>
+  
+</feed>

@@ -1,0 +1,473 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"
+     xmlns:atom="http://www.w3.org/2005/Atom"
+     xmlns:content="http://purl.org/rss/1.0/modules/content/"
+     xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Felipe Balbi</title>
+    <link>https://balbi.sh</link>
+    <description>Notes on embedded systems, Rust, and the craft of writing software.</description>
+    <generator>Zola</generator>
+    <language>en</language>
+    <lastBuildDate>Wed, 05 Aug 2026 09:00:00 +0000</lastBuildDate>
+    <atom:link href="https://balbi.sh/tags/isa/rss.xml" rel="self" type="application/rss+xml"/>
+    
+    <item>
+      <title>Tamal: The Instruction Set</title>
+      <link>https://balbi.sh/posts/tamal-isa/</link>
+      <guid isPermaLink="true">https://balbi.sh/posts/tamal-isa/</guid>
+      <pubDate>Wed, 05 Aug 2026 09:00:00 +0000</pubDate>
+      <dc:creator>Felipe Balbi</dc:creator>
+      <description>&lt;p&gt;For &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;three posts&lt;/a&gt; we held the leaves shut. We read the engine’s
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;shape&lt;/a&gt;, watched it &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;dispatch an instruction&lt;/a&gt;, and &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-bus/&quot;&gt;ran its
+wire&lt;/a&gt;, and all the while &lt;code&gt;decode&lt;/code&gt;, &lt;code&gt;dataResult&lt;/code&gt;, &lt;code&gt;branchTaken&lt;/code&gt;, and
+the rest were names with one-line jobs and no insides. Now we start
+opening them — in the order the engine reaches for each — and the
+very first thing the engine does to any word, before it can compute or
+branch or drive a pin, is &lt;code&gt;decode&lt;/code&gt; it. So the descent begins where every
+road out of &lt;code&gt;Exec&lt;/code&gt; began: in &lt;code&gt;Tamal.Isa&lt;/code&gt;, the instruction set itself.&lt;/p&gt;
+&lt;p&gt;This is a leaf again, read whole the way the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-crc/&quot;&gt;CRC&lt;/a&gt; and the
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-mem/&quot;&gt;memories&lt;/a&gt; were — but it is the leaf the entire engine is written
+against. Every constructor &lt;code&gt;execInstr&lt;/code&gt; matched, every field it pulled out
+with an underscore or a name, every trap that fired on a word the engine
+could not read: all of it is defined here, in one file, as a type and two
+functions that are exact inverses of each other over exactly the words
+that are legal.&lt;/p&gt;</description>
+      
+      <content:encoded>&lt;p&gt;For &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;three posts&lt;/a&gt; we held the leaves shut. We read the engine’s
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;shape&lt;/a&gt;, watched it &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;dispatch an instruction&lt;/a&gt;, and &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-bus/&quot;&gt;ran its
+wire&lt;/a&gt;, and all the while &lt;code&gt;decode&lt;/code&gt;, &lt;code&gt;dataResult&lt;/code&gt;, &lt;code&gt;branchTaken&lt;/code&gt;, and
+the rest were names with one-line jobs and no insides. Now we start
+opening them — in the order the engine reaches for each — and the
+very first thing the engine does to any word, before it can compute or
+branch or drive a pin, is &lt;code&gt;decode&lt;/code&gt; it. So the descent begins where every
+road out of &lt;code&gt;Exec&lt;/code&gt; began: in &lt;code&gt;Tamal.Isa&lt;/code&gt;, the instruction set itself.&lt;/p&gt;
+&lt;p&gt;This is a leaf again, read whole the way the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-crc/&quot;&gt;CRC&lt;/a&gt; and the
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-mem/&quot;&gt;memories&lt;/a&gt; were — but it is the leaf the entire engine is written
+against. Every constructor &lt;code&gt;execInstr&lt;/code&gt; matched, every field it pulled out
+with an underscore or a name, every trap that fired on a word the engine
+could not read: all of it is defined here, in one file, as a type and two
+functions that are exact inverses of each other over exactly the words
+that are legal.&lt;/p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;/span&gt;&lt;h2 id=&quot;the-word&quot;&gt;The word&lt;/h2&gt;
+&lt;p&gt;Every tamal instruction is exactly thirty-two bits, and those bits are
+carved into six fields the same way for every opcode. The module’s
+doc-comment draws the map:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;plain&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt; 31 30 | 29 .. 26 | 25 .. 21 | 20 .. 16 | 15 .. 11 | 10 .. 0&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt; group |   sub    |    rd    |   rs1    |   rs2    |  imm&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Two bits of &lt;strong&gt;group&lt;/strong&gt;, four of &lt;strong&gt;sub&lt;/strong&gt;, then three five-bit register
+selectors — &lt;strong&gt;rd&lt;/strong&gt;, &lt;strong&gt;rs1&lt;/strong&gt;, &lt;strong&gt;rs2&lt;/strong&gt; — and an eleven-bit &lt;strong&gt;imm&lt;/strong&gt; at
+the bottom. The group and sub together are the opcode: the group picks
+one of four families, the sub picks an operation within it. The three
+register fields and the immediate are the operands, and which of them an
+opcode actually uses depends on the opcode — the rest are &lt;em&gt;reserved&lt;/em&gt;,
+and we will see that “reserved” is a promise the decoder enforces, not a
+comment.&lt;/p&gt;
+&lt;figure class=&quot;isaw-fig&quot; style=&quot;margin:2rem 0&quot;&gt;
+&lt;svg class=&quot;isaw&quot; viewBox=&quot;0 0 760 138&quot; role=&quot;img&quot; aria-labelledby=&quot;isaw-t isaw-d&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot;&gt;
+&lt;title id=&quot;isaw-t&quot;&gt;The 32-bit tamal instruction word and its six fields&lt;/title&gt;
+&lt;desc id=&quot;isaw-d&quot;&gt;A 32-bit instruction word drawn left to right, most significant bit 31 on the left. Six fields shown in proportion to their bit counts: a two-bit group in bits 31 to 30 and a four-bit sub in bits 29 to 26 together form the opcode; then a five-bit rd in bits 25 to 21, a five-bit rs1 in bits 20 to 16, a five-bit rs2 in bits 15 to 11, and an eleven-bit imm in bits 10 to 0 are the operands.&lt;/desc&gt;
+&lt;style&gt;
+.isaw{max-width:760px;width:100%;height:auto;display:block;margin:0 auto}
+.isaw .box{fill:var(--bg-dim);stroke:var(--fg-main);stroke-width:2}
+.isaw .boxA{fill:var(--bg-dim);stroke:var(--accent);stroke-width:2.5}
+.isaw .nm{fill:var(--fg-main);font-family:var(--mono);font-size:14px}
+.isaw .nmA{fill:var(--accent);font-family:var(--mono);font-size:14px}
+.isaw .rng{fill:var(--fg-dim);font-family:var(--mono);font-size:11.5px}
+.isaw .brk{stroke:var(--fg-dim);stroke-width:1.5;fill:none}
+.isaw .brkA{stroke:var(--accent);stroke-width:1.5;fill:none}
+.isaw .cap{fill:var(--fg-dim);font-family:var(--sans);font-size:11.5px}
+.isaw .capA{fill:var(--accent);font-family:var(--sans);font-size:11.5px}
+&lt;/style&gt;
+&lt;!-- opcode / operand brackets --&gt;
+&lt;path class=&quot;brkA&quot; d=&quot;M54,50 V42 H174 V50&quot;/&gt;
+&lt;text class=&quot;capA&quot; x=&quot;114&quot; y=&quot;34&quot; text-anchor=&quot;middle&quot;&gt;opcode&lt;/text&gt;
+&lt;path class=&quot;brk&quot; d=&quot;M174,50 V42 H694 V50&quot;/&gt;
+&lt;text class=&quot;cap&quot; x=&quot;434&quot; y=&quot;34&quot; text-anchor=&quot;middle&quot;&gt;operands&lt;/text&gt;
+&lt;!-- field boxes --&gt;
+&lt;rect class=&quot;boxA&quot; x=&quot;54&quot; y=&quot;56&quot; width=&quot;40&quot; height=&quot;46&quot; rx=&quot;4&quot;/&gt;
+&lt;text class=&quot;rng&quot; x=&quot;74&quot; y=&quot;83&quot; text-anchor=&quot;middle&quot;&gt;31:30&lt;/text&gt;
+&lt;text class=&quot;nmA&quot; x=&quot;74&quot; y=&quot;122&quot; text-anchor=&quot;middle&quot;&gt;group&lt;/text&gt;
+&lt;rect class=&quot;boxA&quot; x=&quot;94&quot; y=&quot;56&quot; width=&quot;80&quot; height=&quot;46&quot; rx=&quot;4&quot;/&gt;
+&lt;text class=&quot;rng&quot; x=&quot;134&quot; y=&quot;83&quot; text-anchor=&quot;middle&quot;&gt;29:26&lt;/text&gt;
+&lt;text class=&quot;nmA&quot; x=&quot;134&quot; y=&quot;122&quot; text-anchor=&quot;middle&quot;&gt;sub&lt;/text&gt;
+&lt;rect class=&quot;box&quot; x=&quot;174&quot; y=&quot;56&quot; width=&quot;100&quot; height=&quot;46&quot; rx=&quot;4&quot;/&gt;
+&lt;text class=&quot;rng&quot; x=&quot;224&quot; y=&quot;83&quot; text-anchor=&quot;middle&quot;&gt;25:21&lt;/text&gt;
+&lt;text class=&quot;nm&quot; x=&quot;224&quot; y=&quot;122&quot; text-anchor=&quot;middle&quot;&gt;rd&lt;/text&gt;
+&lt;rect class=&quot;box&quot; x=&quot;274&quot; y=&quot;56&quot; width=&quot;100&quot; height=&quot;46&quot; rx=&quot;4&quot;/&gt;
+&lt;text class=&quot;rng&quot; x=&quot;324&quot; y=&quot;83&quot; text-anchor=&quot;middle&quot;&gt;20:16&lt;/text&gt;
+&lt;text class=&quot;nm&quot; x=&quot;324&quot; y=&quot;122&quot; text-anchor=&quot;middle&quot;&gt;rs1&lt;/text&gt;
+&lt;rect class=&quot;box&quot; x=&quot;374&quot; y=&quot;56&quot; width=&quot;100&quot; height=&quot;46&quot; rx=&quot;4&quot;/&gt;
+&lt;text class=&quot;rng&quot; x=&quot;424&quot; y=&quot;83&quot; text-anchor=&quot;middle&quot;&gt;15:11&lt;/text&gt;
+&lt;text class=&quot;nm&quot; x=&quot;424&quot; y=&quot;122&quot; text-anchor=&quot;middle&quot;&gt;rs2&lt;/text&gt;
+&lt;rect class=&quot;box&quot; x=&quot;474&quot; y=&quot;56&quot; width=&quot;220&quot; height=&quot;46&quot; rx=&quot;4&quot;/&gt;
+&lt;text class=&quot;rng&quot; x=&quot;584&quot; y=&quot;83&quot; text-anchor=&quot;middle&quot;&gt;10:0&lt;/text&gt;
+&lt;text class=&quot;nm&quot; x=&quot;584&quot; y=&quot;122&quot; text-anchor=&quot;middle&quot;&gt;imm&lt;/text&gt;
+&lt;/svg&gt;
+&lt;figcaption style=&quot;text-align:center;color:var(--fg-dim);font-size:.9rem;margin-top:.85rem;font-family:var(--sans)&quot;&gt;The 32-bit instruction word, MSB (bit 31) on the left. The two-bit &lt;code&gt;group&lt;/code&gt; and four-bit &lt;code&gt;sub&lt;/code&gt; form the opcode; &lt;code&gt;rd&lt;/code&gt;, &lt;code&gt;rs1&lt;/code&gt;, &lt;code&gt;rs2&lt;/code&gt; are five-bit register selectors and &lt;code&gt;imm&lt;/code&gt; is an eleven-bit immediate. Widths sum to exactly 32. Every opcode reads the same fields from the same bits; which operands it &lt;em&gt;uses&lt;/em&gt; is what distinguishes them, and every bit an opcode does not use is reserved-must-be-zero.&lt;/figcaption&gt;
+&lt;/figure&gt;
+&lt;p&gt;The register fields are five bits wide, and that width is a small piece of
+the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-introducing/&quot;&gt;RISC-V flavour&lt;/a&gt; the project borrows:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;-- |&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; A 5-bit register selector (RISC-V-standard field width). v1 uses x0..x15.&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;type&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Reg&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 5&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Five bits can name thirty-two registers; v1 implements sixteen and lets
+the top bit go unused, so &lt;code&gt;Reg&lt;/code&gt; is wider than the register file behind it.
+That is deliberate room to grow, and it means a register selector is just
+five bits of a word — not yet an index into anything, only a name. The
+thing it names is the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;next post’s&lt;/a&gt; subject; here it is a field.&lt;/p&gt;
+&lt;h2 id=&quot;one-constructor-per-opcode&quot;&gt;One constructor per opcode&lt;/h2&gt;
+&lt;p&gt;The instruction set is a Haskell data type. Every opcode is a
+constructor, and every constructor carries exactly the operands its opcode
+uses — no more, so the type itself refuses to build an &lt;code&gt;Add&lt;/code&gt; without
+three registers or a &lt;code&gt;Halt&lt;/code&gt; without a status:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Instr&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  =&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; BUS group (group 00)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;    CsAssert&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; CsDeassert&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; PutByteImm&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; PutByteReg&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Reg&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; GetByte&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Reg&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; PutBitsImm&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Index&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;  --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; n-1, bits (n = count in 1..8)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; PutBitsReg&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Reg&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Index&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; GetBits&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Reg&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Index&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; TarImm&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 4&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; TarReg&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Reg&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; RstAssert&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; RstDeassert&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; GetAlert&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Reg&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; CTRL group (group 01)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;    Halt&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Beq&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Reg&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Reg&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 11&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Bne&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Reg&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Reg&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 11&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Bltu&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Reg&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Reg&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 11&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Bgeu&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Reg&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Reg&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 11&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; WaitOn&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Reg&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 2&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 9&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;  --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; rd, cond, timeout&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; SetConfig&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 6&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Mark&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 11&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Reg&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;               --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; label, payload reg&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; CrcReset&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; DATA group (group 10)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;    LoadImm&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Reg&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 21&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Lui&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Reg&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 21&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Mov&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Reg&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Reg&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Add&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Reg&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Reg&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Reg&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Addi&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Reg&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Reg&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 11&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Sub&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Reg&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Reg&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Reg&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;  --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; … And_, Andi, Or_, Ori, Xor_, Xori, all Reg Reg (Reg | imm) …&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Shift&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Reg&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Reg&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 2&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 5&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;  --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; rd, rs1, op, amt&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Rdsr&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Reg&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 5&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;                     --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; rd, sr#&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  deriving&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; stock&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Generic&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Show&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Eq&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  deriving&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; anyclass&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;NFDataX&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Thirty-six constructors, three groups, and every one of them is a name you
+have already seen &lt;code&gt;execInstr&lt;/code&gt; &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;match on&lt;/a&gt;. The grouping is the
+opcode’s top structure made into comments: &lt;code&gt;group 00&lt;/code&gt; is BUS, the
+thirteen opcodes that touch the wire; &lt;code&gt;group 01&lt;/code&gt; is CTRL, the nine for
+flow and configuration; &lt;code&gt;group 10&lt;/code&gt; is DATA, the fourteen that compute. The
+fourth group, &lt;code&gt;11&lt;/code&gt;, has no constructors at all — it is reserved, and a
+word in it decodes to nothing.&lt;/p&gt;
+&lt;p&gt;Read the operand types and the encoding starts to show through the ADT.
+&lt;code&gt;PutByteImm&lt;/code&gt; carries a &lt;code&gt;BitVector 8&lt;/code&gt;, the byte it will drive. &lt;code&gt;Beq&lt;/code&gt; carries
+two &lt;code&gt;Reg&lt;/code&gt;s and a &lt;code&gt;BitVector 11&lt;/code&gt;, the two sources and the branch offset —
+the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;PC arithmetic from the dispatch post&lt;/a&gt; operated on exactly that
+eleven-bit field. &lt;code&gt;PutBitsImm&lt;/code&gt; carries an &lt;code&gt;Index 8&lt;/code&gt; &lt;em&gt;and&lt;/em&gt; a byte, because
+“put n bits” needs both a count and the bits; the comment &lt;code&gt;n-1&lt;/code&gt; warns that
+the field holds one less than the count, a detail the encoder will handle.
+And &lt;code&gt;LoadImm&lt;/code&gt; carries a &lt;code&gt;BitVector 21&lt;/code&gt; — a twenty-one-bit immediate, wider
+than the eleven-bit &lt;code&gt;imm&lt;/code&gt; field, which is the one interesting packing
+problem in the whole module. Hold that thought; the encoder solves it in
+two lines.&lt;/p&gt;
+&lt;p&gt;Beside &lt;code&gt;Instr&lt;/code&gt; sits the type that says why a word was &lt;em&gt;not&lt;/em&gt; an
+instruction:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; DecodeError&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; ReservedFieldNonZero&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; OpcodeUnimplemented&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; IllegalOpcode&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  deriving&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; stock&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Generic&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Show&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Eq&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  deriving&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; anyclass&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;NFDataX&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Three ways to fail: a reserved field that was not zero, an opcode
+recognised but not yet built, an opcode that is illegal outright. These
+are the &lt;code&gt;Left&lt;/code&gt; the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;dispatch post’s&lt;/a&gt; &lt;code&gt;stepExec&lt;/code&gt; turned into a
+trap&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-unimpl-1&quot;&gt;&lt;a href=&quot;https://balbi.sh/posts/tamal-isa/#fn-unimpl&quot;&gt;[1]&lt;/a&gt;&lt;/sup&gt; — and now we are on the other side of that &lt;code&gt;Left&lt;/code&gt;, in the
+code that produces it.&lt;/p&gt;
+&lt;h2 id=&quot;encode-the-easy-direction&quot;&gt;Encode: the easy direction&lt;/h2&gt;
+&lt;p&gt;Turning an &lt;code&gt;Instr&lt;/code&gt; into a word is the easy half, because an &lt;code&gt;Instr&lt;/code&gt; is
+already valid by construction — the type would not let you build a
+malformed one — so the encoder only has to &lt;em&gt;place&lt;/em&gt; the operands and
+zero everything else. It is a total &lt;code&gt;\case&lt;/code&gt;, one arm per constructor, and
+every arm calls the same helper:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;encode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Instr&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;encode &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; \&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;case&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  CsAssert&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;       -&amp;gt;&lt;/span&gt;&lt;span&gt; joinW &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0b00&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0x0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  PutByteImm&lt;/span&gt;&lt;span&gt; b   &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span&gt; joinW &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0b00&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0x2&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; zeroExtend b&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  GetByte&lt;/span&gt;&lt;span&gt; rd     &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span&gt; joinW &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0b00&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0x4&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; rd&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  Beq&lt;/span&gt;&lt;span&gt; a b off    &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span&gt; joinW &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0b01&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0x1&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; a&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; b&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; off&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  WaitOn&lt;/span&gt;&lt;span&gt; rd c t  &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span&gt; joinW &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0b01&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0x5&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; rd&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; bitCoerce &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;c&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; t&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  Add&lt;/span&gt;&lt;span&gt; rd a b     &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span&gt; joinW &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0b10&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0x3&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; rd&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; a&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; b&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;  Shift&lt;/span&gt;&lt;span&gt; rd a op a5 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span&gt; joinW &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0b10&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0xC&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; rd&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; a&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; bitCoerce &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;op&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 4&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; a5&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;  --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; … thirty-odd arms in the same shape …&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Every arm reads the same way: pick the &lt;code&gt;group&lt;/code&gt; and &lt;code&gt;sub&lt;/code&gt; that name the
+opcode, drop the operands into their fields, and put &lt;code&gt;0&lt;/code&gt; everywhere else.
+&lt;code&gt;CsAssert&lt;/code&gt; has no operands, so it is all opcode and zeros. &lt;code&gt;GetByte&lt;/code&gt; uses
+only &lt;code&gt;rd&lt;/code&gt;. &lt;code&gt;Beq&lt;/code&gt; fills &lt;code&gt;rs1&lt;/code&gt;, &lt;code&gt;rs2&lt;/code&gt;, and &lt;code&gt;imm&lt;/code&gt; with its two sources and
+its offset, and leaves &lt;code&gt;rd&lt;/code&gt; zero. The zeros are the reserved fields, and
+the encoder writes them faithfully — which is what makes a decode able
+to &lt;em&gt;check&lt;/em&gt; them later.&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;joinW&lt;/code&gt; is the field-packer, and it is one of a small family of functions
+that are all the same trick:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;type&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Fields&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 2&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 4&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 5&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 5&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 5&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 11&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;splitWord&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Fields&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;splitWord &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; bitCoerce&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;joinW&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Fields&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;joinW &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; bitCoerce&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;Fields&lt;/code&gt; is the word’s six fields as a tuple, and &lt;code&gt;joinW&lt;/code&gt; and &lt;code&gt;splitWord&lt;/code&gt;
+are both just &lt;code&gt;bitCoerce&lt;/code&gt; — the same &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-bus/&quot;&gt;structural bit-reinterpretation the
+trace records used&lt;/a&gt; to pack a tag and a payload into one word. Here it
+lays six fields end to end into thirty-two bits, or takes them back apart,
+and the type system checks the arithmetic: &lt;code&gt;2 + 4 + 5 + 5 + 5 + 11 = 32&lt;/code&gt;,
+so the coercion is total and lossless, a reshaping of bits with nothing
+added and nothing dropped.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-bitcoerce-1&quot;&gt;&lt;a href=&quot;https://balbi.sh/posts/tamal-isa/#fn-bitcoerce&quot;&gt;[2]&lt;/a&gt;&lt;/sup&gt; &lt;code&gt;WaitOn&lt;/code&gt; and &lt;code&gt;Shift&lt;/code&gt; reach for
+&lt;code&gt;bitCoerce&lt;/code&gt; a second time, to pack &lt;em&gt;sub-fields&lt;/em&gt; of the immediate — a
+condition and a timeout, or a shift-op and an amount — into the eleven
+bits they share.&lt;/p&gt;
+&lt;p&gt;And the twenty-one-bit immediate that did not fit? It is split across the
+three fields nobody else was using:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;joinImm21&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 5&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 5&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 11&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 21&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;joinImm21 rs1 rs2 imm &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; bitCoerce &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;rs1 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;++&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;#&lt;/span&gt;&lt;span&gt; rs2 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;++&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;#&lt;/span&gt;&lt;span&gt; imm&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;LoadImm&lt;/code&gt; and &lt;code&gt;Lui&lt;/code&gt; have no register sources, so &lt;code&gt;rs1&lt;/code&gt;, &lt;code&gt;rs2&lt;/code&gt;, and &lt;code&gt;imm&lt;/code&gt;
+— five plus five plus eleven — sit empty and adjacent, exactly
+twenty-one bits, exactly the room a wide immediate needs. The encoder
+glues them into one &lt;code&gt;BitVector 21&lt;/code&gt; on the way out and the decoder splits
+them back on the way in. It is a small, satisfying piece of format design:
+the widest immediate in the ISA is carved out of the fields the
+immediate-loading opcodes had no other use for.&lt;/p&gt;
+&lt;h2 id=&quot;decode-and-the-reserved-zero&quot;&gt;Decode, and the reserved zero&lt;/h2&gt;
+&lt;p&gt;Decoding is the hard direction, because now the input is &lt;em&gt;any&lt;/em&gt; thirty-two
+bits, most of which are not valid instructions, and the decoder has to
+tell which is which. It begins by splitting the word and dispatching on the
+group:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;decode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Either&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; DecodeError&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Instr&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;decode w &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  case&lt;/span&gt;&lt;span&gt; grp &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;of&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;    0b00&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; decodeBus sub&amp;#39; rd rs1 rs2 imm&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;    0b01&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; decodeCtrl sub&amp;#39; rd rs1 rs2 imm&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;    0b10&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; decodeData sub&amp;#39; rd rs1 rs2 imm&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    _ &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Left&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; IllegalOpcode&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; group 11 reserved&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; where&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;/span&gt;&lt;span&gt;grp&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; sub&amp;#39;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; rd&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; rs1&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; rs2&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; imm&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; splitWord w&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;splitWord&lt;/code&gt; takes the word apart into the six fields — the inverse of the
+&lt;code&gt;joinW&lt;/code&gt; the encoder used — and the group selects one of three per-group
+decoders, or, for the reserved group &lt;code&gt;11&lt;/code&gt;, rejects outright. Each
+per-group decoder is a &lt;code&gt;case&lt;/code&gt; on the sub-opcode that rebuilds the
+constructor. But rebuilding is not enough: the decoder must also &lt;em&gt;refuse&lt;/em&gt; a
+word whose reserved fields are not zero, and that refusal is the heart of
+the module. It runs through one tiny guard:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;only&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bool&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Instr&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Either&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; DecodeError&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Instr&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;only ok r &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; if&lt;/span&gt;&lt;span&gt; ok &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;then&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Right&lt;/span&gt;&lt;span&gt; r &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;else&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Left&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; ReservedFieldNonZero&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;only&lt;/code&gt; takes a condition and an instruction and hands back the instruction
+&lt;em&gt;only&lt;/em&gt; when the condition holds. The condition is always the same kind of
+thing — “every field this opcode does not use is zero” — and you can
+read it plainly in the BUS decoder:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;decodeBus sub&amp;#39; rd rs1 rs2 imm &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  case&lt;/span&gt;&lt;span&gt; sub&amp;#39; &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;of&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;    0x0&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; only &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;z rd &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt;&lt;span&gt; z rs1 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt;&lt;span&gt; z rs2 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt;&lt;span&gt; z imm&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; CsAssert&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;       --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; no operands&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;    0x2&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; only &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;z rd &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt;&lt;span&gt; z rs1 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt;&lt;span&gt; z rs2 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt;&lt;span&gt; immHi8 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;PutByteImm&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;truncateB imm&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;    0x3&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; only &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;z rd &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt;&lt;span&gt; z rs2 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt;&lt;span&gt; z imm&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;PutByteReg&lt;/span&gt;&lt;span&gt; rs1&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;         --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; rs1 used&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;    0x4&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; only &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;z rs1 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt;&lt;span&gt; z rs2 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt;&lt;span&gt; z imm&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;GetByte&lt;/span&gt;&lt;span&gt; rd&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;            --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; rd used&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;    --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; …&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;    0xc&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; only &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;z rs1 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt;&lt;span&gt; z rs2 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt;&lt;span&gt; z imm&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;GetAlert&lt;/span&gt;&lt;span&gt; rd&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    _ &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Left&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; IllegalOpcode&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; where&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  z &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  immHi8 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; slice d10 d8 imm  &lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; imm[10:8] reserved for PUT_BYTE&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;z&lt;/code&gt; is “is zero.” Every arm names the fields its opcode &lt;em&gt;uses&lt;/em&gt; and asserts
+&lt;code&gt;z&lt;/code&gt; on all the others. &lt;code&gt;CsAssert&lt;/code&gt; uses nothing, so all four operand fields
+must be zero. &lt;code&gt;GetByte&lt;/code&gt; uses &lt;code&gt;rd&lt;/code&gt;, so &lt;code&gt;rs1&lt;/code&gt;, &lt;code&gt;rs2&lt;/code&gt;, and &lt;code&gt;imm&lt;/code&gt; must be zero.
+&lt;code&gt;PutByteImm&lt;/code&gt; uses the low eight bits of &lt;code&gt;imm&lt;/code&gt; for its byte and reserves
+the top three — &lt;code&gt;immHi8 == 0&lt;/code&gt; — so a &lt;code&gt;PUT_BYTE&lt;/code&gt; word with junk in
+&lt;code&gt;imm[10:8]&lt;/code&gt; is rejected even though its opcode is real. The decoder is
+strict about the whole word, not just the opcode: a legal instruction is a
+legal opcode &lt;em&gt;and&lt;/em&gt; clean reserved bits. &lt;code&gt;decodeCtrl&lt;/code&gt; and &lt;code&gt;decodeData&lt;/code&gt; are
+the same shape at greater length, each checking the exact bits its
+opcodes leave unused — &lt;code&gt;HALT&lt;/code&gt; reserving &lt;code&gt;imm[10:8]&lt;/code&gt;, &lt;code&gt;SET_CONFIG&lt;/code&gt;
+reserving &lt;code&gt;imm[10:6]&lt;/code&gt;, the reserved shift-op &lt;code&gt;0b11&lt;/code&gt; refused, and so on.&lt;/p&gt;
+&lt;h2 id=&quot;total-both-ways&quot;&gt;Total, both ways&lt;/h2&gt;
+&lt;p&gt;Why be this strict? Because the strictness buys two laws, and the two laws
+are what make an instruction encoding trustworthy.&lt;/p&gt;
+&lt;p&gt;The first is the &lt;strong&gt;round trip&lt;/strong&gt;: &lt;code&gt;decode (encode i) == Right i&lt;/code&gt;. Encode any
+instruction and decode the result and you get the instruction back. This
+is nearly free — the encoder places operands and zeroes reserved fields,
+the decoder reads operands and checks reserved fields are zero, so of
+course they agree. It says the encoder and decoder are inverses on the
+instructions.&lt;/p&gt;
+&lt;p&gt;The second is deeper and is the one the reserved zero is really for:
+&lt;strong&gt;canonicity&lt;/strong&gt;. Over &lt;em&gt;every&lt;/em&gt; thirty-two-bit word — not just the ones the
+encoder produces, but all four billion of them — any word &lt;code&gt;decode&lt;/code&gt;
+accepts re-encodes to itself: &lt;code&gt;encode (decode w) == w&lt;/code&gt; whenever &lt;code&gt;decode w&lt;/code&gt;
+succeeds. There are no two words that decode to the same instruction,
+because the only words decode accepts are the ones with zero reserved
+fields, which is exactly the set the encoder emits. Drop the reserved-field
+checks and this law dies: a hundred different &lt;code&gt;imm[10:8]&lt;/code&gt; values would all
+decode to the same &lt;code&gt;PUT_BYTE&lt;/code&gt;, the mapping would be many-to-one, and the
+word would no longer be a &lt;em&gt;canonical&lt;/em&gt; name for the instruction. The
+&lt;code&gt;only&lt;/code&gt; guard is what keeps the correspondence one-to-one.&lt;/p&gt;
+&lt;p&gt;And under both laws sits totality. &lt;code&gt;decode :: BitVector 32 -&amp;gt; Either DecodeError Instr&lt;/code&gt; is a total function: every one of the $2^{32}$ possible
+words has a defined answer, an &lt;code&gt;Instr&lt;/code&gt; or a named error, with no partial
+case, no crash, no loop. That is the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-haskell-primer/&quot;&gt;primer’s&lt;/a&gt; “totality is a
+truth table” cashed at scale — decode is a four-billion-row truth table,
+which in hardware is exactly what it becomes: a combinational decoder that
+wires every input pattern to an output.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-truthtable-1&quot;&gt;&lt;a href=&quot;https://balbi.sh/posts/tamal-isa/#fn-truthtable&quot;&gt;[3]&lt;/a&gt;&lt;/sup&gt; The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;dispatch
+post’s&lt;/a&gt; &lt;code&gt;Left -&amp;gt; trap&lt;/code&gt; was this totality made visible from the
+outside: because decode has a defined answer for &lt;em&gt;every&lt;/em&gt; word, a corrupted
+or malicious program cannot reach an undefined state through the front
+door. Every word either is an instruction or is a trap with a reason.&lt;/p&gt;
+&lt;h2 id=&quot;a-decode-within-the-decode&quot;&gt;A decode within the decode&lt;/h2&gt;
+&lt;p&gt;One BUS-group neighbour we passed over has an inside of its own.
+&lt;code&gt;SetConfig&lt;/code&gt; carries a &lt;code&gt;BitVector 6&lt;/code&gt;, and back in the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;dispatch post&lt;/a&gt;
+its arm ran that payload through &lt;code&gt;decodeConfig&lt;/code&gt; and trapped on a &lt;code&gt;Left&lt;/code&gt;.
+That function lives in &lt;code&gt;Tamal.Config&lt;/code&gt;, and it is the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;fold-in this post
+promised&lt;/a&gt; — because decoding a configuration payload is the same
+act as decoding an instruction, one level down.&lt;/p&gt;
+&lt;p&gt;The shape is identical: a total function from a bitfield to &lt;code&gt;Either&lt;/code&gt; an
+error or a typed value.&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;decodeConfig&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 6&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Either&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; ConfigError&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Config&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;decodeConfig p &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  case&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;role&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; io&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; sck&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; of&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    (&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0b0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0b00&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0b00&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Right&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Config&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Controller&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; X1&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Sck20&lt;/span&gt;&lt;span&gt; alertSrc&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    (&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0b1&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; _&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; _&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;         -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Left&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; UnsupportedRole&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    (&lt;/span&gt;&lt;span&gt;_&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; io&amp;#39;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; _&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; |&lt;/span&gt;&lt;span&gt; io&amp;#39; &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;/=&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0b00&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Left&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; UnsupportedIoMode&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    _                   &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Left&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; UnsupportedSck&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; where&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;/span&gt;&lt;span&gt;role&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; io&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; sck&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; alert&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; bitCoerce p &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 2&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 2&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  alertSrc &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; if&lt;/span&gt;&lt;span&gt; alert &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; then&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; AlertPin&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; else&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; AlertIo1&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Six bits come apart by &lt;code&gt;bitCoerce&lt;/code&gt; — the same field-split, smaller — into
+a one-bit role, a two-bit I/O mode, a two-bit clock, and a one-bit alert
+source. And then the striking part: only &lt;em&gt;one&lt;/em&gt; combination is accepted.
+&lt;code&gt;(0b0, 0b00, 0b00)&lt;/code&gt; — controller role, single I/O, 20 MHz — decodes to a
+&lt;code&gt;Config&lt;/code&gt;; every other role traps &lt;code&gt;UnsupportedRole&lt;/code&gt;, every other I/O mode
+&lt;code&gt;UnsupportedIoMode&lt;/code&gt;, every other clock &lt;code&gt;UnsupportedSck&lt;/code&gt;. The values it
+decodes into are a little vocabulary of their own:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Role&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;        =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Controller&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Target&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; IoMode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;      =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; X1&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; X2&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; X4&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Sck&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;         =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Sck20&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Sck33&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Sck50&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Sck66&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; AlertSource&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; AlertPin&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; |&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; AlertIo1&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Config&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Config&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  {&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; cfgRole&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Role&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; cfgIoMode&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; IoMode&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; cfgSck&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Sck&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; cfgAlertSource&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; AlertSource&lt;/span&gt;&lt;span&gt; }&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The types describe the &lt;em&gt;whole&lt;/em&gt; eSPI configuration space — &lt;code&gt;Target&lt;/code&gt;,
+&lt;code&gt;X2&lt;/code&gt;/&lt;code&gt;X4&lt;/code&gt;, the faster clocks — but &lt;code&gt;decodeConfig&lt;/code&gt; accepts only the corner
+of it v1 actually implements, and names the rest as errors rather than
+pretending they work. This is the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-introducing/&quot;&gt;introduction’s&lt;/a&gt; honesty line
+turned into code: the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;shape post’s&lt;/a&gt; &lt;code&gt;powerUpDefault&lt;/code&gt; — controller,
+x1, 20 MHz, alert pin — is the one config that decodes, and the alert
+source is the single bit v1 lets you actually choose. The reserved-zero
+discipline of the ISA has a cousin here: a config the engine cannot honour
+is refused at decode, so &lt;code&gt;SET_CONFIG&lt;/code&gt; can never quietly leave the engine in
+a mode its gates do not implement. It traps instead, &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;reason two&lt;/a&gt;.&lt;/p&gt;
+&lt;h2 id=&quot;the-tests&quot;&gt;The tests&lt;/h2&gt;
+&lt;p&gt;A module whose whole job is a bijection over a word space is a module you
+can test &lt;em&gt;completely&lt;/em&gt;, and &lt;code&gt;Test.Isa&lt;/code&gt; does, from both directions at once.
+The round trips are one property per group:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;testProperty &lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;BUS: decode . encode == Right&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; $&lt;/span&gt;&lt;span&gt; property &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; do&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  i &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;-&lt;/span&gt;&lt;span&gt; forAll genBusInstr&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  decode &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;encode i&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ===&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Right&lt;/span&gt;&lt;span&gt; i&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https://hedgehog.qa&quot;&gt;Hedgehog&lt;/a&gt; draws a random instruction, encodes it, decodes the
+result, and demands the original back — the first law, checked across
+hundreds of generated instructions per group. But the property that earns
+its keep is the second one, and it runs over the &lt;em&gt;whole word space&lt;/em&gt;, not
+the image of the encoder:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;testProperty &lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;any 32-bit word: decode is canonical or traps&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; $&lt;/span&gt;&lt;span&gt; property &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; do&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  w &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;-&lt;/span&gt;&lt;span&gt; forAll genWord&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  case&lt;/span&gt;&lt;span&gt; decode w &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;of&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;    Right&lt;/span&gt;&lt;span&gt; i &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span&gt; encode i &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;===&lt;/span&gt;&lt;span&gt; w&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;    Left&lt;/span&gt;&lt;span&gt; _  &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span&gt; success&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Read what this checks. Draw &lt;em&gt;any&lt;/em&gt; thirty-two-bit word — valid or
+garbage, any group, any junk in any reserved field. If &lt;code&gt;decode&lt;/code&gt; rejects it,
+fine, &lt;code&gt;success&lt;/code&gt;. But if &lt;code&gt;decode&lt;/code&gt; &lt;em&gt;accepts&lt;/em&gt; it, the accepted instruction
+must re-encode to the very word we started from. That is canonicity stated
+as a test: there is no word decode accepts that is not the encoder’s own
+output for that instruction. A single too-lax reserved-field check — one
+&lt;code&gt;only&lt;/code&gt; that forgot a field — and Hedgehog would find a word that decodes
+to an instruction whose encoding differs, and the property would go red
+with the counterexample in hand. It is the reserved zero, guarded from the
+outside.&lt;/p&gt;
+&lt;p&gt;Two &lt;code&gt;HUnit&lt;/code&gt; cases pin the reserved discipline to specific words:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;testCase &lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;reserved non-zero field traps (CS_ASSERT with junk imm)&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; $&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  decode &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;busWord &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0b00&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0x0&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; +&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; @?=&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Left&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; ReservedFieldNonZero&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;testCase &lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;reserved SHIFT op (0b11) traps&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; $&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  decode &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;encode &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Shift&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0b11&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; @?=&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Left&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; ReservedFieldNonZero&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The first takes a clean &lt;code&gt;CS_ASSERT&lt;/code&gt; word and sets one reserved bit; it must
+trap. The second is sharper: &lt;code&gt;encode&lt;/code&gt; never validates, so it will happily
+build a &lt;code&gt;SHIFT&lt;/code&gt; word with the reserved op &lt;code&gt;0b11&lt;/code&gt; — and the tightened
+decoder must reject what the encoder was willing to write. That gap between
+a permissive encoder and a strict decoder is the safe direction to err:
+the engine only ever runs &lt;code&gt;decode&lt;/code&gt;, so the decoder is the gate, and the
+test proves the gate is shut.&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;Test.Config&lt;/code&gt; does the same for the fold-in, five cases wide: the v1
+default decodes, the in-band alert source decodes, and target role, dual
+I/O, and 33 MHz each trap with their own error. The whole legal surface
+and three witnesses that the illegal surface is refused.&lt;/p&gt;
+&lt;h2 id=&quot;what-we-read&quot;&gt;What we read&lt;/h2&gt;
+&lt;p&gt;The first box, opened. The instruction set is a thirty-two-bit word in six
+fields, a data type with one constructor per opcode across three groups and
+a reserved fourth, and two functions that are inverses over exactly the
+legal words. &lt;code&gt;encode&lt;/code&gt; is the easy direction — an &lt;code&gt;Instr&lt;/code&gt; is valid by
+construction, so encoding only places operands and zeroes the reserved
+fields, &lt;code&gt;bitCoerce&lt;/code&gt; doing the packing the way it packed the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-bus/&quot;&gt;trace
+records&lt;/a&gt;, the widest immediate carved from the fields its opcodes left
+spare. &lt;code&gt;decode&lt;/code&gt; is the hard one, dispatching on the group and accepting a
+word &lt;em&gt;only&lt;/em&gt; when every reserved field is zero — and that strictness buys
+the round trip, canonicity, and a totality that gives every one of four
+billion words a defined home, which is the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-exec/&quot;&gt;trap&lt;/a&gt; seen from the
+inside. The folded &lt;code&gt;Config&lt;/code&gt; is the same function one level down, six bits
+to a role and a mode and a clock, accepting the single corner v1
+implements and naming the rest as errors. And the tests check the bijection
+across the whole word space, not a sample of it.&lt;/p&gt;
+&lt;p&gt;We opened &lt;code&gt;decode&lt;/code&gt; because it was the engine’s first act on any word. Its
+last act on that word — once decoded, the very next thing &lt;code&gt;execInstr&lt;/code&gt;
+did — was to read the registers the operands named: &lt;code&gt;readReg (regs s) (operandRs1 i)&lt;/code&gt;. Those register selectors were &lt;code&gt;Reg&lt;/code&gt;s, the five-bit fields
+we met at the top of this post, still only &lt;em&gt;names&lt;/em&gt;. Next we open the thing
+they name: &lt;code&gt;Tamal.RegFile&lt;/code&gt;, the sixteen registers, the hardwired zero, and
+the two ports the datapath read and wrote through the whole time we were
+holding it shut.&lt;/p&gt;
+&lt;section class=&quot;footnotes&quot;&gt;
+&lt;ol class=&quot;footnotes-list&quot;&gt;
+&lt;li id=&quot;fn-unimpl&quot;&gt;
+&lt;p&gt;&lt;code&gt;OpcodeUnimplemented&lt;/code&gt; is the one &lt;code&gt;DecodeError&lt;/code&gt; the current
+decoders never actually return — they reject with &lt;code&gt;IllegalOpcode&lt;/code&gt; (an
+unknown sub-opcode, or the reserved group) or &lt;code&gt;ReservedFieldNonZero&lt;/code&gt; (a
+dirty reserved field). It exists in the type for the case of an opcode that
+is &lt;em&gt;recognised&lt;/em&gt; but not yet built, so that a future partial implementation
+can distinguish “this is not an instruction” from “this is an instruction I
+have not finished.” Declaring the variant now costs nothing and reserves
+the vocabulary; the engine treats all three the same way, as a trap. &lt;a href=&quot;https://balbi.sh/posts/tamal-isa/#fr-unimpl-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id=&quot;fn-bitcoerce&quot;&gt;
+&lt;p&gt;&lt;code&gt;bitCoerce&lt;/code&gt; is Clash’s total, zero-cost reinterpretation of a
+value as another type of the &lt;em&gt;same bit width&lt;/em&gt; — it is &lt;code&gt;pack&lt;/code&gt; followed by
+&lt;code&gt;unpack&lt;/code&gt;, and it lowers to no gates at all, only a relabelling of wires.
+The safety is entirely in the widths: &lt;code&gt;joinW :: Fields -&amp;gt; BitVector 32&lt;/code&gt;
+typechecks only because the six fields sum to thirty-two, so a field-layout
+error is a compile error, not a silently truncated word. It is the same
+“widths live in the type” guarantee the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-haskell-primer/&quot;&gt;primer&lt;/a&gt; opened with, doing the
+load-bearing work in a format definition — the reason the ISA can be
+described as tuples of &lt;code&gt;BitVector&lt;/code&gt;s and trusted to pack correctly. &lt;a href=&quot;https://balbi.sh/posts/tamal-isa/#fr-bitcoerce-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id=&quot;fn-truthtable&quot;&gt;
+&lt;p&gt;The hardware reading matters because &lt;code&gt;decode&lt;/code&gt; is not a
+program the engine runs step by step — it is a combinational function the
+&lt;code&gt;Fetch&lt;/code&gt;-to-&lt;code&gt;Exec&lt;/code&gt; boundary evaluates in a single cycle. Clash turns the
+nested &lt;code&gt;case&lt;/code&gt;s into a tree of multiplexers and comparators: the group
+selects a per-group decoder, the sub selects an arm, the reserved-field
+tests become AND-reductions over the unused bits. There is no loop and no
+sequencing, because a truth table has none; the whole of &lt;code&gt;decode&lt;/code&gt; is one
+wide slab of logic that turns thirty-two input wires into a decoded
+instruction and a valid bit, every cycle, for whatever word &lt;code&gt;Fetch&lt;/code&gt;
+happened to hand it. &lt;a href=&quot;https://balbi.sh/posts/tamal-isa/#fr-truthtable-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/section&gt;
+</content:encoded>
+    </item>
+    
+  </channel>
+</rss>
