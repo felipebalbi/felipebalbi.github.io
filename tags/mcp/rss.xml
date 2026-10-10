@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"
+     xmlns:atom="http://www.w3.org/2005/Atom"
+     xmlns:content="http://purl.org/rss/1.0/modules/content/"
+     xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Felipe Balbi</title>
+    <link>https://balbi.sh</link>
+    <description>Notes on embedded systems, Rust, and the craft of writing software.</description>
+    <generator>Zola</generator>
+    <language>en</language>
+    <lastBuildDate>Tue, 28 Jul 2026 20:00:00 +0000</lastBuildDate>
+    <atom:link href="https://balbi.sh/tags/mcp/rss.xml" rel="self" type="application/rss+xml"/>
+    
+    <item>
+      <title>Agentic Gallo: Introducing gallo-mcp</title>
+      <link>https://balbi.sh/posts/gallo-mcp-introducing/</link>
+      <guid isPermaLink="true">https://balbi.sh/posts/gallo-mcp-introducing/</guid>
+      <pubDate>Tue, 28 Jul 2026 20:00:00 +0000</pubDate>
+      <dc:creator>Felipe Balbi</dc:creator>
+      <description>&lt;p&gt;&lt;a href=&quot;/pico-de-gallo/&quot;&gt;Pico de Gallo&lt;/a&gt; turns an RP2350 into a USB-attached bridge that
+lets a host program drive real I²C, SPI, UART, GPIO, PWM, ADC, and
+1-Wire straight from your laptop — so you can write and test device
+drivers in &lt;code&gt;std&lt;/code&gt; Rust, C, or Python instead of cross-compiling for an
+MCU every time. Today there’s a new way to reach that hardware, and it
+isn’t for you: &lt;a rel=&quot;external&quot; href=&quot;https://crates.io/crates/gallo-mcp&quot;&gt;&lt;code&gt;gallo-mcp&lt;/code&gt;&lt;/a&gt; is a &lt;a rel=&quot;external&quot; href=&quot;https://modelcontextprotocol.io/&quot;&gt;Model Context Protocol&lt;/a&gt;
+server that hands the board to the AI agent writing your driver.&lt;/p&gt;</description>
+      
+      <content:encoded>&lt;p&gt;&lt;a href=&quot;/pico-de-gallo/&quot;&gt;Pico de Gallo&lt;/a&gt; turns an RP2350 into a USB-attached bridge that
+lets a host program drive real I²C, SPI, UART, GPIO, PWM, ADC, and
+1-Wire straight from your laptop — so you can write and test device
+drivers in &lt;code&gt;std&lt;/code&gt; Rust, C, or Python instead of cross-compiling for an
+MCU every time. Today there’s a new way to reach that hardware, and it
+isn’t for you: &lt;a rel=&quot;external&quot; href=&quot;https://crates.io/crates/gallo-mcp&quot;&gt;&lt;code&gt;gallo-mcp&lt;/code&gt;&lt;/a&gt; is a &lt;a rel=&quot;external&quot; href=&quot;https://modelcontextprotocol.io/&quot;&gt;Model Context Protocol&lt;/a&gt;
+server that hands the board to the AI agent writing your driver.&lt;/p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;/span&gt;&lt;h2 id=&quot;one-tool-per-peripheral-over-stdio&quot;&gt;One tool per peripheral, over stdio&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;gallo-mcp&lt;/code&gt; runs an MCP server over stdio, wraps
+&lt;a rel=&quot;external&quot; href=&quot;https://crates.io/crates/pico-de-gallo-lib&quot;&gt;&lt;code&gt;pico-de-gallo-lib&lt;/code&gt;&lt;/a&gt;, and exposes one tool for every peripheral
+operation across all seven buses. Point an MCP-capable agent at it and
+the model can probe and drive real silicon through the same board the
+&lt;code&gt;gallo&lt;/code&gt; CLI talks to — read a sensor register, scan a bus, toggle a
+pin — while it’s writing the driver, without cross-compiling or
+flashing anything.&lt;/p&gt;
+&lt;p&gt;That closes a loop that used to need a human in the middle. Instead of
+you running &lt;code&gt;gallo i2c scan&lt;/code&gt;, pasting the output into the chat, and
+asking “now what?”, the agent can:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;explore an unfamiliar device interactively,&lt;/li&gt;
+&lt;li&gt;generate register-level driver code and validate it against the
+actual chip, and&lt;/li&gt;
+&lt;li&gt;turn “what does this chip return?” into a tool call it makes itself.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id=&quot;wiring-it-into-a-client&quot;&gt;Wiring it into a client&lt;/h2&gt;
+&lt;p&gt;Install the server:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;shellsession&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;$&lt;/span&gt;&lt;span&gt; cargo install gallo-mcp&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;gallo-mcp&lt;/code&gt; speaks MCP on &lt;strong&gt;stdout&lt;/strong&gt; and logs to &lt;strong&gt;stderr&lt;/strong&gt;, so it’s
+meant to be launched by a client, not run by hand. Add it as a local
+(stdio) server. These config files are safe to commit per project, so
+the tools show up only in the repos that opt in:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;json&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;//&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; opencode.json&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;{&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;$schema&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;https://opencode.ai/config.json&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;mcp&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;pico-de-gallo&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;type&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;local&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;command&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;gallo-mcp&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;enabled&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt; true&lt;/span&gt;&lt;span&gt; }&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  }&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;json&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;//&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; Claude Code — .mcp.json&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;mcpServers&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;pico-de-gallo&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;command&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;gallo-mcp&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;args&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt; }&lt;/span&gt;&lt;span&gt; }&lt;/span&gt;&lt;span&gt; }&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;json&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;//&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; Cursor — .cursor/mcp.json&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;mcpServers&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;pico-de-gallo&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;command&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;gallo-mcp&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;args&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt; }&lt;/span&gt;&lt;span&gt; }&lt;/span&gt;&lt;span&gt; }&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;One detail worth calling out: the server holds &lt;strong&gt;no persistent USB
+claim&lt;/strong&gt;. Each tool call opens the board, runs, and releases it, so the
+device stays free for the &lt;code&gt;gallo&lt;/code&gt; CLI or another host process between
+calls. There’s a small fixed connection cost per call in exchange, but
+it also means the server starts fine with nothing plugged in — you can
+attach the board mid-session and the tools start working. If you have
+more than one board attached, &lt;code&gt;--serial-number &amp;lt;SN&amp;gt;&lt;/code&gt; picks one.&lt;/p&gt;
+&lt;h2 id=&quot;the-tool-surface&quot;&gt;The tool surface&lt;/h2&gt;
+&lt;p&gt;Tools are grouped by peripheral, and every one is annotated: reads
+carry MCP’s &lt;code&gt;readOnlyHint&lt;/code&gt;, writes and actuation carry
+&lt;code&gt;destructiveHint&lt;/code&gt; (more on why that matters below).&lt;/p&gt;
+&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Peripheral&lt;/th&gt;&lt;th&gt;What the agent can do&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;
+&lt;tr&gt;&lt;td&gt;device&lt;/td&gt;&lt;td&gt;list boards, check attach state, read firmware/schema version, ping&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;I²C&lt;/td&gt;&lt;td&gt;read, write, write-then-read, scan, batch, get/set frequency&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;SPI&lt;/td&gt;&lt;td&gt;read, write, full-duplex transfer, flush, batch, get/set config&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;UART&lt;/td&gt;&lt;td&gt;read, write, flush, get/set config&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;GPIO&lt;/td&gt;&lt;td&gt;read a pin, drive a pin, set direction/pull, bounded edge waits&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;PWM&lt;/td&gt;&lt;td&gt;get/set duty cycle, enable/disable, get/set config&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;ADC&lt;/td&gt;&lt;td&gt;read a sample, read config&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;1-Wire&lt;/td&gt;&lt;td&gt;reset, read, write, parasitic-power write, ROM search&lt;/td&gt;&lt;/tr&gt;
+&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;The &lt;a href=&quot;/pico-de-gallo/crates/mcp.html&quot;&gt;full catalog is in the book&lt;/a&gt;. A couple of conventions
+are worth knowing up front. Byte payloads go &lt;strong&gt;in&lt;/strong&gt; as hex strings —
+comma-separated or bare, &lt;code&gt;&quot;0x00,0x10&quot;&lt;/code&gt; or &lt;code&gt;&quot;0010&quot;&lt;/code&gt; — and come &lt;strong&gt;back&lt;/strong&gt;
+as both hex and a decimal array:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;json&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;//&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; i2c_write_read {&amp;quot;address&amp;quot;:72,&amp;quot;data&amp;quot;:&amp;quot;0x00&amp;quot;,&amp;quot;count&amp;quot;:2}&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;hex&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;0x0B,0xCF&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;bytes&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;11&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 207&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt; }&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;And the GPIO edge waits are &lt;strong&gt;timeout-bounded only&lt;/strong&gt;: each requires a
+non-zero &lt;code&gt;timeout_ms&lt;/code&gt;. This first release deliberately leaves out
+infinite waits and push-based edge subscriptions — a wait that never
+returns would wedge the stdio session, and event streaming is out of
+scope for now.&lt;/p&gt;
+&lt;h2 id=&quot;seeing-the-same-truth-as-the-shell&quot;&gt;Seeing the same truth as the shell&lt;/h2&gt;
+&lt;p&gt;The server was validated on real hardware: a Pico de Gallo (firmware
+v0.10.0, schema v0.6.0 — the &lt;a href=&quot;/posts/pico-de-gallo-reliability-release/&quot;&gt;reliability release&lt;/a&gt;) with a
+TMP108 temperature sensor on I²C.&lt;/p&gt;
+&lt;p&gt;Over stdio, &lt;code&gt;status&lt;/code&gt; reports the attached board:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;json&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;attached&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt; true&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;firmware_version&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;0.10.0&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;schema_major&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;schema_minor&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 6&lt;/span&gt;&lt;span&gt; }&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;i2c_scan&lt;/code&gt; finds the sensor at &lt;code&gt;0x48&lt;/code&gt;:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;json&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;//&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; i2c_scan {&amp;quot;include_reserved&amp;quot;:false}&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;addresses&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;0x48&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;raw&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;72&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt; }&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;And &lt;code&gt;i2c_write_read&lt;/code&gt; pulls its two temperature bytes:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;json&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;//&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; i2c_write_read {&amp;quot;address&amp;quot;:72,&amp;quot;data&amp;quot;:&amp;quot;0x00&amp;quot;,&amp;quot;count&amp;quot;:2}&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;hex&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;0x0B,0xCF&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;bytes&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;:&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;11&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 207&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt; }&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Those bytes are byte-for-byte identical to what the CLI returns:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;shellsession&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;$&lt;/span&gt;&lt;span&gt; gallo i2c write-read -a 0x48 -b 0x00 -c 2&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;0b cf&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Turning &lt;code&gt;0x0BCF&lt;/code&gt; into degrees Celsius is between you and the TMP108
+datasheet — the point is that the MCP round-trip returns exactly what
+the shell does. An agent driving the board through &lt;code&gt;gallo-mcp&lt;/code&gt; sees the
+same truth you would at the prompt.&lt;/p&gt;
+&lt;h2 id=&quot;a-word-on-safety&quot;&gt;A word on safety&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;gallo-mcp&lt;/code&gt; does &lt;strong&gt;not&lt;/strong&gt; gate writes itself. It annotates them and
+delegates approval to the MCP client: read tools are marked
+&lt;code&gt;readOnlyHint&lt;/code&gt;, write and actuation tools are marked &lt;code&gt;destructiveHint&lt;/code&gt;.
+A well-configured client uses those hints to prompt you before it
+drives a pin or writes a bus.&lt;/p&gt;
+&lt;p&gt;That delegation cuts both ways. Under a permission-less or
+blanket-allow client, an agent can actuate hardware — toggle GPIOs,
+write I²C/SPI, change bus configuration — with no confirmation at all.
+If the board is wired to anything you care about, run the server behind
+a client that honors &lt;code&gt;destructiveHint&lt;/code&gt;, and set your permissions
+accordingly. The bytes are real, and so are the volts.&lt;/p&gt;
+&lt;h2 id=&quot;the-plumbing-pico-de-gallo-lib-0-7-1&quot;&gt;The plumbing: &lt;code&gt;pico-de-gallo-lib&lt;/code&gt; 0.7.1&lt;/h2&gt;
+&lt;p&gt;Handing the board to an agent turned up two rough edges in the host
+library, and smoothing them out is the other half of today’s release.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;&lt;code&gt;try_new()&lt;/code&gt;.&lt;/strong&gt; The existing &lt;code&gt;PicoDeGallo::new()&lt;/code&gt; (and
+&lt;code&gt;new_with_serial_number()&lt;/code&gt;) enumerate USB at construction and &lt;strong&gt;panic&lt;/strong&gt;
+when no matching board is present or the interface can’t be claimed —
+the old “constructing never fails” doc comment was simply wrong. That’s
+fine for a CLI that’s about to exit anyway, but a long-lived MCP server
+that connects per call can’t panic just because you haven’t plugged the
+board in yet. So 0.7.1 adds fallible &lt;code&gt;try_new()&lt;/code&gt; and
+&lt;code&gt;try_new_with_serial_number()&lt;/code&gt;, returning &lt;code&gt;Result&amp;lt;PicoDeGallo, String&amp;gt;&lt;/code&gt;
+so the caller can report “no device attached” or retry a transient
+claim failure. The panicking constructors stay exactly as they were.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Nameable comms errors.&lt;/strong&gt; 0.7.0 re-exports &lt;code&gt;HostErr&lt;/code&gt; and &lt;code&gt;WireError&lt;/code&gt;
+(and makes the &lt;code&gt;host_client&lt;/code&gt; path public), so a downstream crate can
+name the transport error types when it maps &lt;code&gt;PicoDeGalloError&lt;/code&gt; into its
+own representation — without pulling in &lt;code&gt;postcard-rpc&lt;/code&gt; directly. That’s
+what lets &lt;code&gt;gallo-mcp&lt;/code&gt; match on &lt;code&gt;PicoDeGalloError::Comms(HostErr::Closed)&lt;/code&gt;
+and turn a dropped USB connection into a clean “no device attached”
+message instead of an opaque error.&lt;/p&gt;
+&lt;p&gt;Both changes are additive and non-breaking; &lt;code&gt;hal&lt;/code&gt;, &lt;code&gt;ffi&lt;/code&gt;, &lt;code&gt;gallo&lt;/code&gt;, and
+the Python bindings resolve 0.7.1 without any changes of their own. If
+you’re building your own host tooling on the library, &lt;code&gt;try_new()&lt;/code&gt; is
+the constructor you want.&lt;/p&gt;
+&lt;h2 id=&quot;get-it&quot;&gt;Get it&lt;/h2&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;shellsession&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;$&lt;/span&gt;&lt;span&gt; cargo install gallo-mcp&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;ul&gt;
+&lt;li&gt;crate: &lt;a rel=&quot;external&quot; href=&quot;https://crates.io/crates/gallo-mcp&quot;&gt;&lt;code&gt;gallo-mcp&lt;/code&gt;&lt;/a&gt; · docs: &lt;a rel=&quot;external&quot; href=&quot;https://docs.rs/gallo-mcp&quot;&gt;docs.rs/gallo-mcp&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;library: &lt;a rel=&quot;external&quot; href=&quot;https://crates.io/crates/pico-de-gallo-lib&quot;&gt;&lt;code&gt;pico-de-gallo-lib&lt;/code&gt; 0.7.1&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;everything else: the &lt;a href=&quot;/pico-de-gallo/&quot;&gt;Pico de Gallo book&lt;/a&gt; and the &lt;a rel=&quot;external&quot; href=&quot;https://github.com/OpenDevicePartnership/pico-de-gallo&quot;&gt;repo&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Wire up a board, point your agent at it, and let it read the chip
+itself.&lt;/p&gt;
+</content:encoded>
+    </item>
+    
+  </channel>
+</rss>
