@@ -1,7 +1,7 @@
 +++
 title = "Teaching my Urchin to type, then figuring out where the power went"
 date = 2026-10-21
-draft = true
+draft = false
 description = "Buffered tap-hold on RMK, sleeping nice!view screens, and a power investigation that nearly blamed a few-microamp display for a missing-half radio scan."
 [taxonomies]
 tags = ["embedded", "rust", "keyboards", "rmk", "bluetooth", "low-power"]
