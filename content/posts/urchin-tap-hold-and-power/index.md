@@ -15,6 +15,8 @@ keyboard with nice!nano controllers and nice!view displays. Moving it
 from ZMK to RMK meant bringing along the tap-hold behavior I liked, not
 just copying the keymap and calling it done.
 
+Each half has a **110 mAh battery**.[^battery-capacity]
+
 That conversion led to a buffered tap-hold implementation, some display
 power management, and quite a few sessions with Nordic's Power Profiler
 Kit II.
@@ -319,3 +321,8 @@ a radio search. I'll take that.
     switch on the bare test board and forgot its matrix diode. That trace
     wasn't valid evidence of key handling, so I repeated the experiment
     with the diode installed.
+
+[^battery-capacity]: Updated November 4, 2026: the batteries in my Urchin
+    are rated at 110 mAh each, not 100 mAh. This clarifies the battery
+    capacity; the current measurements above are unchanged. Capacity-based
+    runtime estimates should use 110 mAh per half.
