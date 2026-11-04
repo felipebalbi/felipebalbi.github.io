@@ -1,7 +1,7 @@
 +++
 title = "My sleeping Urchin had a perfectly good crystal it wasn't using"
 date = 2026-11-04
-draft = true
+draft = false
 description = "Following the remaining connected-idle current through BLE subrating, unnecessary wakeups, a failed latency estimate, and the nice!nano's unused low-frequency crystal."
 [taxonomies]
 tags = ["embedded", "rust", "keyboards", "rmk", "bluetooth", "low-power"]
