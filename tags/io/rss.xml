@@ -1,0 +1,625 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"
+     xmlns:atom="http://www.w3.org/2005/Atom"
+     xmlns:content="http://purl.org/rss/1.0/modules/content/"
+     xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Felipe Balbi</title>
+    <link>https://balbi.sh</link>
+    <description>Notes on embedded systems, Rust, and the craft of writing software.</description>
+    <generator>Zola</generator>
+    <language>en</language>
+    <lastBuildDate>Thu, 13 Aug 2026 09:00:00 +0000</lastBuildDate>
+    <atom:link href="https://balbi.sh/tags/io/rss.xml" rel="self" type="application/rss+xml"/>
+    
+    <item>
+      <title>Tamal: Out to the Pins</title>
+      <link>https://balbi.sh/posts/tamal-io/</link>
+      <guid isPermaLink="true">https://balbi.sh/posts/tamal-io/</guid>
+      <pubDate>Thu, 13 Aug 2026 09:00:00 +0000</pubDate>
+      <dc:creator>Felipe Balbi</dc:creator>
+      <description>&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-serdes/&quot;&gt;serdes post&lt;/a&gt; ended with a promise and an apology. It had just
+finished arguing that a &lt;code&gt;(value, enable)&lt;/code&gt; pair is the whole of tri-state —
+three wire states carried in two bits — and then it admitted that none of it
+was real yet. Every &lt;code&gt;Lanes&lt;/code&gt; the engine computes is &lt;em&gt;still just numbers&lt;/em&gt;, it
+said; a description of a drive, not a drive. Something has to carry those pairs
+the last step out.&lt;/p&gt;
+&lt;p&gt;This is that something. &lt;code&gt;Tamal.Io&lt;/code&gt; is a hundred and four lines, and it contains
+the single line the last eight posts have been walking toward:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;toDrive &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;o&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; oe&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; if&lt;/span&gt;&lt;span&gt; oe &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; then&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Just&lt;/span&gt;&lt;span&gt; o &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;else&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;That is the crossing. On the left of it, the engine’s arithmetic — two &lt;code&gt;Bit&lt;/code&gt;s
+in a tuple, computed by pure functions, checked by property tests, meaning
+nothing to any wire. On the right, a &lt;code&gt;Maybe Bit&lt;/code&gt;, which Clash knows how to turn
+into an FPGA’s output-enable and a pad that either drives or floats. Everything
+the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-introducing/&quot;&gt;introduction&lt;/a&gt; meant when it said &lt;em&gt;the pins are the hard part&lt;/em&gt;
+happens in this file, and the file is short enough to read in one sitting.&lt;/p&gt;</description>
+      
+      <content:encoded>&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-serdes/&quot;&gt;serdes post&lt;/a&gt; ended with a promise and an apology. It had just
+finished arguing that a &lt;code&gt;(value, enable)&lt;/code&gt; pair is the whole of tri-state —
+three wire states carried in two bits — and then it admitted that none of it
+was real yet. Every &lt;code&gt;Lanes&lt;/code&gt; the engine computes is &lt;em&gt;still just numbers&lt;/em&gt;, it
+said; a description of a drive, not a drive. Something has to carry those pairs
+the last step out.&lt;/p&gt;
+&lt;p&gt;This is that something. &lt;code&gt;Tamal.Io&lt;/code&gt; is a hundred and four lines, and it contains
+the single line the last eight posts have been walking toward:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;toDrive &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;o&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; oe&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; if&lt;/span&gt;&lt;span&gt; oe &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; then&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Just&lt;/span&gt;&lt;span&gt; o &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;else&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;That is the crossing. On the left of it, the engine’s arithmetic — two &lt;code&gt;Bit&lt;/code&gt;s
+in a tuple, computed by pure functions, checked by property tests, meaning
+nothing to any wire. On the right, a &lt;code&gt;Maybe Bit&lt;/code&gt;, which Clash knows how to turn
+into an FPGA’s output-enable and a pad that either drives or floats. Everything
+the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-introducing/&quot;&gt;introduction&lt;/a&gt; meant when it said &lt;em&gt;the pins are the hard part&lt;/em&gt;
+happens in this file, and the file is short enough to read in one sitting.&lt;/p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;/span&gt;&lt;h2 id=&quot;two-names-on-the-door&quot;&gt;Two names on the door&lt;/h2&gt;
+&lt;p&gt;The door is the shortest of the whole series bar one, and the imports beneath it
+are shorter still:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;module&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Tamal.Io&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; espiPads&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; alertSync&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  )&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; where&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;import&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Clash.Prelude&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;import&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Tamal.Bus.Serdes&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Lanes&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Two functions, no types. The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-crc/&quot;&gt;CRC’s&lt;/a&gt; wall-with-a-door still holds, and this
+wall has exactly two openings: the pad boundary itself, and the synchroniser
+that guards the one asynchronous wire in the design. Everything else in the file
+is a &lt;code&gt;where&lt;/code&gt;-bound helper.&lt;/p&gt;
+&lt;p&gt;The import list is the more interesting half. &lt;code&gt;Clash.Prelude&lt;/code&gt;, the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-crc/&quot;&gt;one line
+that turns a Haskell file into a hardware description&lt;/a&gt;, and then a single
+name from a single sibling: &lt;code&gt;Lanes&lt;/code&gt;, from &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-serdes/&quot;&gt;&lt;code&gt;Tamal.Bus.Serdes&lt;/code&gt;&lt;/a&gt;. That is
+the whole dependency graph. &lt;code&gt;Tamal.Io&lt;/code&gt; has never heard of the engine. It does
+not import &lt;code&gt;Tamal.Engine&lt;/code&gt;, does not know what a &lt;code&gt;BusOut&lt;/code&gt; is, has no idea a
+&lt;code&gt;phase&lt;/code&gt; field exists or that a &lt;code&gt;PUT&lt;/code&gt; is different from a &lt;code&gt;TAR&lt;/code&gt;. It takes a
+&lt;code&gt;Signal dom Lanes&lt;/code&gt; — four &lt;code&gt;(value, enable)&lt;/code&gt; pairs per cycle — and asks no
+questions about where they came from.&lt;/p&gt;
+&lt;p&gt;That is the same discipline the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-mem/&quot;&gt;memories&lt;/a&gt; were held to, and for the same
+reason. A &lt;code&gt;blockRamPow2&lt;/code&gt; that imported the engine would be a memory that knows
+what a trace record is; a pad boundary that imported the engine would be a pad
+that knows what an instruction is. Neither needs to. The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;shape post&lt;/a&gt;
+observed that the engine’s &lt;code&gt;busOut&lt;/code&gt; is a &lt;em&gt;projection&lt;/em&gt; and not a computation —
+the pins are read out of registers that were already settled — and this module
+is the consumer that projection was written for. It receives a settled drive and
+makes it physical. Nothing more.&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;A pad that imports the engine is a pad that knows what an instruction is.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;h2 id=&quot;the-line-that-makes-it-physical&quot;&gt;The line that makes it physical&lt;/h2&gt;
+&lt;p&gt;Read &lt;code&gt;toDrive&lt;/code&gt; again, because it is doing something more delicate than it looks:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;toDrive &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;o&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; oe&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  if&lt;/span&gt;&lt;span&gt; oe &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    then&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Just&lt;/span&gt;&lt;span&gt; o&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;    else&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nothing&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The type is &lt;code&gt;Lane -&amp;gt; Maybe Bit&lt;/code&gt;, which is &lt;code&gt;(Bit, Bit) -&amp;gt; Maybe Bit&lt;/code&gt;. Two bits in,
+one optional bit out. Count the inhabitants and the shape of the move becomes
+clear. The input type has four values: &lt;code&gt;(0,0)&lt;/code&gt;, &lt;code&gt;(1,0)&lt;/code&gt;, &lt;code&gt;(0,1)&lt;/code&gt;, &lt;code&gt;(1,1)&lt;/code&gt;. The
+output type has three: &lt;code&gt;Nothing&lt;/code&gt;, &lt;code&gt;Just 0&lt;/code&gt;, &lt;code&gt;Just 1&lt;/code&gt;. &lt;code&gt;toDrive&lt;/code&gt; is the function
+that collapses four onto three, and it collapses exactly the pair the serdes post
+said was redundant — &lt;code&gt;(0,0)&lt;/code&gt; and &lt;code&gt;(1,0)&lt;/code&gt;, released with the value ignored —
+onto the single &lt;code&gt;Nothing&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-serdes/&quot;&gt;serdes post&lt;/a&gt; called that redundancy &lt;em&gt;not waste, but the shape of the
+thing&lt;/em&gt;, and it was right about the encoding. Two bits are how you carry three
+states through a register file, a &lt;code&gt;Vec&lt;/code&gt;, a &lt;code&gt;bitCoerce&lt;/code&gt;d record, all the machinery
+that wants fixed widths. But the moment those bits reach a pad, the redundancy is
+a liability: a pad has no use for the value of a lane it is not driving. &lt;code&gt;Maybe Bit&lt;/code&gt; is the type with no redundancy in it. Three states, three constructors, and
+no way to write down a released lane that also carries a value, because there is
+no such thing.&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;The engine says the enable &lt;em&gt;may&lt;/em&gt; veto the value. The pad type says the veto has
+already happened.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;So &lt;code&gt;toDrive&lt;/code&gt; is not a conversion so much as a &lt;em&gt;normalisation&lt;/em&gt; — it takes the
+engine’s convenient encoding and hands the synthesiser the canonical one. And
+&lt;code&gt;Just&lt;/code&gt;/&lt;code&gt;Nothing&lt;/code&gt; is exactly the vocabulary Clash’s bidirectional primitive
+expects:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;writeToBiSignal&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitPack&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; a&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; NFDataX&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; a&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; …&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;  BiSignalIn&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; ds&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; d&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitSize&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; a&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Signal&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; d&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Maybe&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; a&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BiSignalOut&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; ds&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; d&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BitSize&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; a&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;Just x&lt;/code&gt; means &lt;em&gt;drive &lt;code&gt;x&lt;/code&gt; onto this net this cycle&lt;/em&gt;; &lt;code&gt;Nothing&lt;/code&gt; means &lt;em&gt;let go&lt;/em&gt;.
+Which is why the body of &lt;code&gt;drive&lt;/code&gt; is one line with nothing clever in it:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;drive&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Index&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 4&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BiSignalIn&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;#39;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;PullUp&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BiSignalOut&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;#39;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;PullUp&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;drive i padIn &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; writeToBiSignal padIn &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;toDrive &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;lt;$&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;laneSigs &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;!!&lt;/span&gt;&lt;span&gt; i&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;laneSigs = unbundle lanesOut&lt;/code&gt; splits the one &lt;code&gt;Signal dom (Vec 4 Lane)&lt;/code&gt; the
+engine produces into four separate &lt;code&gt;Signal dom Lane&lt;/code&gt;s, one per wire.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-unbundle-1&quot;&gt;&lt;a href=&quot;https://balbi.sh/posts/tamal-io/#fn-unbundle&quot;&gt;[1]&lt;/a&gt;&lt;/sup&gt;
+&lt;code&gt;laneSigs !! i&lt;/code&gt; picks lane &lt;code&gt;i&lt;/code&gt;; &lt;code&gt;toDrive &amp;lt;$&amp;gt;&lt;/code&gt; maps the collapse across time, cycle
+by cycle; &lt;code&gt;writeToBiSignal&lt;/code&gt; attaches the result to the net as a driver. Three
+combinators and the &lt;code&gt;(value, enable)&lt;/code&gt; pair has become a tri-state buffer.
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-bus/&quot;&gt;Post 3’s&lt;/a&gt; &lt;code&gt;beatLanes&lt;/code&gt; decided &lt;em&gt;what&lt;/em&gt; to drive; &lt;code&gt;serializeX1&lt;/code&gt; and &lt;code&gt;tarBeat&lt;/code&gt;
+and &lt;code&gt;hiZ&lt;/code&gt; &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-serdes/&quot;&gt;built the drive&lt;/a&gt;; this line performs it.&lt;/p&gt;
+&lt;h2 id=&quot;a-pad-has-two-ends&quot;&gt;A pad has two ends&lt;/h2&gt;
+&lt;p&gt;The signature of &lt;code&gt;espiPads&lt;/code&gt; is the longest thing in the file, and worth reading
+as a shape before reading it as a list. Five plain &lt;code&gt;Signal&lt;/code&gt; inputs, four pad
+inputs, and a nine-element tuple out:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;espiPads&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  forall&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;HiddenClockResetEnable&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;  Signal&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Lanes&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;                 --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; engine lanesOut&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;  Signal&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bit&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;                   --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; csOut&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;  Signal&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bit&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;                   --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; sckOut&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;  Signal&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bit&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;                   --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; rstOut&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;  Signal&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bit&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;                   --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; ALERT# (raw, async, active-low)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;  BiSignalIn&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;#39;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;PullUp&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;         --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; IO0 pad (read side)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;  BiSignalIn&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;#39;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;PullUp&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;         --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; IO1 pad (read side)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;  BiSignalIn&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;#39;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;PullUp&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;         --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; IO2 pad (read side)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;  BiSignalIn&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;#39;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;PullUp&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;         --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; IO3 pad (read side)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BiSignalOut&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;#39;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;PullUp&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;         --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; IO0 pad (drive side)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BiSignalOut&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;#39;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;PullUp&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;         --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; IO1&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BiSignalOut&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;#39;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;PullUp&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;         --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; IO2&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BiSignalOut&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;#39;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;PullUp&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;         --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; IO3&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Signal&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bit&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;                    --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; CS#    pin out&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Signal&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bit&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;                    --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; SCK    pin out&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Signal&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bit&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;                    --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; RESET# pin out&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Signal&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Vec&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 4&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bit&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;            --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; ioIn    -&amp;gt; BusIn.ioIn&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Signal&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bit&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;                    --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; alertIn -&amp;gt; BusIn.alertIn&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  )&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Four of those inputs and four of those outputs are the same four wires.&lt;/p&gt;
+&lt;p&gt;That is the thing to understand about &lt;code&gt;BiSignalIn&lt;/code&gt; and &lt;code&gt;BiSignalOut&lt;/code&gt;: they are
+not two ports, they are two &lt;em&gt;views&lt;/em&gt; of one port. A unidirectional signal has a
+direction baked into where it appears — an argument is an input, a result is an
+output. A bidirectional wire has no such luxury, because at different moments it
+is both. Clash’s answer is to split the wire into its two roles and make you name
+each: &lt;code&gt;BiSignalIn&lt;/code&gt; is the net as something you may read, &lt;code&gt;BiSignalOut&lt;/code&gt; is the net
+as something you may drive. Hand &lt;code&gt;espiPads&lt;/code&gt; the read view of &lt;code&gt;IO0&lt;/code&gt; and it hands
+you back the drive view of &lt;code&gt;IO0&lt;/code&gt; — and when Clash lowers the design to Verilog,
+it recognises that the result was derived from the argument and fuses the pair
+into one &lt;code&gt;inout&lt;/code&gt; port.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-inout-1&quot;&gt;&lt;a href=&quot;https://balbi.sh/posts/tamal-io/#fn-inout&quot;&gt;[2]&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;p&gt;The &lt;code&gt;&#39;PullUp&lt;/code&gt; in &lt;code&gt;BiSignalIn &#39;PullUp dom 1&lt;/code&gt; is a type-level tag for what the net
+does when &lt;em&gt;nobody&lt;/em&gt; drives it, and here that is the physically honest answer for
+an eSPI bus: idle high. Every eSPI lane has a pull-up on the board, so a fully
+released net floats up rather than drifting undefined — which is why the
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-serdes/&quot;&gt;turnaround&lt;/a&gt; drives high before letting go, settling the line to the
+level the pull-ups would have chosen anyway.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-pullup-1&quot;&gt;&lt;a href=&quot;https://balbi.sh/posts/tamal-io/#fn-pullup&quot;&gt;[3]&lt;/a&gt;&lt;/sup&gt; The &lt;code&gt;1&lt;/code&gt; is the width in
+bits: each lane is one wire, so each pad is a &lt;code&gt;BiSignal … 1&lt;/code&gt;. And the whole thing
+carries &lt;code&gt;HiddenClockResetEnable dom&lt;/code&gt; — not because the pads need a clock, but
+because &lt;code&gt;alertSync&lt;/code&gt;, further down, holds two registers.&lt;/p&gt;
+&lt;p&gt;The last two results are the return path, and they are the fields the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;shape
+post&lt;/a&gt; introduced without saying where they came from:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BusIn&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; BusIn&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  {&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; instrWord&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 32&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; ioIn&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Vec&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 4&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bit&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; alertIn&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bit&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; startIn&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bool&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  }&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;ioIn&lt;/code&gt; is &lt;em&gt;the four IO lanes sampled off the pads&lt;/em&gt;, that post said, and &lt;code&gt;alertIn&lt;/code&gt;
+&lt;em&gt;the synchronised alert pin&lt;/em&gt;. This module is the pads and the synchroniser. The
+loop the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-bus/&quot;&gt;bus post&lt;/a&gt; ran — drive a beat, sample the far end, shift the bit
+in — closes here, through eight signal wires and four bidirectional ones.&lt;/p&gt;
+&lt;h2 id=&quot;scalar-not-vec&quot;&gt;Scalar, not Vec&lt;/h2&gt;
+&lt;p&gt;The file’s longest comment is a warning, and it is the kind of warning that only
+gets written after somebody has lost an afternoon:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; Per-lane scalar BiSignals, deliberately not a Vec. […] Clash fuses a scalar&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; BiSignalIn argument with the scalar BiSignalOut result derived from it into&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; one inout port per lane --- but if the lanes are routed through a Vec of&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; BiSignals (zipWith/map/:&amp;gt; over BiSignalIn/BiSignalOut), Clash treats the&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; vector as an opaque bundle and drops the drive: the inout ports get a read&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; path but no tri-state driver (the write collapses to a dead net).&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Look at what this forbids, because the forbidden version is the version a Haskell
+programmer writes first. Four lanes, four identical operations, a &lt;code&gt;Vec 4&lt;/code&gt; already
+in hand from &lt;code&gt;unbundle&lt;/code&gt; — of course you write &lt;code&gt;zipWith writeToBiSignal pads laneSigs&lt;/code&gt; and get a &lt;code&gt;Vec 4 (BiSignalOut …)&lt;/code&gt; back. It is one line instead of four,
+it is obviously correct, and every other four-lane operation in the project is
+written exactly that way. &lt;code&gt;serializeX1&lt;/code&gt; maps over eight bits. &lt;code&gt;beatLanes&lt;/code&gt; returns
+a whole &lt;code&gt;Vec 4&lt;/code&gt;. The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-isa/&quot;&gt;ISA&lt;/a&gt; packs and unpacks by field. Tamal is a project
+that trusts &lt;code&gt;Vec&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;And the &lt;code&gt;Vec&lt;/code&gt; version compiles, simulates correctly, and passes its tests. It
+produces silicon that cannot drive a pin.&lt;/p&gt;
+&lt;p&gt;The failure is entirely in the lowering. Clash’s &lt;code&gt;inout&lt;/code&gt; support is a
+&lt;em&gt;pattern-matching&lt;/em&gt; feature, not a type-level one: the compiler looks for a
+scalar &lt;code&gt;BiSignalIn&lt;/code&gt; argument in the top entity’s signature and a scalar
+&lt;code&gt;BiSignalOut&lt;/code&gt; result that was derived from it, and when it finds that pair it
+emits one &lt;code&gt;inout&lt;/code&gt; port and wires the tri-state driver to it. Wrap the pair in a
+&lt;code&gt;Vec&lt;/code&gt; and the pair is no longer visible — the argument is now one opaque
+aggregate and the result another, and the derivation relating them is buried
+inside a bundle the fuser does not open. So it does the only safe thing it knows:
+it keeps the read path, because reading an input is always valid, and it drops
+the write, because it cannot see which port the write belongs to. The result is a
+port that can be sampled and never driven. A pad that can only listen.&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;The type system will not save you here. The &lt;code&gt;Vec&lt;/code&gt; version has the same type as
+the scalar version and does something different in Verilog.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;Which is why the fix is not a fix but a &lt;em&gt;shape&lt;/em&gt;: the lanes stay scalar end to
+end, four arguments in and four results out, spelled once each, and the tuple
+that returns them is nine elements long because collapsing it would undo the
+whole point.&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;espiPads lanesOut csOut sckOut rstOut alert pad0 pad1 pad2 pad3 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;/span&gt;&lt;span&gt; drive &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0&lt;/span&gt;&lt;span&gt; pad0&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span&gt; drive &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;1&lt;/span&gt;&lt;span&gt; pad1&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span&gt; drive &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;2&lt;/span&gt;&lt;span&gt; pad2&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span&gt; drive &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;3&lt;/span&gt;&lt;span&gt; pad3&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  ,&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; …&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Four calls, hand-written, with the index and the pad matched up by eye. It reads
+like a regression rather than a design, and in a sense it is: this is the one
+place in Tamal where the natural Haskell abstraction has to be &lt;em&gt;declined&lt;/em&gt; because
+the backend cannot see through it. The comment even records how the constraint
+was established — &lt;em&gt;verified from the emitted Verilog: each &lt;code&gt;io0&lt;/code&gt;..&lt;code&gt;io3&lt;/code&gt; must
+carry its own tri-state driver&lt;/em&gt; — which is the only way such a thing can be
+established. No test in the Haskell world distinguishes the two versions. You
+have to go read the output.&lt;/p&gt;
+&lt;p&gt;This is the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-introducing/&quot;&gt;introduction’s&lt;/a&gt; thesis arriving as a concrete scar. The pins
+are the hard part not because tri-state logic is conceptually difficult — it is
+two bits, and the serdes post spent five thousand words showing how simple —
+but because the pins are where your abstraction meets somebody else’s compiler,
+and the meeting has rules that live outside your type system. The engine got
+eight posts of increasingly confident reasoning. The pad boundary gets a
+hand-unrolled loop and a comment saying &lt;em&gt;check the Verilog&lt;/em&gt;.&lt;/p&gt;
+&lt;h2 id=&quot;reading-the-net-back&quot;&gt;Reading the net back&lt;/h2&gt;
+&lt;p&gt;The drive side is four scalars. The read side, one line down, is a &lt;code&gt;Vec&lt;/code&gt; again:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;ioIn &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  bundle&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    (&lt;/span&gt;&lt;span&gt; readFromBiSignal pad0&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;        :&amp;gt;&lt;/span&gt;&lt;span&gt; readFromBiSignal pad1&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;        :&amp;gt;&lt;/span&gt;&lt;span&gt; readFromBiSignal pad2&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;        :&amp;gt;&lt;/span&gt;&lt;span&gt; readFromBiSignal pad3&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;        :&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nil&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    )&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;That looks like it should trip the same wire, and it does not — for a reason
+worth being precise about. The &lt;code&gt;Vec&lt;/code&gt; here is not a vector of &lt;code&gt;BiSignal&lt;/code&gt;s. Each
+&lt;code&gt;readFromBiSignal padK&lt;/code&gt; has already turned a pad into an ordinary &lt;code&gt;Signal dom Bit&lt;/code&gt;, an everyday unidirectional value, and &lt;em&gt;those&lt;/em&gt; are what get consed together
+and &lt;code&gt;bundle&lt;/code&gt;d into a &lt;code&gt;Signal dom (Vec 4 Bit)&lt;/code&gt;. The four pads are still touched
+one at a time, by name; only their sampled results are gathered. The rule is
+narrower than “no &lt;code&gt;Vec&lt;/code&gt;s near pads” — it is that the fusible pair, the
+&lt;code&gt;BiSignalIn&lt;/code&gt; argument and the &lt;code&gt;BiSignalOut&lt;/code&gt; derived from it, must both be scalar
+and visible. Once a pad has been read into a plain &lt;code&gt;Signal&lt;/code&gt;, ordinary Haskell
+resumes.&lt;/p&gt;
+&lt;p&gt;So the asymmetry in the source — four hand-written &lt;code&gt;drive&lt;/code&gt; calls, then a
+four-element &lt;code&gt;:&amp;gt;&lt;/code&gt; chain — is not inconsistency. It is the boundary of the
+constraint, drawn exactly where the constraint ends.&lt;/p&gt;
+&lt;p&gt;What comes out is &lt;code&gt;Signal dom (Vec 4 Bit)&lt;/code&gt;, which is &lt;code&gt;BusIn.ioIn&lt;/code&gt;, which is where
+the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-bus/&quot;&gt;bus post’s&lt;/a&gt; &lt;code&gt;sampleGet&lt;/code&gt; was reading from all along:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;PendGet&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; t&lt;/span&gt;&lt;span&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;shifter&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span&gt; shifter t &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;`&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;shiftL&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;`&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; .|.&lt;/span&gt;&lt;span&gt; zeroExtend &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;pack &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;ioIn inp &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;!!&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Index&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 4&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Index &lt;code&gt;1&lt;/code&gt;. &lt;code&gt;IO[1]&lt;/code&gt;, the eSPI response lane, sampled at the rising edge, shifted
+into the accumulator a bit at a time. That expression has been in the series
+since the bus post, and this is the first time we can point at the wire it names:
+&lt;code&gt;readFromBiSignal pad1&lt;/code&gt;, the second of four, reading whatever the target is
+driving while all four of our own enables are low.&lt;/p&gt;
+&lt;p&gt;Note also that the read is &lt;em&gt;combinational&lt;/em&gt;. &lt;code&gt;readFromBiSignal&lt;/code&gt; puts no register
+in the path; what &lt;code&gt;ioIn&lt;/code&gt; carries this cycle is the net’s level this cycle. The
+engine samples it inside &lt;code&gt;stepBusBeat&lt;/code&gt;, at a phase of its own choosing, and the
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-bus/&quot;&gt;bus post&lt;/a&gt; chose phase 3 of the five-cycle beat — comfortably after the
+rising edge at the 2→3 boundary, comfortably before the next. The pad boundary
+does not schedule anything. It presents a level; the engine decides when that
+level means something.&lt;/p&gt;
+&lt;h2 id=&quot;three-wires-that-pass-straight-through&quot;&gt;Three wires that pass straight through&lt;/h2&gt;
+&lt;p&gt;Three of the nine results are pure pass-through:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  , csOut&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  , sckOut&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  , rstOut&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;No transformation at all. The value that arrives is the value that leaves. And
+that is correct, because the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;shape post&lt;/a&gt; made a point of it: &lt;code&gt;csN&lt;/code&gt;, &lt;code&gt;sck&lt;/code&gt;
+and &lt;code&gt;rstN&lt;/code&gt; are &lt;em&gt;fields of the engine’s &lt;code&gt;State&lt;/code&gt;&lt;/em&gt;, written by the transition
+function and read out by &lt;code&gt;busOut&lt;/code&gt;, which means they emerge from the engine
+already registered — settled outputs of flip-flops, not combinational functions
+of this cycle’s inputs. There is nothing left to do to them. Adding a register
+here would only delay them by a cycle relative to the lanes, which are equally
+registered, and skew the bus.&lt;/p&gt;
+&lt;p&gt;So why route them through &lt;code&gt;espiPads&lt;/code&gt; at all, if the function does nothing to
+them? Because the module’s job is to be &lt;em&gt;the pad boundary&lt;/em&gt;, singular. It is the
+one place in the design where the outside world is named. A board shell that
+wired &lt;code&gt;CS#&lt;/code&gt; straight from &lt;code&gt;system&lt;/code&gt; and &lt;code&gt;IO[0]&lt;/code&gt; through &lt;code&gt;espiPads&lt;/code&gt; would have the
+pin list living in two places, and the next person to add a sideband would have
+to guess which. Routing all seven eSPI pins through one function costs three
+lines of nothing and buys a single answer to &lt;em&gt;where do the pins leave&lt;/em&gt;. It is the
+same argument the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-uart-top/&quot;&gt;UART top&lt;/a&gt; made for a module with no behaviour of its
+own: the value is in the wiring being in one place.&lt;/p&gt;
+&lt;h2 id=&quot;the-one-asynchronous-wire&quot;&gt;The one asynchronous wire&lt;/h2&gt;
+&lt;p&gt;Everything else in Tamal is synchronous. The engine, the loader, the memories,
+the serialiser: one clock, one domain, every signal generated inside it. There is
+exactly one exception, and it is the only wire in the design that arrives from
+outside with no relationship to our clock at all:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;alertSync&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;HiddenClockResetEnable&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;  Signal&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bit&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;  Signal&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Bit&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;alertSync alert &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; alert&amp;#39;&amp;#39;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; where&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  alert&amp;#39; &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; register high alert&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  alert&amp;#39;&amp;#39; &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; register high alert&amp;#39;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Two registers in series, both initialised &lt;code&gt;high&lt;/code&gt;. The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-uart-rx/&quot;&gt;receiver&lt;/a&gt; built the
+same thing for the same reason and spent a long section on why: an asynchronous
+input will eventually violate a flip-flop’s setup or hold window, that flop can
+go &lt;strong&gt;metastable&lt;/strong&gt; — its output hovering at neither level for an unbounded
+time — and the second flop exists to give the first a whole clock period to
+settle before anything downstream is allowed to look. It does not make
+metastability impossible. It makes it improbable enough to ignore.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-mtbf-1&quot;&gt;&lt;a href=&quot;https://balbi.sh/posts/tamal-io/#fn-mtbf&quot;&gt;[4]&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;p&gt;Two details are specific to this wire rather than to synchronisers in general.&lt;/p&gt;
+&lt;p&gt;The first is &lt;code&gt;high&lt;/code&gt;. Both flops power up at one, and one is &lt;em&gt;deasserted&lt;/em&gt; —
+&lt;code&gt;ALERT#&lt;/code&gt; is active-low, as the trailing hash says. The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-uart-rx/&quot;&gt;receiver&lt;/a&gt; made the
+same choice for the idle-high UART line, and the argument is identical: a
+synchroniser that powers up at zero powers up believing the world is asserting
+something. Here that would be worse than a spurious byte. &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-bus/&quot;&gt;&lt;code&gt;WAIT_ON&lt;/code&gt;&lt;/a&gt; blocks
+the engine until the alert asserts, so a synchroniser that came out of reset low
+would release a waiting engine on a signal that was never sent. Initialising the
+flops to the wire’s resting state is what makes the first two cycles of a run
+&lt;em&gt;quiet&lt;/em&gt; instead of a lie.&lt;/p&gt;
+&lt;p&gt;The second is that this synchroniser is unconditional. The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-uart-rx/&quot;&gt;receiver’s&lt;/a&gt; flops
+were also clocked every cycle — deliberately not gated by the oversample tick,
+because a metastable strike does not wait for the tick — and the same holds
+here with nothing to gate it against. Two flops, every cycle, output lagging the
+raw pin by exactly two. That lag is the cost, and for this signal it is free:
+&lt;code&gt;ALERT#&lt;/code&gt; is a request for attention with no timing requirement finer than the
+engine’s own beat, so two cycles at 100 MHz is twenty nanoseconds of latency on a
+signal that exists to be waited on.&lt;/p&gt;
+&lt;p&gt;Worth noticing where the synchroniser &lt;em&gt;is&lt;/em&gt;, too. It is in the pad module, not in
+the engine and not in the board shell. That is the same placement argument the
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-uart-rx/&quot;&gt;receiver&lt;/a&gt; made about &lt;code&gt;rxLine&lt;/code&gt;: a wire is asynchronous because it comes from
+a pin, so it should be synchronised at the pin, and every consumer downstream can
+then treat it as ordinary. &lt;code&gt;BusIn.alertIn&lt;/code&gt; is a clean synchronous bit because
+&lt;code&gt;espiPads&lt;/code&gt; cleaned it. The engine never learns that one of its inputs came from
+outside the clock domain.&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Synchronise a wire where it enters, once, and no one downstream has to know it
+was ever dangerous.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;h2 id=&quot;one-lane-drawn&quot;&gt;One lane, drawn&lt;/h2&gt;
+&lt;p&gt;Four lanes, and they are four copies of one picture:&lt;/p&gt;
+&lt;figure class=&quot;iop-fig&quot; style=&quot;margin:2rem 0&quot;&gt;
+&lt;svg class=&quot;iop&quot; viewBox=&quot;0 0 760 344&quot; role=&quot;img&quot; aria-labelledby=&quot;iop-t iop-d&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot;&gt;
+&lt;title id=&quot;iop-t&quot;&gt;One IO lane crossing from the engine&#39;s value-and-enable pair to a bidirectional pad&lt;/title&gt;
+&lt;desc id=&quot;iop-d&quot;&gt;A left-to-right path. A box labelled lanesOut index i, holding the pair o and oe, feeds a box labelled toDrive. From toDrive an accented wire labelled Just o or Nothing runs into a tri-state buffer drawn as a triangle, labelled writeToBiSignal, whose output-enable stub above it is also accented and labelled oe. The buffer output runs right to a junction dot and then to a square port labelled inout io underscore i. A pull-up box labelled PullUp, idle high, drops onto the junction from above. From the same junction a wire runs downward into a box labelled readFromBiSignal, and below that into a box labelled ioIn index i, annotated as feeding BusIn dot ioIn. The accented path is the enable path: it runs from the pair through toDrive to the buffer&#39;s output enable.&lt;/desc&gt;
+&lt;style&gt;
+.iop{max-width:760px;width:100%;height:auto;display:block;margin:0 auto}
+.iop .bx{fill:var(--bg-dim);stroke:var(--fg-dim);stroke-width:1.6;rx:7}
+.iop .bxa{fill:var(--bg-dim);stroke:var(--accent);stroke-width:2.4;rx:7}
+.iop .pad{fill:var(--bg-main);stroke:var(--fg-dim);stroke-width:2}
+.iop .buf{fill:var(--bg-dim);stroke:var(--accent);stroke-width:2.4}
+.iop .w{stroke:var(--fg-dim);stroke-width:1.8;fill:none}
+.iop .wa{stroke:var(--accent);stroke-width:2.4;fill:none}
+.iop .m{fill:var(--fg-main);font-family:var(--mono);font-size:13.5px}
+.iop .d{fill:var(--fg-dim);font-family:var(--mono);font-size:12px}
+.iop .a{fill:var(--accent);font-family:var(--mono);font-size:12px}
+.iop .s{fill:var(--fg-dim);font-family:var(--sans);font-size:11.5px}
+.iop .ah{fill:var(--fg-dim)}
+.iop .aha{fill:var(--accent)}
+&lt;/style&gt;
+&lt;defs&gt;
+&lt;marker id=&quot;iop-m&quot; markerWidth=&quot;9&quot; markerHeight=&quot;7&quot; refX=&quot;8&quot; refY=&quot;3.5&quot; orient=&quot;auto&quot;&gt;&lt;path d=&quot;M0,0 L8,3.5 L0,7 Z&quot; class=&quot;ah&quot;/&gt;&lt;/marker&gt;
+&lt;marker id=&quot;iop-ma&quot; markerWidth=&quot;9&quot; markerHeight=&quot;7&quot; refX=&quot;8&quot; refY=&quot;3.5&quot; orient=&quot;auto&quot;&gt;&lt;path d=&quot;M0,0 L8,3.5 L0,7 Z&quot; class=&quot;aha&quot;/&gt;&lt;/marker&gt;
+&lt;/defs&gt;
+&lt;!-- engine side --&gt;
+&lt;rect class=&quot;bx&quot; x=&quot;14&quot; y=&quot;62&quot; width=&quot;152&quot; height=&quot;56&quot; rx=&quot;7&quot;/&gt;
+&lt;text class=&quot;m&quot; x=&quot;90&quot; y=&quot;86&quot; text-anchor=&quot;middle&quot;&gt;lanesOut !! i&lt;/text&gt;
+&lt;text class=&quot;d&quot; x=&quot;90&quot; y=&quot;105&quot; text-anchor=&quot;middle&quot;&gt;(o, oe)&lt;/text&gt;
+&lt;line class=&quot;w&quot; x1=&quot;166&quot; y1=&quot;90&quot; x2=&quot;222&quot; y2=&quot;90&quot; marker-end=&quot;url(#iop-m)&quot;/&gt;
+&lt;!-- toDrive --&gt;
+&lt;rect class=&quot;bxa&quot; x=&quot;232&quot; y=&quot;62&quot; width=&quot;120&quot; height=&quot;56&quot; rx=&quot;7&quot;/&gt;
+&lt;text class=&quot;m&quot; x=&quot;292&quot; y=&quot;96&quot; text-anchor=&quot;middle&quot;&gt;toDrive&lt;/text&gt;
+&lt;!-- toDrive -&gt; buffer, accented --&gt;
+&lt;line class=&quot;wa&quot; x1=&quot;352&quot; y1=&quot;90&quot; x2=&quot;426&quot; y2=&quot;90&quot; marker-end=&quot;url(#iop-ma)&quot;/&gt;
+&lt;text class=&quot;a&quot; x=&quot;392&quot; y=&quot;78&quot; text-anchor=&quot;middle&quot;&gt;Maybe Bit&lt;/text&gt;
+&lt;!-- tri-state buffer --&gt;
+&lt;path class=&quot;buf&quot; d=&quot;M432,58 L432,122 L502,90 Z&quot;/&gt;
+&lt;line class=&quot;wa&quot; x1=&quot;466&quot; y1=&quot;42&quot; x2=&quot;466&quot; y2=&quot;73&quot;/&gt;
+&lt;text class=&quot;a&quot; x=&quot;466&quot; y=&quot;34&quot; text-anchor=&quot;middle&quot;&gt;oe&lt;/text&gt;
+&lt;text class=&quot;s&quot; x=&quot;467&quot; y=&quot;142&quot; text-anchor=&quot;middle&quot;&gt;writeToBiSignal&lt;/text&gt;
+&lt;!-- buffer -&gt; pad --&gt;
+&lt;line class=&quot;w&quot; x1=&quot;502&quot; y1=&quot;90&quot; x2=&quot;612&quot; y2=&quot;90&quot; marker-end=&quot;url(#iop-m)&quot;/&gt;
+&lt;circle cx=&quot;556&quot; cy=&quot;90&quot; r=&quot;4.5&quot; fill=&quot;var(--fg-dim)&quot;/&gt;
+&lt;!-- pull-up --&gt;
+&lt;rect class=&quot;bx&quot; x=&quot;500&quot; y=&quot;10&quot; width=&quot;112&quot; height=&quot;34&quot; rx=&quot;7&quot;/&gt;
+&lt;text class=&quot;d&quot; x=&quot;556&quot; y=&quot;32&quot; text-anchor=&quot;middle&quot;&gt;&#39;PullUp&lt;/text&gt;
+&lt;line class=&quot;w&quot; x1=&quot;556&quot; y1=&quot;44&quot; x2=&quot;556&quot; y2=&quot;86&quot;/&gt;
+&lt;!-- pad --&gt;
+&lt;rect class=&quot;pad&quot; x=&quot;618&quot; y=&quot;64&quot; width=&quot;128&quot; height=&quot;52&quot;/&gt;
+&lt;text class=&quot;m&quot; x=&quot;682&quot; y=&quot;95&quot; text-anchor=&quot;middle&quot;&gt;inout io_i&lt;/text&gt;
+&lt;!-- read tap --&gt;
+&lt;line class=&quot;w&quot; x1=&quot;556&quot; y1=&quot;90&quot; x2=&quot;556&quot; y2=&quot;178&quot; marker-end=&quot;url(#iop-m)&quot;/&gt;
+&lt;rect class=&quot;bx&quot; x=&quot;462&quot; y=&quot;186&quot; width=&quot;188&quot; height=&quot;52&quot; rx=&quot;7&quot;/&gt;
+&lt;text class=&quot;m&quot; x=&quot;556&quot; y=&quot;217&quot; text-anchor=&quot;middle&quot;&gt;readFromBiSignal&lt;/text&gt;
+&lt;line class=&quot;w&quot; x1=&quot;556&quot; y1=&quot;238&quot; x2=&quot;556&quot; y2=&quot;270&quot; marker-end=&quot;url(#iop-m)&quot;/&gt;
+&lt;rect class=&quot;bx&quot; x=&quot;462&quot; y=&quot;278&quot; width=&quot;188&quot; height=&quot;52&quot; rx=&quot;7&quot;/&gt;
+&lt;text class=&quot;m&quot; x=&quot;556&quot; y=&quot;309&quot; text-anchor=&quot;middle&quot;&gt;ioIn !! i&lt;/text&gt;
+&lt;line class=&quot;w&quot; x1=&quot;462&quot; y1=&quot;304&quot; x2=&quot;304&quot; y2=&quot;304&quot; marker-end=&quot;url(#iop-m)&quot;/&gt;
+&lt;text class=&quot;s&quot; x=&quot;298&quot; y=&quot;308&quot; text-anchor=&quot;end&quot;&gt;to BusIn.ioIn&lt;/text&gt;
+&lt;/svg&gt;
+&lt;figcaption style=&quot;text-align:center;color:var(--fg-dim);font-size:.9rem;margin-top:.85rem;font-family:var(--sans)&quot;&gt;One of the four &lt;code&gt;IO&lt;/code&gt; lanes, from the engine&#39;s arithmetic to the bonded pin. The accented path is the enable: &lt;code&gt;toDrive&lt;/code&gt; collapses &lt;code&gt;(o, oe)&lt;/code&gt; into a &lt;code&gt;Maybe Bit&lt;/code&gt;, and &lt;code&gt;writeToBiSignal&lt;/code&gt; turns &lt;code&gt;Just o&lt;/code&gt; into a driven level and &lt;code&gt;Nothing&lt;/code&gt; into a released output. When nobody drives, the &lt;code&gt;&#39;PullUp&lt;/code&gt; holds the net at one. The same net is tapped combinationally by &lt;code&gt;readFromBiSignal&lt;/code&gt; and returned as &lt;code&gt;ioIn !! i&lt;/code&gt;, which is where the engine&#39;s &lt;code&gt;sampleGet&lt;/code&gt; reads &lt;code&gt;IO[1]&lt;/code&gt;. Clash fuses the scalar &lt;code&gt;BiSignalIn&lt;/code&gt; argument and the scalar &lt;code&gt;BiSignalOut&lt;/code&gt; result into the single &lt;code&gt;inout&lt;/code&gt; port on the right — which is precisely why the four lanes may not be bundled into a &lt;code&gt;Vec&lt;/code&gt;.&lt;/figcaption&gt;
+&lt;/figure&gt;
+&lt;p&gt;Four copies of this, plus three wires that pass through and one that gets caught
+by two flops, and the file is done.&lt;/p&gt;
+&lt;h2 id=&quot;the-tests-and-the-knot&quot;&gt;The tests, and the knot&lt;/h2&gt;
+&lt;p&gt;The test module is twice the length of the module it tests, and about half of it
+is comment explaining why the harnesses are shaped the way they are. That is
+unusual for this project, and the explanation is worth the detour, because it is
+about a hazard that only exists once signals become bidirectional.&lt;/p&gt;
+&lt;p&gt;Here is the problem. The obvious test for a pad boundary is a loopback: hand
+&lt;code&gt;espiPads&lt;/code&gt; a net, let it drive that net, read the same net back through the same
+&lt;code&gt;espiPads&lt;/code&gt;, and check that what you drove is what you sampled. The comment says
+what happens if you try:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; NB: feeding espiPads&amp;#39;s own drive-side &amp;#39;outs&amp;#39; back into the &amp;#39;padsIn&amp;#39; it also&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; reads makes the Clash BiSignal loopback diverge (self-drive + self-read knot).&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;It diverges — hangs, rather than failing. And it diverges for a reason that is
+not a bug: a bidirectional net’s value is a function of &lt;em&gt;every&lt;/em&gt; driver on it, so
+to compute what the net carries, the simulator must first know what each driver
+is putting there. If one of those drivers is derived from a read of the same net,
+the value depends on itself. When the lane is driven the knot happens to untie,
+because &lt;code&gt;Just o&lt;/code&gt; does not consult the net. When the lane is tri-stated it does
+not: the net’s level is &lt;em&gt;only&lt;/em&gt; the other drivers, so &lt;code&gt;Nothing&lt;/code&gt; leaves the
+simulator resolving a value defined in terms of itself, and Haskell’s laziness
+turns that into a loop rather than an error.&lt;/p&gt;
+&lt;p&gt;Which is a fair model of the world, if you think about it. A real net whose
+driver is a combinational function of its own level is a real oscillator. The
+simulator is not being difficult; it is refusing to invent a fixed point that
+hardware would not have.&lt;/p&gt;
+&lt;p&gt;So the harnesses split the loopback into its two directions, each with a single
+driver:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;idleNet&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Vec&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 4&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BiSignalIn&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;#39;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;PullUp&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Dom100&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;idleNet &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; repeat &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;veryUnsafeToBiSignalIn &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;mempty &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BiSignalOut&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;#39;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;PullUp&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Dom100&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;idleNet&lt;/code&gt; is a net nobody drives — &lt;code&gt;mempty&lt;/code&gt; is the empty set of drivers — so
+it reads as the pull-up’s idle high. It is the stub you hand &lt;code&gt;espiPads&lt;/code&gt; when you
+want it to &lt;em&gt;not depend&lt;/em&gt; on its read side. &lt;code&gt;simSample&lt;/code&gt; gives &lt;code&gt;espiPads&lt;/code&gt; a
+DUT-driven net and makes it a pure consumer; &lt;code&gt;simDrive&lt;/code&gt; lets &lt;code&gt;espiPads&lt;/code&gt; drive
+while handing it &lt;code&gt;idleNet&lt;/code&gt; to read, and routes its drive-side results to a
+&lt;em&gt;fresh&lt;/em&gt; reader. Two linear paths instead of one circular one, and the physical
+justification is one line of comment: &lt;em&gt;the engine never drives and samples one
+lane in the same cycle&lt;/em&gt;. The thing the harness cannot simulate is a thing the
+design never does.&lt;/p&gt;
+&lt;p&gt;There is a second shim, and it is a small joke at the module’s expense:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;espiPadsVec&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; …&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Vec&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 4&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BiSignalIn&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;#39;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;PullUp&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;Vec&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 4&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;BiSignalOut&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; &amp;#39;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;PullUp&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; dom&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; …&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;espiPadsVec lanes cs sck rst alert pads &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;d0 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&amp;gt;&lt;/span&gt;&lt;span&gt; d1 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&amp;gt;&lt;/span&gt;&lt;span&gt; d2 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&amp;gt;&lt;/span&gt;&lt;span&gt; d3 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nil&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; …&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; where&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  (&lt;/span&gt;&lt;span&gt;d0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; d1&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; d2&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; d3&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; csO&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; sckO&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; rstO&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; ioIn&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; alertO&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    espiPads lanes cs sck rst alert &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;pads &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;!!&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;pads &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;!!&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;pads &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;!!&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 2&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span&gt;pads &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;!!&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 3&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The tests wrap the scalar-per-lane interface back up into the &lt;code&gt;Vec&lt;/code&gt; interface it
+was so carefully not given — because, as its comment notes, &lt;em&gt;bundling
+&lt;code&gt;BiSignal&lt;/code&gt;s in a &lt;code&gt;Vec&lt;/code&gt; is fine in simulation; only Clash synthesis needs the
+scalar-per-lane form for &lt;code&gt;inout&lt;/code&gt; fusion&lt;/em&gt;. The constraint we spent a section on is
+a &lt;strong&gt;backend&lt;/strong&gt; constraint, and the test bench, which never goes near the backend,
+is free to ignore it. That is worth stating plainly, because it is exactly what
+makes the scar dangerous: the version that breaks silicon behaves identically
+everywhere a Haskell programmer can see.&lt;/p&gt;
+&lt;p&gt;The assertions themselves are short. Two oracles, one per direction:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;sampleOracle &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; map &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;maybe &lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;1&lt;/span&gt;&lt;span&gt; id&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;driveOracle  &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; map &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;\&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;o&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span&gt; oe&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; -&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; if&lt;/span&gt;&lt;span&gt; oe &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; then&lt;/span&gt;&lt;span&gt; o &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;else&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Read them together and they are the pull-up written twice. &lt;code&gt;sampleOracle&lt;/code&gt; says a
+lane reads the DUT’s value when the DUT drives and &lt;code&gt;1&lt;/code&gt; when it does not.
+&lt;code&gt;driveOracle&lt;/code&gt; says a lane carries &lt;code&gt;o&lt;/code&gt; when our enable is high and &lt;code&gt;1&lt;/code&gt; when it is
+not. Both fall back to one, and both times the one is the pull-up. The
+&lt;a rel=&quot;external&quot; href=&quot;https://hedgehog.qa&quot;&gt;Hedgehog&lt;/a&gt; properties then sweep random drive patterns against each
+model, and two &lt;code&gt;testCase&lt;/code&gt;s pin the interesting corners: drive nothing and
+everything reads high; drive lane zero only and read &lt;code&gt;0 :&amp;gt; 1 :&amp;gt; 1 :&amp;gt; 1 :&amp;gt; Nil&lt;/code&gt;,
+one driven low and three floating up.&lt;/p&gt;
+&lt;p&gt;One case reaches back a post and welds the two modules together:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;testCase &lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;io: x1 beat0 drives IO[0] only, IO[1..3] hi-Z (independent OE)&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;  $&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; let&lt;/span&gt;&lt;span&gt; byte &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0b0111_1111&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; BitVector&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;   --&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; MSB (IO[0]) = 0&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        lane0 &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;=&lt;/span&gt;&lt;span&gt; serializeX1 byte &lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;!!&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; ::&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; Index&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 8&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;     in&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; L.&lt;/span&gt;&lt;span&gt;head &lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;simDrive &lt;/span&gt;&lt;span&gt;[&lt;/span&gt;&lt;span&gt;lane0&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; @?=&lt;/span&gt;&lt;span&gt; (&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; :&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; :&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; :&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; :&amp;gt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Nil&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;That is not a made-up &lt;code&gt;Lanes&lt;/code&gt; value — it is &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-serdes/&quot;&gt;&lt;code&gt;serializeX1&lt;/code&gt;&lt;/a&gt;’s beat zero,
+the real drive the engine emits for the first bit of a &lt;code&gt;PUT&lt;/code&gt;. The byte
+&lt;code&gt;0b0111_1111&lt;/code&gt; is chosen so the MSB is the &lt;em&gt;only&lt;/em&gt; zero, so beat zero drives a low
+onto &lt;code&gt;IO[0]&lt;/code&gt; while the other three lanes are released and pull up to one. The
+expected vector, &lt;code&gt;0 :&amp;gt; 1 :&amp;gt; 1 :&amp;gt; 1&lt;/code&gt;, therefore distinguishes a driven zero from a
+floating one by position alone. Change any part of the chain — the serialiser’s
+bit order, &lt;code&gt;toDrive&lt;/code&gt;’s enable test, the per-lane indexing in &lt;code&gt;drive&lt;/code&gt; — and the
+zero lands on the wrong lane or does not land at all. It is the smallest test in
+the file and the only one that checks the two modules agree about which wire is
+which.&lt;/p&gt;
+&lt;p&gt;The synchroniser gets three of its own, and the first is the clearest statement
+of what it does:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;simAlert &lt;/span&gt;&lt;span&gt;[&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;1&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; @?=&lt;/span&gt;&lt;span&gt; [&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;1&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 1&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;]&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The input drops on sample two; the output drops on sample four. Two cycles,
+exactly, and the leading ones are the init-high flops showing through before the
+pin’s own value has walked the pipeline. A property test then holds the general
+form against a three-line reference model — &lt;code&gt;refAlert xs = take (length xs) (1 : 1 : xs)&lt;/code&gt;, which is &lt;em&gt;the input with two idle-high samples in front of it&lt;/em&gt; — and
+a second &lt;code&gt;testCase&lt;/code&gt; checks that a single-cycle assertion survives the trip rather
+than being swallowed. That last one matters: a synchroniser is allowed to delay a
+pulse but not to eat it, and a one-cycle &lt;code&gt;ALERT#&lt;/code&gt; that vanished on the way in
+would strand a &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-bus/&quot;&gt;&lt;code&gt;WAIT_ON&lt;/code&gt;&lt;/a&gt; forever.&lt;/p&gt;
+&lt;p&gt;Even the sideband pass-through is tested, which sounds like testing that &lt;code&gt;id&lt;/code&gt; is
+&lt;code&gt;id&lt;/code&gt; — and functionally it is:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;haskell&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;simSide xs &lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;H.&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;===&lt;/span&gt;&lt;span&gt; xs&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;But the property is not really about the function. It is about the &lt;em&gt;wiring&lt;/em&gt;:
+that &lt;code&gt;CS#&lt;/code&gt;, &lt;code&gt;SCK&lt;/code&gt; and &lt;code&gt;RESET#&lt;/code&gt; come out in that order, uncrossed, unregistered
+and unmolested. Swap two of the nine result positions in &lt;code&gt;espiPads&lt;/code&gt; and this is
+the test that goes red.&lt;/p&gt;
+&lt;h2 id=&quot;what-we-read&quot;&gt;What we read&lt;/h2&gt;
+&lt;p&gt;A hundred and four lines, and the series has crossed out of arithmetic. &lt;code&gt;Tamal.Io&lt;/code&gt;
+imports nothing but &lt;code&gt;Clash.Prelude&lt;/code&gt; and the &lt;code&gt;Lanes&lt;/code&gt; type, and it does four things.
+It turns each lane’s &lt;code&gt;(value, enable)&lt;/code&gt; pair into a &lt;code&gt;Maybe Bit&lt;/code&gt; with &lt;code&gt;toDrive&lt;/code&gt; —
+four states collapsed onto three, the redundancy of a released-but-valued lane
+finally made unwritable — and hands that to &lt;code&gt;writeToBiSignal&lt;/code&gt;, which is the
+tri-state driver the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-serdes/&quot;&gt;serdes post&lt;/a&gt; promised the pair would one day meet.
+It taps each net back with &lt;code&gt;readFromBiSignal&lt;/code&gt; and bundles the four into
+&lt;code&gt;BusIn.ioIn&lt;/code&gt;, the vector &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-bus/&quot;&gt;&lt;code&gt;sampleGet&lt;/code&gt;&lt;/a&gt; has been indexing since post three.
+It passes &lt;code&gt;CS#&lt;/code&gt;, &lt;code&gt;SCK&lt;/code&gt; and &lt;code&gt;RESET#&lt;/code&gt; through untouched, because they left the
+engine &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;already registered&lt;/a&gt; and the only value in routing them here is
+that the pin list then lives in one place. And it catches &lt;code&gt;ALERT#&lt;/code&gt;, the single
+asynchronous wire in the design, with two flops that both power up deasserted, so
+a &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-bus/&quot;&gt;&lt;code&gt;WAIT_ON&lt;/code&gt;&lt;/a&gt; is never released by a signal nobody sent.&lt;/p&gt;
+&lt;p&gt;The scar in the middle of it is the one the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-introducing/&quot;&gt;introduction&lt;/a&gt; predicted.
+Four lanes that every instinct in the project says should be a &lt;code&gt;Vec 4&lt;/code&gt; have to be
+four scalar arguments and four scalar results, because Clash fuses &lt;code&gt;inout&lt;/code&gt; ports
+by matching a scalar &lt;code&gt;BiSignalIn&lt;/code&gt; with the scalar &lt;code&gt;BiSignalOut&lt;/code&gt; derived from it,
+and a &lt;code&gt;Vec&lt;/code&gt; of &lt;code&gt;BiSignal&lt;/code&gt;s hides the match — silently keeping the read path and
+dropping the driver. The types do not distinguish the two versions. The
+simulation does not distinguish them; the test bench cheerfully wraps the scalar
+form back into a &lt;code&gt;Vec&lt;/code&gt; because in simulation the &lt;code&gt;Vec&lt;/code&gt; is fine. Only the emitted
+Verilog distinguishes them, which is why the comment says to go and look. Eight
+posts of the engine could be reasoned about from the source alone. The first post
+of the shell cannot.&lt;/p&gt;
+&lt;p&gt;The pads exist now, and they are wired to nothing. &lt;code&gt;espiPads&lt;/code&gt; takes a
+&lt;code&gt;Signal dom Lanes&lt;/code&gt; and produces four &lt;code&gt;inout&lt;/code&gt; ports, but the design that computes
+those lanes — the engine, the loader that feeds it a program, the two block RAMs
+it reads and writes, the UART that carries frames in and out — is still a pile
+of modules that have never been connected to one another. Every piece has been
+read; none of them have been joined. The next post joins them: one function that
+takes a UART line and the four sampled bits and gives back a serial line, a
+drive, three sidebands and a status LED, with the &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-engine-shape/&quot;&gt;engine’s pure &lt;code&gt;step&lt;/code&gt;&lt;/a&gt;
+lifted into a clocked signal at the centre of it and every module in the series
+hanging off the result. Everything, wired.&lt;/p&gt;
+&lt;section class=&quot;footnotes&quot;&gt;
+&lt;ol class=&quot;footnotes-list&quot;&gt;
+&lt;li id=&quot;fn-unbundle&quot;&gt;
+&lt;p&gt;&lt;code&gt;unbundle :: Signal dom (Vec n a) -&amp;gt; Vec n (Signal dom a)&lt;/code&gt; turns a
+signal of vectors into a vector of signals, and &lt;code&gt;bundle&lt;/code&gt; goes the other way.
+Both are identities on the hardware — a &lt;code&gt;Vec 4 Lane&lt;/code&gt; was always four separate
+pairs of wires, and neither combinator adds a gate — so the pair exists purely
+to let you choose which shape is convenient at each point in the source. Here
+the choice is forced by what comes next: &lt;code&gt;writeToBiSignal&lt;/code&gt; wants a
+&lt;code&gt;Signal dom (Maybe Bit)&lt;/code&gt; per pad, one pad at a time, so &lt;code&gt;unbundle&lt;/code&gt;
+splits the engine’s single lane signal into four the moment it arrives.
+&lt;code&gt;readFromBiSignal&lt;/code&gt; then produces four separate &lt;code&gt;Signal dom Bit&lt;/code&gt;s, and &lt;code&gt;bundle&lt;/code&gt;
+regathers them because &lt;code&gt;BusIn.ioIn&lt;/code&gt; is a &lt;code&gt;Vec 4 Bit&lt;/code&gt;. The module unbundles on
+the way out and bundles on the way back, and both moves are free. The
+&lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-haskell-primer/&quot;&gt;primer’s&lt;/a&gt; point about &lt;code&gt;Signal&lt;/code&gt; being a stream you map over rather than
+a value you inspect is what makes this legal: &lt;code&gt;toDrive &amp;lt;$&amp;gt; laneSig&lt;/code&gt; applies a
+pure function at every cycle at once, which is exactly what a combinational
+circuit is. &lt;a href=&quot;https://balbi.sh/posts/tamal-io/#fr-unbundle-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id=&quot;fn-inout&quot;&gt;
+&lt;p&gt;In Verilog a port is &lt;code&gt;input&lt;/code&gt;, &lt;code&gt;output&lt;/code&gt;, or &lt;code&gt;inout&lt;/code&gt;, and only the third
+can be both driven and read by the module that declares it. Clash has no
+&lt;code&gt;inout&lt;/code&gt; in its type system — &lt;code&gt;BiSignalIn&lt;/code&gt; and &lt;code&gt;BiSignalOut&lt;/code&gt; are ordinary
+Haskell types — so the mapping is done structurally at lowering time: the
+compiler looks for a top-entity argument of type &lt;code&gt;BiSignalIn ds dom n&lt;/code&gt; and a
+result of type &lt;code&gt;BiSignalOut ds dom n&lt;/code&gt; that was produced from that argument, and
+emits a single &lt;code&gt;inout&lt;/code&gt; port carrying both roles, with the &lt;code&gt;Maybe&lt;/code&gt; given to
+&lt;code&gt;writeToBiSignal&lt;/code&gt; becoming the value and output-enable of a tri-state driver on
+that port. &lt;code&gt;Nothing&lt;/code&gt; lowers to the driver disabled, which in Verilog is an
+assignment of &lt;code&gt;1&#39;bz&lt;/code&gt;. The recognition is syntactic in the sense that matters:
+it depends on the shape the pair appears in, not on the types alone. Route the
+pair through a &lt;code&gt;Vec&lt;/code&gt; — &lt;code&gt;zipWith writeToBiSignal pads lanes&lt;/code&gt;, or even a &lt;code&gt;map&lt;/code&gt;
+over the results — and the argument becomes one opaque aggregate and the
+result another, with nothing at the port boundary relating lane &lt;code&gt;k&lt;/code&gt; of one to
+lane &lt;code&gt;k&lt;/code&gt; of the other. Clash keeps what it can prove, the read, and discards
+what it cannot place, the write. The emitted module still has four &lt;code&gt;inout&lt;/code&gt;
+ports and still compiles; each one is simply never driven, so the bus sits at
+its pull-ups forever and every &lt;code&gt;GET&lt;/code&gt; returns ones. Nothing in Haskell reports
+this. The verification step recorded in the source comment — read the Verilog,
+confirm each of &lt;code&gt;io0&lt;/code&gt;..&lt;code&gt;io3&lt;/code&gt; carries its own tri-state driver — is the whole
+of the available evidence, which is why it is written down. &lt;a href=&quot;https://balbi.sh/posts/tamal-io/#fr-inout-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id=&quot;fn-pullup&quot;&gt;
+&lt;p&gt;&lt;code&gt;BiSignalIn&lt;/code&gt;’s first parameter is a &lt;code&gt;BiSignalDefault&lt;/code&gt;, a type-level
+tag saying what the &lt;em&gt;simulator&lt;/em&gt; should believe an undriven net carries:
+&lt;code&gt;&#39;PullUp&lt;/code&gt; for one, &lt;code&gt;&#39;PullDown&lt;/code&gt; for zero, &lt;code&gt;&#39;Floating&lt;/code&gt; for undefined. It
+generates no hardware — a real pull-up is a resistor on the board or a pad
+attribute in the constraints file, not a gate in your netlist — so the tag is
+a claim about the physical world that you are responsible for making true
+elsewhere. &lt;code&gt;&#39;PullUp&lt;/code&gt; is the correct claim for eSPI: the bus idles high, every
+lane has a pull-up, and a released net rises rather than drifting. It is also
+what makes the test oracles read the way they do, both falling back to &lt;code&gt;1&lt;/code&gt;
+whenever nothing drives. Get the tag wrong and simulation quietly disagrees
+with the board about what a floating wire means — and since the whole point of
+a tri-state bus is that wires spend most of their time floating, the
+disagreement would not be a corner case. &lt;a href=&quot;https://balbi.sh/posts/tamal-io/#fr-pullup-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id=&quot;fn-mtbf&quot;&gt;
+&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://balbi.sh/posts/tamal-uart-rx/&quot;&gt;receiver post&lt;/a&gt; worked this through at length, so only the
+shape is worth repeating. A flip-flop sampled while its input is changing can
+enter a metastable state, in which its output sits between the two valid levels
+for an unbounded — though exponentially improbable — time. You cannot prevent
+the first flop from going metastable, because the input is asynchronous and
+asynchronous means &lt;em&gt;will eventually violate setup and hold&lt;/em&gt;. What a second flop
+buys is a full clock period of settling time before any logic downstream is
+allowed to look, which pushes the mean time between failures from seconds to
+geological. Two flops is the standard dose; safety-critical designs add a
+third. &lt;code&gt;ALERT#&lt;/code&gt; gets two, and the choice to run them unconditionally — no
+enable, every cycle — matters for the same reason it mattered in the receiver:
+a strike arrives when the outside world decides, not when your logic is ready
+for it. The cost is a fixed two-cycle lag, and for a signal whose consumer is a
+blocking wait, twenty nanoseconds is not a cost at all. &lt;a href=&quot;https://balbi.sh/posts/tamal-io/#fr-mtbf-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/section&gt;
+</content:encoded>
+    </item>
+    
+  </channel>
+</rss>
