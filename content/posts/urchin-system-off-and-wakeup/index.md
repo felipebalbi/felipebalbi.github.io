@@ -1,7 +1,7 @@
 +++
 title = "My Urchin can sleep deeper, if I let it disconnect"
 date = 2026-11-11
-draft = true
+draft = false
 description = "A central-only SYSTEM_OFF experiment brings whole-board current to about 19.8 µA at 4.0 V, then tests whether the keyboard can wake, reconnect, type, and go back to sleep."
 [taxonomies]
 tags = ["embedded", "rust", "keyboards", "rmk", "bluetooth", "low-power"]
