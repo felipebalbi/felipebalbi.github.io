@@ -1,0 +1,1104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+  <title>Felipe Balbi</title>
+  <subtitle>Notes on embedded systems, Rust, and the craft of writing software.</subtitle>
+  <link href="https://balbi.sh/tags/rmk/atom.xml" rel="self" type="application/atom+xml"/>
+  <link href="https://balbi.sh"/>
+  <generator uri="https://www.getzola.org/">Zola</generator>
+  <updated>2026-11-11T00:00:00+00:00</updated>
+  <id>https://balbi.sh/tags/rmk/atom.xml</id>
+  
+  <entry xml:lang="en">
+    <title>My Urchin can sleep deeper, if I let it disconnect</title>
+    <published>2026-11-11T00:00:00+00:00</published>
+    <updated>2026-11-11T00:00:00+00:00</updated>
+    <author><name>Felipe Balbi</name></author>
+    <link rel="alternate" href="https://balbi.sh/posts/urchin-system-off-and-wakeup/" type="text/html"/>
+    <id>https://balbi.sh/posts/urchin-system-off-and-wakeup/</id>
+    <summary type="html">&lt;p&gt;In the &lt;a href=&quot;https://balbi.sh/posts/urchin-connected-sleep-and-clocks/&quot;&gt;previous post&lt;/a&gt;,
+my Urchin central reached about &lt;strong&gt;62 µA asleep&lt;/strong&gt;, with both Bluetooth
+connections retained. The displays were off, the low-frequency crystal
+was finally doing its job, and a keypress didn’t require a reboot and
+reconnection.&lt;/p&gt;
+&lt;p&gt;I still like that arrangement. Taking my hands off the keyboard for a
+minute shouldn’t mean asking all the Bluetooth devices to introduce
+themselves again.&lt;/p&gt;
+&lt;p&gt;But leaving it alone overnight is a different question. What would it
+cost to stop keeping those connections alive? And, rather more
+importantly, would it come back as a keyboard afterward?&lt;/p&gt;
+&lt;p&gt;The short answer is &lt;strong&gt;about 19.8 µA for the whole measurement board at
+a 4.0 V supply&lt;/strong&gt;. A local keypress woke the central, it reconnected to
+the host and accepted keys, and I also checked its connection to the
+other half. It could then enter SYSTEM_OFF again and return to the same
+current floor.&lt;/p&gt;
+&lt;p&gt;That is enough to make me consider a second, longer idle timeout. It
+isn’t a production sleep policy yet.&lt;/p&gt;</summary>
+    
+    <content type="html">&lt;p&gt;In the &lt;a href=&quot;https://balbi.sh/posts/urchin-connected-sleep-and-clocks/&quot;&gt;previous post&lt;/a&gt;,
+my Urchin central reached about &lt;strong&gt;62 µA asleep&lt;/strong&gt;, with both Bluetooth
+connections retained. The displays were off, the low-frequency crystal
+was finally doing its job, and a keypress didn’t require a reboot and
+reconnection.&lt;/p&gt;
+&lt;p&gt;I still like that arrangement. Taking my hands off the keyboard for a
+minute shouldn’t mean asking all the Bluetooth devices to introduce
+themselves again.&lt;/p&gt;
+&lt;p&gt;But leaving it alone overnight is a different question. What would it
+cost to stop keeping those connections alive? And, rather more
+importantly, would it come back as a keyboard afterward?&lt;/p&gt;
+&lt;p&gt;The short answer is &lt;strong&gt;about 19.8 µA for the whole measurement board at
+a 4.0 V supply&lt;/strong&gt;. A local keypress woke the central, it reconnected to
+the host and accepted keys, and I also checked its connection to the
+other half. It could then enter SYSTEM_OFF again and return to the same
+current floor.&lt;/p&gt;
+&lt;p&gt;That is enough to make me consider a second, longer idle timeout. It
+isn’t a production sleep policy yet.&lt;/p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;/span&gt;&lt;h2 id=&quot;this-time-actually-turn-it-off&quot;&gt;This time, actually turn it off&lt;/h2&gt;
+&lt;p&gt;The &lt;a href=&quot;https://balbi.sh/posts/urchin-tap-hold-and-power/&quot;&gt;first post&lt;/a&gt; distinguished
+screen sleep from MCU System OFF. Until now, the firmware cleared the
+nice!view, cut its switched supply, and stopped periodic display work.
+The MCU still detected keys and maintained the host and split links.&lt;/p&gt;
+&lt;p&gt;For this experiment, I made a disposable &lt;strong&gt;central-only&lt;/strong&gt; firmware
+snapshot. At the existing &lt;strong&gt;30-second idle timeout&lt;/strong&gt;, after the display
+had finished shutting down, it entered nRF52840 SYSTEM_OFF instead of
+remaining in connected sleep.&lt;/p&gt;
+&lt;p&gt;The normal application checkout stayed untouched. The snapshot started
+from &lt;a rel=&quot;external&quot; href=&quot;https://github.com/felipebalbi/rmk-urchin/commit/041403d5ec7aa1186de57e7653db59e349b50bfb&quot;&gt;this application revision&lt;/a&gt;,
+and kept its &lt;a rel=&quot;external&quot; href=&quot;https://github.com/felipebalbi/rmk/commit/18300680e2f16046643b9f8151abae891df998a4&quot;&gt;pinned RMK revision&lt;/a&gt;.
+I didn’t update the library in the middle of the power measurement.
+The &lt;a href=&quot;https://balbi.sh/posts/urchin-system-off-and-wakeup/system-off-spike.patch&quot;&gt;diagnostic patch&lt;/a&gt; contains the temporary
+application changes, not a proposed general-purpose RMK shutdown API.&lt;/p&gt;
+&lt;p&gt;The PPK2 supplied the central through its battery connection at
+&lt;strong&gt;4.0 V&lt;/strong&gt;, with keyboard USB and the debugger disconnected. These are
+November 5 captures of the Urchin measurement board with its nice!nano
+v2, not isolated measurements of the nRF52840 supply. The same setup
+includes the board’s other components and whatever current they still
+draw while the MCU is off.&lt;/p&gt;
+&lt;p&gt;Throughout the measurements, I kept the supply at 4.0 V, which RMK
+reported as about 65% battery charge.&lt;/p&gt;
+&lt;h2 id=&quot;a-key-still-needs-a-way-in&quot;&gt;A key still needs a way in&lt;/h2&gt;
+&lt;p&gt;SYSTEM_OFF is not a deeper version of waiting for the next Embassy
+timer. Nordic’s &lt;a rel=&quot;external&quot; href=&quot;https://files.seeedstudio.com/wiki/XIAO-BLE/nRF52840_PS_v1.5.pdf&quot;&gt;nRF52840 Product Specification v1.5&lt;/a&gt;,
+§5.3.3, describes the core being powered down and the system resetting
+when it wakes. GPIO DETECT is one of its wake sources.&lt;/p&gt;
+&lt;p&gt;The central’s matrix uses columns as outputs and rows as inputs. Before
+entering SYSTEM_OFF, the diagnostic drives &lt;strong&gt;all five columns high&lt;/strong&gt;
+and configures &lt;strong&gt;all four rows as pulled-down inputs with high-level
+SENSE enabled&lt;/strong&gt;. Closing a switch raises its row through the matrix
+diode and asserts DETECT.&lt;/p&gt;
+&lt;p&gt;The relevant row configuration is ordinary GPIO configuration, with
+one extra field:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;w&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;set_dir&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Dir&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Input&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;w&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;set_input&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Input&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Connect&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;w&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;set_pull&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Pull&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Pulldown&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;w&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;set_sense&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Sense&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;High&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The GPIO configuration is retained in SYSTEM_OFF. No periodic matrix
+scan is needed to notice that level. I also replaced the running
+matrix wait’s SENSE settings and cleared stale latches, rather than
+assuming its interrupt-driven configuration was already the desired
+off-state configuration.&lt;/p&gt;
+&lt;p&gt;There is a little more to shutdown than writing the power register.
+The display finishes its final SPI transaction and loses its supply
+first. The diagnostic synchronously disables the Bluetooth controller,
+then masks interrupts and disables PPI channels so the running tasks
+cannot reconfigure the hardware. It stops any overlapping battery ADC
+conversion and waits for STOPPED, disables SPIM2, and clears RAM
+retention before calling &lt;code&gt;embassy_nrf::power::set_system_off()&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;Nordic explicitly requires ongoing EasyDMA transactions to finish
+before SYSTEM_OFF. The ADC is worth remembering here: its 30-second
+sampling cadence can overlap the 30-second idle timeout.&lt;/p&gt;
+&lt;p&gt;This is a non-returning measurement path. It does not hand those
+peripherals back to their Rust owners and try to resume their futures.
+Wake starts the MCU again through reset and the installed bootloader.
+No RAM contents need to survive that trip.&lt;/p&gt;
+&lt;p&gt;A connected debugger also changes the experiment: the chip emulates
+SYSTEM_OFF to keep debug resources available. I measured with it
+disconnected, after a power cycle.&lt;/p&gt;
+&lt;h2 id=&quot;about-twenty-microamps-not-zero&quot;&gt;About twenty microamps, not zero&lt;/h2&gt;
+&lt;p&gt;The first useful off selection was almost 30 seconds long:&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://balbi.sh/posts/urchin-system-off-and-wakeup/system-off-selection.png&quot;&gt;&lt;img src=&quot;https://balbi.sh/posts/urchin-system-off-and-wakeup/system-off-selection.png&quot; alt=&quot;PPK2 capture with the SYSTEM_OFF region selected: 19.79 µA over 29.43 seconds.&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;Read the selected region: 19.79 µA over 29.43 seconds. The 1.30 mA
+whole-window average includes the earlier active period. Neither the
+height of the active peaks nor that mixed average is the off current.&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;The CSV from that capture has &lt;strong&gt;10 µs sample spacing&lt;/strong&gt;. Using a slightly
+different boundary, from 27 seconds to its end, gives &lt;strong&gt;19.792 µA over
+29.41 seconds&lt;/strong&gt;. Moving the start to 30 seconds gives &lt;strong&gt;19.791 µA&lt;/strong&gt;;
+the 40–50 second interval gives &lt;strong&gt;19.791 µA&lt;/strong&gt; too.&lt;/p&gt;
+&lt;p&gt;The &lt;a href=&quot;https://balbi.sh/posts/urchin-system-off-and-wakeup/measurement-summary.json&quot;&gt;measurement summary&lt;/a&gt; records the source
+CSV filenames, hashes, and calculation windows for these captures.&lt;/p&gt;
+&lt;p&gt;That’s a stable result within this recording, not an uncertainty
+estimate accurate to a thousandth of a microamp. &lt;strong&gt;About 19.8 µA&lt;/strong&gt; is
+the useful number.&lt;/p&gt;
+&lt;p&gt;Relative to the previously reported &lt;strong&gt;62.07 µA connected-sleep
+selection&lt;/strong&gt;, it is about &lt;strong&gt;42.3 µA lower&lt;/strong&gt;, or &lt;strong&gt;68% less current&lt;/strong&gt;.
+The important qualification is also the point of the experiment: the
+Bluetooth connections are no longer retained. These are different
+operating states and captures, not a controlled attribution of every
+saved microamp to one peripheral.&lt;/p&gt;
+&lt;p&gt;There is still a small repeating feature in the off trace:&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://balbi.sh/posts/urchin-system-off-and-wakeup/system-off-detail.png&quot;&gt;&lt;img src=&quot;https://balbi.sh/posts/urchin-system-off-and-wakeup/system-off-detail.png&quot; alt=&quot;A zoomed SYSTEM_OFF trace showing small pulses above the approximately 19.6 µA quiet current.&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;The 115.3 ms quiet selection averages 19.56 µA. The complete visible
+window, including the small pulses, averages 19.79 µA. I kept the
+pulses in the reported off average.&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;Thresholding the CSV above 23 µA puts the pulses roughly &lt;strong&gt;139 ms
+apart&lt;/strong&gt;. I haven’t isolated their source. That spacing alone doesn’t
+make them Bluetooth events, firmware timer wakeups, or a particular
+board component. It also doesn’t make this a measurement of the SoC’s
+datasheet SYSTEM_OFF current.&lt;/p&gt;
+&lt;p&gt;The remaining whole-board current is a separate investigation. I don’t
+need to explain it away to find this reduction useful.&lt;/p&gt;
+&lt;h2 id=&quot;coming-back-matters-more-than-going-away&quot;&gt;Coming back matters more than going away&lt;/h2&gt;
+&lt;p&gt;I initially measured only the current after shutdown. No keypresses,
+no wake test. A low number from a board that never comes back would
+be easy enough to arrange.&lt;/p&gt;
+&lt;p&gt;The next recording started with the central off, included a local
+keypress and startup, then ended with another shutdown. The off
+selections on either side were &lt;strong&gt;19.74 µA&lt;/strong&gt; and &lt;strong&gt;19.75 µA&lt;/strong&gt;.&lt;/p&gt;
+&lt;p&gt;That established a repeatable electrical cycle. It didn’t establish a
+working Bluetooth keyboard. Host Bluetooth also misbehaved while I
+was trying to pair, so I kept the successful connection check separate
+from those first current captures.&lt;/p&gt;
+&lt;p&gt;Afterward, I verified that the central &lt;strong&gt;reconnected to the host and
+accepted keypresses&lt;/strong&gt;. I also made sure it connected to the split
+peripheral half. The final recording captures the complete sequence:&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://balbi.sh/posts/urchin-system-off-and-wakeup/system-off-full-cycle.png&quot;&gt;&lt;img src=&quot;https://balbi.sh/posts/urchin-system-off-and-wakeup/system-off-full-cycle.png&quot; alt=&quot;Full PPK2 capture showing active operation, SYSTEM_OFF, key-triggered wake, resumed activity, and another SYSTEM_OFF transition.&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;Central at a 4.0 V supply. The displayed 999.21 µA average covers both
+active periods and startup, not just SYSTEM_OFF. The large peak sets
+the vertical scale; the two low-current intervals are not zero.&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;The final CSV gives:&lt;/p&gt;
+&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Phase&lt;/th&gt;&lt;th&gt;Selected interval&lt;/th&gt;&lt;th style=&quot;text-align: right&quot;&gt;Average current&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;
+&lt;tr&gt;&lt;td&gt;Initial activity&lt;/td&gt;&lt;td&gt;0–18.511 s&lt;/td&gt;&lt;td style=&quot;text-align: right&quot;&gt;1.047 mA&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;First settled SYSTEM_OFF window&lt;/td&gt;&lt;td&gt;18.611–22.143 s&lt;/td&gt;&lt;td style=&quot;text-align: right&quot;&gt;19.76 µA&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;Second settled SYSTEM_OFF window&lt;/td&gt;&lt;td&gt;55.931–58.936 s&lt;/td&gt;&lt;td style=&quot;text-align: right&quot;&gt;19.76 µA&lt;/td&gt;&lt;/tr&gt;
+&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;Wake activity begins around &lt;strong&gt;22.243 seconds&lt;/strong&gt;. After startup, the
+one-second windows generally return to roughly &lt;strong&gt;1.03–1.05 mA&lt;/strong&gt;. The
+second shutdown is around &lt;strong&gt;55.831 seconds&lt;/strong&gt;. The two short off
+selections confirm the return to the earlier floor; they don’t replace
+the longer first capture as the main off-current measurement.&lt;/p&gt;
+&lt;p&gt;The first wake key is lost. It triggers a reboot, and the firmware
+doesn’t save or replay that event. RAM retention is disabled too.
+Subsequent keypresses worked after reconnection; I haven’t timed that
+reconnection or stress-tested repeated wakeups.&lt;/p&gt;
+&lt;h2 id=&quot;the-tall-startup-peak-isn-t-the-whole-bill&quot;&gt;The tall startup peak isn’t the whole bill&lt;/h2&gt;
+&lt;p&gt;One of the wake captures contains an exported peak of &lt;strong&gt;128.10 mA&lt;/strong&gt;.
+That certainly gets the plot’s attention.&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://balbi.sh/posts/urchin-system-off-and-wakeup/wake-startup.png&quot;&gt;&lt;img src=&quot;https://balbi.sh/posts/urchin-system-off-and-wakeup/wake-startup.png&quot; alt=&quot;Wake startup selection containing 2.86 mC over 808.6 ms, including a narrow 128.10 mA peak.&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;The GUI startup selection contains 2.86 mC over 808.6 ms. A slightly
+wider CSV window, 4.95–5.78 seconds, contains 2.886 mC over 0.83 seconds.
+Neither selection identifies when Bluetooth reconnection completed.&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;Zooming into the peak makes the scale less alarming:&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://balbi.sh/posts/urchin-system-off-and-wakeup/wake-peak.png&quot;&gt;&lt;img src=&quot;https://balbi.sh/posts/urchin-system-off-and-wakeup/wake-peak.png&quot; alt=&quot;A 200 µs selection around the startup peak contains 7.69 µC despite its 128.10 mA maximum.&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;The selected 200 µs contains about 7.7 µC. That’s roughly 0.27% of
+the broader startup window’s charge, despite dominating its vertical
+scale.&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;I haven’t identified that peak’s source. I’m strictly reporting what
+the PPK2 export contains. No other claims are made.&lt;/p&gt;
+&lt;p&gt;The broader &lt;strong&gt;2.886 mC&lt;/strong&gt; startup selection is about &lt;strong&gt;0.00080 mAh&lt;/strong&gt;.
+That’s small enough to be encouraging. It is not a complete
+measurement of the additional cost of waking from SYSTEM_OFF: that
+would need an ordinary connected-wake comparison and a boundary that
+includes the full reconnection process. I won’t turn this selected
+window into a precise break-even timer.&lt;/p&gt;
+&lt;h2 id=&quot;thirty-seconds-for-the-experiment-perhaps-thirty-minutes-for-use&quot;&gt;Thirty seconds for the experiment, perhaps thirty minutes for use&lt;/h2&gt;
+&lt;p&gt;I don’t want every short pause to reset the keyboard. The experiment
+used the existing 30-second timeout so I could measure it without
+waiting half an hour for every run.&lt;/p&gt;
+&lt;p&gt;The policy I’m considering is two-stage:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;After a short idle period, keep today’s connected sleep: displays
+off, links retained, quick wake.&lt;/li&gt;
+&lt;li&gt;After perhaps &lt;strong&gt;30 minutes without activity&lt;/strong&gt;, enter SYSTEM_OFF and
+accept reset and reconnection on the next local keypress.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-wake-both-halves-1&quot;&gt;&lt;a href=&quot;https://balbi.sh/posts/urchin-system-off-and-wakeup/#fn-wake-both-halves&quot;&gt;[1]&lt;/a&gt;&lt;/sup&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;For a deliberately simple eight-hour idle budget, using the earlier
+62.07 µA connected-sleep result and this experiment’s 19.79 µA off
+result:&lt;/p&gt;
+&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Hypothetical central idle policy&lt;/th&gt;&lt;th style=&quot;text-align: right&quot;&gt;Charge over eight hours&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;
+&lt;tr&gt;&lt;td&gt;Connected sleep throughout&lt;/td&gt;&lt;td style=&quot;text-align: right&quot;&gt;0.497 mAh&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;30 minutes connected sleep, then 7.5 hours SYSTEM_OFF&lt;/td&gt;&lt;td style=&quot;text-align: right&quot;&gt;0.179 mAh&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;Difference&lt;/td&gt;&lt;td style=&quot;text-align: right&quot;&gt;&lt;strong&gt;0.317 mAh saved&lt;/strong&gt;&lt;/td&gt;&lt;/tr&gt;
+&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;With eight hours idle each day, that saves enough charge to power the
+central for another &lt;strong&gt;0.31 hours, or about 18½ minutes&lt;/strong&gt;, at the
+&lt;strong&gt;1.03 mA awake-idle current&lt;/strong&gt; measured in the previous post. Typing
+may draw a different current.&lt;/p&gt;
+&lt;p&gt;That’s about &lt;strong&gt;64% less charge in that simplified overnight budget&lt;/strong&gt;.
+It uses steady-state currents and leaves out the common initial
+awake period and the eventual wake/reconnection cost. It isn’t a
+measurement of an implemented 30-minute policy.&lt;/p&gt;
+&lt;h2 id=&quot;the-daily-budget-is-less-dramatic&quot;&gt;The daily budget is less dramatic&lt;/h2&gt;
+&lt;p&gt;The &lt;a href=&quot;https://balbi.sh/posts/urchin-connected-sleep-and-clocks/#what-does-that-buy-a-110-mah-battery&quot;&gt;previous post’s battery-runtime table&lt;/a&gt;
+was for continuous sleep. Its daily-use example, with &lt;strong&gt;four hours
+active and twenty hours in connected sleep&lt;/strong&gt;, came to about &lt;strong&gt;20.5
+ideal days&lt;/strong&gt; from the central’s 110 mAh battery.&lt;/p&gt;
+&lt;p&gt;Keeping those four active hours, but replacing eight of the connected
+idle hours with SYSTEM_OFF, gives:&lt;/p&gt;
+&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;State&lt;/th&gt;&lt;th style=&quot;text-align: right&quot;&gt;Hours per day&lt;/th&gt;&lt;th style=&quot;text-align: right&quot;&gt;Current&lt;/th&gt;&lt;th style=&quot;text-align: right&quot;&gt;Daily charge&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;
+&lt;tr&gt;&lt;td&gt;Active&lt;/td&gt;&lt;td style=&quot;text-align: right&quot;&gt;4&lt;/td&gt;&lt;td style=&quot;text-align: right&quot;&gt;1.03 mA&lt;/td&gt;&lt;td style=&quot;text-align: right&quot;&gt;4.120 mAh&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;Connected idle&lt;/td&gt;&lt;td style=&quot;text-align: right&quot;&gt;12&lt;/td&gt;&lt;td style=&quot;text-align: right&quot;&gt;62.07 µA&lt;/td&gt;&lt;td style=&quot;text-align: right&quot;&gt;0.745 mAh&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;SYSTEM_OFF&lt;/td&gt;&lt;td style=&quot;text-align: right&quot;&gt;8&lt;/td&gt;&lt;td style=&quot;text-align: right&quot;&gt;19.79 µA&lt;/td&gt;&lt;td style=&quot;text-align: right&quot;&gt;0.158 mAh&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;strong&gt;Total&lt;/strong&gt;&lt;/td&gt;&lt;td style=&quot;text-align: right&quot;&gt;&lt;strong&gt;24&lt;/strong&gt;&lt;/td&gt;&lt;td style=&quot;text-align: right&quot;&gt;&lt;/td&gt;&lt;td style=&quot;text-align: right&quot;&gt;&lt;strong&gt;5.023 mAh&lt;/strong&gt;&lt;/td&gt;&lt;/tr&gt;
+&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;That’s &lt;strong&gt;21.9 ideal days&lt;/strong&gt;, compared with the earlier &lt;strong&gt;20.5 days&lt;/strong&gt;:
+about &lt;strong&gt;1.4 more days per charge&lt;/strong&gt;, or &lt;strong&gt;6.7% longer runtime&lt;/strong&gt;. The four
+active hours alone cost 4.12 mAh, about 82% of the new daily budget.
+Reducing overnight current can’t do much about that part.&lt;/p&gt;
+&lt;p&gt;This example assumes eight full hours in SYSTEM_OFF, unlike the
+overnight table’s half-hour connected grace period followed by 7.5
+hours off. It still uses awake-idle current as the active-use estimate
+and excludes reboot and reconnection overhead.&lt;/p&gt;
+&lt;p&gt;Each half has its own &lt;strong&gt;110 mAh battery&lt;/strong&gt;. These numbers concern the
+central’s battery only; I can’t apply them to both halves or call the
+68% sleep-current reduction a threefold increase in overall battery
+life. Awake time still matters, as do battery self-discharge, cutoff,
+and current changing as the battery voltage falls. A fixed 4.0 V
+measurement isn’t a battery rundown.&lt;/p&gt;
+&lt;p&gt;There is also a split-keyboard catch that matters more than another
+decimal place: &lt;strong&gt;the peripheral cannot wake a central whose BLE radio
+is off&lt;/strong&gt;. This experiment wakes from a local central key. A usable
+two-half policy needs to make that behavior intentional, rather than
+surprise me when my first key after lunch happens to be on the right.
+I haven’t tested a SYSTEM_OFF image on the peripheral.&lt;/p&gt;
+&lt;h2 id=&quot;where-i-stopped&quot;&gt;Where I stopped&lt;/h2&gt;
+&lt;p&gt;This was a measurement spike, not a replacement for the connected
+sleep behavior I already like. The normal firmware remains unchanged,
+and there is no new 30-minute timer yet.&lt;/p&gt;
+&lt;p&gt;What I have now is a central that can reach about &lt;strong&gt;19.8 µA whole-board
+current at 4.0 V&lt;/strong&gt;, wake through a local keypress, reconnect to the host
+and the other half, accept typing, and go back to the same floor.&lt;/p&gt;
+&lt;p&gt;The earlier improvements made keeping the conversation going cheaper.
+This one asks whether, after enough silence, it’s worth hanging up.&lt;/p&gt;
+&lt;p&gt;I’m certainly considering it, but if my four-hour active-use estimate
+is correct, the extra &lt;strong&gt;1.4 days per charge&lt;/strong&gt; is close to negligible
+for me.&lt;/p&gt;
+&lt;section class=&quot;footnotes&quot;&gt;
+&lt;ol class=&quot;footnotes-list&quot;&gt;
+&lt;li id=&quot;fn-wake-both-halves&quot;&gt;
+&lt;p&gt;If both halves enter SYSTEM_OFF, each needs its own
+local keypress to wake, reset, and reconnect. Neither half can wake
+the other over BLE while its radio is off. The central reconnects to
+the host, and the peripheral reconnects to the central. &lt;a href=&quot;https://balbi.sh/posts/urchin-system-off-and-wakeup/#fr-wake-both-halves-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/section&gt;
+</content>
+  </entry>
+  
+  <entry xml:lang="en">
+    <title>REMAKE: a small keyboard of my own</title>
+    <published>2026-11-09T00:00:00+00:00</published>
+    <updated>2026-11-09T00:00:00+00:00</updated>
+    <author><name>Felipe Balbi</name></author>
+    <link rel="alternate" href="https://balbi.sh/posts/remake-introducing/" type="text/html"/>
+    <id>https://balbi.sh/posts/remake-introducing/</id>
+    <summary type="html">&lt;p&gt;Getting my &lt;a href=&quot;https://balbi.sh/posts/urchin-tap-hold-and-power/&quot;&gt;Urchin to run RMK&lt;/a&gt;
+apparently wasn’t the end of the keyboard project. Now I have a hardware
+repository, too.&lt;/p&gt;
+&lt;p&gt;Meet &lt;strong&gt;REMAKE&lt;/strong&gt;: a &lt;strong&gt;36-key wireless split keyboard&lt;/strong&gt; designed around
+&lt;a rel=&quot;external&quot; href=&quot;https://rmk.rs/&quot;&gt;RMK&lt;/a&gt;, with nice!nano v2 controllers, low-profile Choc
+switches, and an optional nice!view display on each half. The name has
+&lt;strong&gt;RMK&lt;/strong&gt; in it. That part of the design was considerably easier than the PCB.&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://balbi.sh/posts/remake-introducing/remake-logo.svg&quot; alt=&quot;REMAKE logo: brush-style lettering across six keycaps.&quot; /&gt;&lt;/p&gt;
+&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://github.com/6mil-Labs/remake&quot;&gt;hardware is on GitHub&lt;/a&gt;, and the &lt;a rel=&quot;external&quot; href=&quot;https://github.com/6mil-Labs/remake/releases/tag/v0.2&quot;&gt;v0.2 release&lt;/a&gt;
+has the fabrication files, schematic, and PCB renders. There are also two
+firmware repositories: &lt;a rel=&quot;external&quot; href=&quot;https://github.com/felipebalbi/rmk-remake&quot;&gt;my personal configuration&lt;/a&gt; and a
+&lt;a rel=&quot;external&quot; href=&quot;https://github.com/6mil-Labs/remake-miryoku&quot;&gt;portable Miryoku sample&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;One important qualification up front: v0.2 is development hardware,
+not a fabrication-approved revision.&lt;/strong&gt; I’m sharing the design and its
+current state, not announcing a finished kit. The release files being
+available doesn’t mean the remaining physical checks have been done.&lt;/p&gt;</summary>
+    
+    <content type="html">&lt;p&gt;Getting my &lt;a href=&quot;https://balbi.sh/posts/urchin-tap-hold-and-power/&quot;&gt;Urchin to run RMK&lt;/a&gt;
+apparently wasn’t the end of the keyboard project. Now I have a hardware
+repository, too.&lt;/p&gt;
+&lt;p&gt;Meet &lt;strong&gt;REMAKE&lt;/strong&gt;: a &lt;strong&gt;36-key wireless split keyboard&lt;/strong&gt; designed around
+&lt;a rel=&quot;external&quot; href=&quot;https://rmk.rs/&quot;&gt;RMK&lt;/a&gt;, with nice!nano v2 controllers, low-profile Choc
+switches, and an optional nice!view display on each half. The name has
+&lt;strong&gt;RMK&lt;/strong&gt; in it. That part of the design was considerably easier than the PCB.&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://balbi.sh/posts/remake-introducing/remake-logo.svg&quot; alt=&quot;REMAKE logo: brush-style lettering across six keycaps.&quot; /&gt;&lt;/p&gt;
+&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://github.com/6mil-Labs/remake&quot;&gt;hardware is on GitHub&lt;/a&gt;, and the &lt;a rel=&quot;external&quot; href=&quot;https://github.com/6mil-Labs/remake/releases/tag/v0.2&quot;&gt;v0.2 release&lt;/a&gt;
+has the fabrication files, schematic, and PCB renders. There are also two
+firmware repositories: &lt;a rel=&quot;external&quot; href=&quot;https://github.com/felipebalbi/rmk-remake&quot;&gt;my personal configuration&lt;/a&gt; and a
+&lt;a rel=&quot;external&quot; href=&quot;https://github.com/6mil-Labs/remake-miryoku&quot;&gt;portable Miryoku sample&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;One important qualification up front: v0.2 is development hardware,
+not a fabrication-approved revision.&lt;/strong&gt; I’m sharing the design and its
+current state, not announcing a finished kit. The release files being
+available doesn’t mean the remaining physical checks have been done.&lt;/p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;/span&gt;&lt;h2 id=&quot;eighteen-keys-twice&quot;&gt;Eighteen keys, twice&lt;/h2&gt;
+&lt;p&gt;Each half has three rows of five finger keys and a three-key thumb
+cluster. The columns are staggered, the thumbs fan out below them, and
+the stepped PCB outline follows that shape rather than putting the keys
+inside a rectangular board.&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://balbi.sh/posts/remake-introducing/remake-left.png&quot;&gt;&lt;img src=&quot;https://balbi.sh/posts/remake-introducing/remake-left.png&quot; alt=&quot;REMAKE v0.2 left-half PCB render, viewed from the typing side.&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;Left half, from the v0.2 release. These are partial PCB assembly renders,
+not photographs of a completed keyboard.&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://balbi.sh/posts/remake-introducing/remake-right.png&quot;&gt;&lt;img src=&quot;https://balbi.sh/posts/remake-introducing/remake-right.png&quot; alt=&quot;REMAKE v0.2 right-half PCB render, viewed from the typing side.&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;Right half. The same PCB is populated in the opposite orientation.&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;There is &lt;strong&gt;one reversible PCB design&lt;/strong&gt;, not a separate board layout for
+each hand. A keyboard uses two identical boards, with one assembled
+front-side up and the other back-side up. No mirrored fabrication file,
+panelization, or mouse bites are required.&lt;/p&gt;
+&lt;p&gt;That does move some complexity into assembly. The controller and display
+connections use left/right selection links: populate the bank for the
+half being built and leave the other bank open. Those links accept either
+0402 zero-ohm resistors or hand-soldered bridges. &lt;strong&gt;Connecting both banks
+shorts signals, including power and ground.&lt;/strong&gt; The
+&lt;a rel=&quot;external&quot; href=&quot;https://github.com/6mil-Labs/remake/blob/v0.2/docs/assembly.md&quot;&gt;assembly guide&lt;/a&gt; is part of the design, not optional reading
+after the soldering iron is hot.&lt;/p&gt;
+&lt;p&gt;The switches are Kailh Choc v1 with hotswap sockets. Most keycaps have a
+17.5 × 16.5 mm outside envelope; one thumb on each half uses a longer
+26.5 × 16.5 mm cap. Those are actual design dimensions, not a promise that
+anything sold under a particular unit-size label will fit.&lt;/p&gt;
+&lt;h2 id=&quot;two-firmware-starting-points&quot;&gt;Two firmware starting points&lt;/h2&gt;
+&lt;p&gt;Both firmware repositories use Rust and RMK, with Bluetooth between the
+halves and USB or Bluetooth to the host. The keymap lives in
+&lt;code&gt;keyboard.toml&lt;/code&gt;, and Vial exposes the 36 physical keys for remapping.&lt;/p&gt;
+&lt;p&gt;They deliberately aren’t the same configuration.&lt;/p&gt;
+&lt;h3 id=&quot;the-one-i-m-experimenting-with&quot;&gt;The one I’m experimenting with&lt;/h3&gt;
+&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https://github.com/felipebalbi/rmk-remake&quot;&gt;rmk-remake&lt;/a&gt; keeps &lt;strong&gt;QWERTY&lt;/strong&gt; alphas and my existing home-row
+modifier order, while adopting Miryoku’s seven-layer structure: Base,
+Nav, Mouse, Media, Num, Sym, and Fun. Each of the six thumb keys taps an
+ordinary key and holds one of the six sublayers. Enter and Space remain
+on my center thumbs.&lt;/p&gt;
+&lt;p&gt;This is also where I’m using the ordered tap-hold work from
+&lt;a rel=&quot;external&quot; href=&quot;https://github.com/rmk-rs/rmk/pull/1347&quot;&gt;RMK PR #1347&lt;/a&gt;. The repository
+pins a specific revision of my RMK fork rather than tracking a moving
+branch. Home-row modifiers use permissive hold and same-hand tap
+filtering; the thumbs have a separate policy. There are four Bluetooth
+host profiles.&lt;/p&gt;
+&lt;p&gt;Keeping QWERTY here is intentional. Learning the layer arrangement and
+changing the alpha layout at the same time would make it harder to tell
+which part I was struggling with.&lt;/p&gt;
+&lt;h3 id=&quot;the-sample-that-doesn-t-need-my-fork&quot;&gt;The sample that doesn’t need my fork&lt;/h3&gt;
+&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https://github.com/6mil-Labs/remake-miryoku&quot;&gt;remake-miryoku&lt;/a&gt; is the more portable starting point. It uses
+&lt;strong&gt;released RMK 0.9.x from crates.io&lt;/strong&gt;, without Git dependencies or local
+source overrides, and Miryoku’s default &lt;strong&gt;Colemak Mod-DH&lt;/strong&gt; alphas. The
+manifests allow compatible patch releases; both committed lockfiles
+currently select RMK 0.9.0. It has the same seven layer names, Miryoku’s
+thumb arrangement and modifier positions, and &lt;strong&gt;four Bluetooth host
+profiles, BT0–BT3&lt;/strong&gt;, just like my personal configuration. Media puts the
+output toggle and those four selectors on the right bottom row; the
+unsupported RGB positions stay unbound.&lt;/p&gt;
+&lt;p&gt;This is an adaptation, not a claim of complete QMK or ZMK feature parity.
+It doesn’t include Auto Shift, layer locks, or the fork-only ordered
+tap-hold behavior. The README documents those differences and credits
+&lt;a rel=&quot;external&quot; href=&quot;https://github.com/manna-harbour/miryoku&quot;&gt;Miryoku and manna-harbour&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;Both repositories include keymap diagrams and build instructions; the
+personal repository also has a printable cheatsheet. If you want a
+starting configuration without my
+experimental RMK dependency, use the sample. If you want to see what I’m
+changing for myself, use the personal repository.&lt;/p&gt;
+&lt;h2 id=&quot;a-little-status-not-a-dashboard&quot;&gt;A little status, not a dashboard&lt;/h2&gt;
+&lt;p&gt;The nice!view screens show battery status and connection information.
+The central also shows the current layer and host profile; the peripheral
+shows whether its link to the central is ready. A lightning bolt means
+local USB power, &lt;strong&gt;not&lt;/strong&gt; a measured charging state.&lt;/p&gt;
+&lt;p&gt;Both configurations have SVG previews generated from their firmware
+renderers:&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;My personal configuration:&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://balbi.sh/posts/remake-introducing/personal-screen-states.svg&quot; alt=&quot;Personal firmware status screens: central connected, advertising, and disconnected; peripheral connected and waiting.&quot; /&gt;&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://balbi.sh/posts/remake-introducing/personal-screen-layers.svg&quot; alt=&quot;Personal firmware central screen for all seven layers: Base, Nav, Mouse, Media, Num, Sym, and Fun.&quot; /&gt;&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Miryoku sample:&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://balbi.sh/posts/remake-introducing/miryoku-screen-states.svg&quot; alt=&quot;Miryoku firmware status screens with the Miryoku seal: central connected, advertising, and disconnected; peripheral connected and waiting.&quot; /&gt;&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://balbi.sh/posts/remake-introducing/miryoku-screen-layers.svg&quot; alt=&quot;Miryoku firmware central screen for all seven layers: Base, Nav, Mouse, Media, Num, Sym, and Fun.&quot; /&gt;&lt;/p&gt;
+&lt;p&gt;The previews are enlarged for readability; their battery values are
+examples, not measurements.&lt;/p&gt;
+&lt;p&gt;After 30 seconds idle, the firmware clears the screens and switches off
+their supply. On wake, it reinitializes them and redraws the current
+state. Split-link subrating is enabled to reduce idle radio activity.
+That is connected sleep, not MCU System OFF.&lt;/p&gt;
+&lt;p&gt;The firmware repositories have native tests for the keymaps, display
+rendering, sleep/wake handling, and other behavior. None of that gives
+REMAKE a measured battery life. The current measurements from my Urchin
+work belong to that setup; they aren’t a runtime specification for this
+board.&lt;/p&gt;
+&lt;h2 id=&quot;bill-of-materials&quot;&gt;Bill of materials&lt;/h2&gt;
+&lt;p&gt;Here is the &lt;strong&gt;per-half&lt;/strong&gt; parts list, reproduced from the
+&lt;a rel=&quot;external&quot; href=&quot;https://github.com/6mil-Labs/remake/blob/v0.2/docs/assembly.md&quot;&gt;v0.2 assembly documentation&lt;/a&gt;. Double the quantities for a
+complete keyboard; the nice!view is optional on each half.&lt;/p&gt;
+&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th style=&quot;text-align: right&quot;&gt;Quantity per half&lt;/th&gt;&lt;th&gt;Part&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;
+&lt;tr&gt;&lt;td style=&quot;text-align: right&quot;&gt;1&lt;/td&gt;&lt;td&gt;REMAKE half PCB&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td style=&quot;text-align: right&quot;&gt;18&lt;/td&gt;&lt;td&gt;Kailh Choc v1 switches and matching hotswap sockets&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td style=&quot;text-align: right&quot;&gt;17&lt;/td&gt;&lt;td&gt;Keycaps, 17.5 × 16.5 mm outside envelopes&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td style=&quot;text-align: right&quot;&gt;1&lt;/td&gt;&lt;td&gt;SW17 long thumb keycap, 26.5 × 16.5 mm outside envelope&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td style=&quot;text-align: right&quot;&gt;18&lt;/td&gt;&lt;td&gt;1N4148W switching diodes, SOD-123&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td style=&quot;text-align: right&quot;&gt;18, or 22 with a display&lt;/td&gt;&lt;td&gt;0 Ω links, 0402 imperial / 1005 metric; manual solder bridges may be used instead&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td style=&quot;text-align: right&quot;&gt;1&lt;/td&gt;&lt;td&gt;Genuine nice!nano v2&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td style=&quot;text-align: right&quot;&gt;2 × 12&lt;/td&gt;&lt;td&gt;Controller socket contacts and matching pins; height must be validated&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td style=&quot;text-align: right&quot;&gt;1&lt;/td&gt;&lt;td&gt;Optional nice!view and matching five-pin socket/header&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td style=&quot;text-align: right&quot;&gt;1&lt;/td&gt;&lt;td&gt;MSK12C02 slide switch; exact manufacturer/variant and rating need approval&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td style=&quot;text-align: right&quot;&gt;1&lt;/td&gt;&lt;td&gt;Panasonic EVQPUJ02K side-actuated, momentary SPST-NO reset switch&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td style=&quot;text-align: right&quot;&gt;1&lt;/td&gt;&lt;td&gt;JST S2B-PH-SM4-TB, two-pin side-entry SMT, 2.0 mm pitch&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td style=&quot;text-align: right&quot;&gt;1&lt;/td&gt;&lt;td&gt;Protected 3.7 V, 110 mAh 301230 battery with PH 2.0 connector&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td style=&quot;text-align: right&quot;&gt;As needed&lt;/td&gt;&lt;td&gt;Battery insulation and suitable case/plate retention&lt;/td&gt;&lt;/tr&gt;
+&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;This isn’t a fully qualified shopping list yet. In particular, some
+MSK12C02 variants are rated for only 50 mA, below the nice!nano’s nominal
+default charging current through that path. The exact switch needs
+approval; a matching footprint or family name isn’t enough.&lt;/p&gt;
+&lt;p&gt;The battery also needs its polarity and charging limits checked. A PH
+2.0 plug doesn’t guarantee the wiring is correct. The documented PCB
+connector is &lt;strong&gt;pin 1 GND, pin 2 BAT+&lt;/strong&gt;, and the nice!nano charge-boost
+jumper should remain open. Socket height, battery insulation, lead
+clearance, and the final mechanical stack still need verification with
+the real parts. Read the full assembly guide before ordering or powering
+anything.&lt;/p&gt;
+&lt;h2 id=&quot;what-s-in-v0-2&quot;&gt;What’s in v0.2&lt;/h2&gt;
+&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://github.com/6mil-Labs/remake/releases/tag/v0.2&quot;&gt;REMAKE v0.2 release&lt;/a&gt; includes:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a rel=&quot;external&quot; href=&quot;https://github.com/6mil-Labs/remake/releases/download/v0.2/remake-jlcpcb.zip&quot;&gt;The Gerber and drill ZIP, &lt;code&gt;remake-jlcpcb.zip&lt;/code&gt;&lt;/a&gt;.&lt;/li&gt;
+&lt;li&gt;&lt;a rel=&quot;external&quot; href=&quot;https://github.com/6mil-Labs/remake/releases/download/v0.2/remake-schematic.pdf&quot;&gt;The schematic PDF&lt;/a&gt;.&lt;/li&gt;
+&lt;li&gt;The left/right PNG renders shown above and separate STEP previews.&lt;/li&gt;
+&lt;li&gt;Model-coverage notes and SHA-256 checksums.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;The fabrication ZIP contains &lt;strong&gt;one PCB design&lt;/strong&gt;. A complete keyboard
+needs two copies of that board, not one left and one right fabrication
+package. It is a bare-PCB export, not a ready-to-order PCBA package with
+population-selected assembly files.&lt;/p&gt;
+&lt;p&gt;The renders and STEP files use only redistributable models and omit some
+geometry. The &lt;a rel=&quot;external&quot; href=&quot;https://github.com/6mil-Labs/remake/releases/download/v0.2/remake-model-coverage.json&quot;&gt;model-coverage file&lt;/a&gt; records those limitations.
+They are useful previews, but they aren’t proof that a controller,
+display, battery, keycap, or case will fit.&lt;/p&gt;
+&lt;p&gt;Routing is complete, the ground pours are filled, and the outline is
+closed. Physical keycap travel, production tolerances, the component
+choices above, and the assembled mechanical and radio behavior still
+need validation. Passing CAD checks is useful evidence about the CAD.
+It doesn’t finish the keyboard.&lt;/p&gt;
+&lt;p&gt;The hardware is licensed under &lt;a rel=&quot;external&quot; href=&quot;https://github.com/6mil-Labs/remake/blob/v0.2/LICENSE&quot;&gt;CERN-OHL-S-2.0&lt;/a&gt;. If you’re
+interested in manufacturing boards or kits, there is a
+&lt;a rel=&quot;external&quot; href=&quot;https://github.com/6mil-Labs/remake/issues/new?template=manufacturing-and-sales.yml&quot;&gt;manufacturing and sales issue template&lt;/a&gt; for that
+conversation. Commercial manufacture is permitted under the licence;
+getting in touch isn’t an extra permission requirement.&lt;/p&gt;
+&lt;p&gt;For now, the design, firmware, and release exports are there to inspect.
+The next important results need to come from the physical assembly, not
+another render.&lt;/p&gt;
+&lt;p&gt;I’ll post an update once I have the keyboard assembled, with photos and
+how it feels to actually type on it.&lt;/p&gt;
+</content>
+  </entry>
+  
+  <entry xml:lang="en">
+    <title>My sleeping Urchin had a perfectly good crystal it wasn&#39;t using</title>
+    <published>2026-11-04T00:00:00+00:00</published>
+    <updated>2026-11-04T00:00:00+00:00</updated>
+    <author><name>Felipe Balbi</name></author>
+    <link rel="alternate" href="https://balbi.sh/posts/urchin-connected-sleep-and-clocks/" type="text/html"/>
+    <id>https://balbi.sh/posts/urchin-connected-sleep-and-clocks/</id>
+    <summary type="html">&lt;p&gt;In the &lt;a href=&quot;https://balbi.sh/posts/urchin-tap-hold-and-power/&quot;&gt;previous post&lt;/a&gt;, I
+managed to stop blaming the displays for power that was going into a
+radio search. The screens slept, the halves stayed connected, and the
+peripheral settled at about &lt;strong&gt;47 µA&lt;/strong&gt;.&lt;/p&gt;
+&lt;p&gt;The central was still around &lt;strong&gt;270–300 µA&lt;/strong&gt; while sleeping with both
+the host and the other half connected. I’d enabled connection subrating,
+but hadn’t measured it yet.&lt;/p&gt;
+&lt;p&gt;This time I did. Then I removed a couple of things I didn’t need, tried
+a change that failed to save what I expected, and eventually noticed
+that the genuine nice!nano v2 had a perfectly good low-frequency crystal
+that my firmware wasn’t using.&lt;/p&gt;
+&lt;p&gt;The final central measurement was about &lt;strong&gt;62 µA asleep&lt;/strong&gt;, with both BLE
+connections retained, and about &lt;strong&gt;1.03 mA awake without typing&lt;/strong&gt;.&lt;/p&gt;
+&lt;p&gt;The quiet current between bursts barely moved. The bursts got cheaper.&lt;/p&gt;</summary>
+    
+    <content type="html">&lt;p&gt;In the &lt;a href=&quot;https://balbi.sh/posts/urchin-tap-hold-and-power/&quot;&gt;previous post&lt;/a&gt;, I
+managed to stop blaming the displays for power that was going into a
+radio search. The screens slept, the halves stayed connected, and the
+peripheral settled at about &lt;strong&gt;47 µA&lt;/strong&gt;.&lt;/p&gt;
+&lt;p&gt;The central was still around &lt;strong&gt;270–300 µA&lt;/strong&gt; while sleeping with both
+the host and the other half connected. I’d enabled connection subrating,
+but hadn’t measured it yet.&lt;/p&gt;
+&lt;p&gt;This time I did. Then I removed a couple of things I didn’t need, tried
+a change that failed to save what I expected, and eventually noticed
+that the genuine nice!nano v2 had a perfectly good low-frequency crystal
+that my firmware wasn’t using.&lt;/p&gt;
+&lt;p&gt;The final central measurement was about &lt;strong&gt;62 µA asleep&lt;/strong&gt;, with both BLE
+connections retained, and about &lt;strong&gt;1.03 mA awake without typing&lt;/strong&gt;.&lt;/p&gt;
+&lt;p&gt;The quiet current between bursts barely moved. The bursts got cheaper.&lt;/p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;/span&gt;&lt;h2 id=&quot;the-keyboard-still-has-to-be-a-keyboard&quot;&gt;The keyboard still has to be a keyboard&lt;/h2&gt;
+&lt;p&gt;The target wasn’t the lowest number I could make the PPK2 display. I
+could get a lower number by disconnecting things. That wasn’t the
+keyboard I wanted to use.&lt;/p&gt;
+&lt;p&gt;My halves sleep through the night while connected to each other, and
+the central stays connected to the host. A keypress should wake the
+keyboard without making me wait for discovery and reconnection. This
+is connected idle, not MCU System OFF.&lt;/p&gt;
+&lt;p&gt;I used a partially populated Urchin measurement board with a genuine
+nice!nano v2 and one populated key for wakeup. The PPK2 supplied the
+central through its battery connection; keyboard USB was disconnected
+during current measurements. The peripheral had its own power.&lt;/p&gt;
+&lt;p&gt;The captures in this post are from October 31. They’re selected
+measurement windows, not a battery rundown test.&lt;/p&gt;
+&lt;p&gt;USB logging would have rather defeated that arrangement. Host-side
+Bluetooth capture, on the other hand, didn’t need another wire into
+the keyboard.&lt;/p&gt;
+&lt;p&gt;The host was Linux &lt;code&gt;7.2.11-arch1-1&lt;/code&gt;, with BlueZ &lt;code&gt;5.87-2&lt;/code&gt;. It also had my
+mouse and actual daily-use keyboard connected, so identifying the
+measurement keyboard mattered. So did keeping those packets out of the
+explanation for its current trace.&lt;/p&gt;
+&lt;h2 id=&quot;subrating-did-help&quot;&gt;Subrating did help&lt;/h2&gt;
+&lt;p&gt;The first useful correction was simple: I hadn’t actually measured the
+subrating-enabled firmware.&lt;/p&gt;
+&lt;p&gt;With it enabled on both halves, initial connected-sleep observations
+were around &lt;strong&gt;117–124 µA&lt;/strong&gt;. This one-minute screenshot averages
+&lt;strong&gt;123.96 µA&lt;/strong&gt;:&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://balbi.sh/posts/urchin-connected-sleep-and-clocks/subrating-minute.png&quot;&gt;&lt;img src=&quot;https://balbi.sh/posts/urchin-connected-sleep-and-clocks/subrating-minute.png&quot; alt=&quot;One minute of connected sleep with subrating enabled, averaging 123.96 µA.&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;Already much better than 270–300 µA. The tall peaks are still there;
+their height isn’t the average.&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;Zooming in, I could select a quiet gap at about &lt;strong&gt;30 µA&lt;/strong&gt;, followed by
+short bursts reaching milliamps. Selecting only that gap would have
+made for a lovely sleep-current claim. It would also have left out
+most of what the keyboard was doing while asleep.&lt;/p&gt;
+&lt;p&gt;At first the spacing looked irregular:&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://balbi.sh/posts/urchin-connected-sleep-and-clocks/overlapping-events.png&quot;&gt;&lt;img src=&quot;https://balbi.sh/posts/urchin-connected-sleep-and-clocks/overlapping-events.png&quot; alt=&quot;A zoomed connected-sleep trace with uneven gaps between bursts and a 145 µA selected-window average.&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;This selection is deliberately burst-rich. Neither its 145 µA nor the
+quiet gap’s 30 µA replaces a representative whole-window average.&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;The CSV exports were more useful than eyeballing the screenshot. The
+PPK2 samples were &lt;strong&gt;10 µs apart&lt;/strong&gt;. Among the uneven gaps, there was a
+very regular train at approximately &lt;strong&gt;225 ms&lt;/strong&gt;: a good match for the
+split link’s factor-30 subrating on its 7.5 ms base interval. Other
+activity sat between those events.&lt;/p&gt;
+&lt;p&gt;Two links with different schedules don’t owe me one tidy pulse train.&lt;/p&gt;
+&lt;h2 id=&quot;a-useful-detour-that-wasn-t-the-goal&quot;&gt;A useful detour that wasn’t the goal&lt;/h2&gt;
+&lt;p&gt;I powered off host Bluetooth with &lt;code&gt;bluetoothctl power off&lt;/code&gt;, left the
+peripheral connected, and waited for the central’s host advertising
+to time out. That advertising session lasts five minutes; measuring
+the reconnection attempt would have answered a different question.&lt;/p&gt;
+&lt;p&gt;The result was &lt;strong&gt;59.38 µA&lt;/strong&gt; over a minute. But the 225 ms train was
+still there.&lt;/p&gt;
+&lt;p&gt;The pinned RMK implementation chose its sleeping split settings when
+sleep state changed. Losing the host while already asleep didn’t
+necessarily make it choose again. A keypress followed by another idle
+timeout did: with the host still off, the train became approximately
+&lt;strong&gt;750 ms&lt;/strong&gt;, and a 21.91-second capture averaged &lt;strong&gt;44.60 µA&lt;/strong&gt;.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-sleep-policy-1&quot;&gt;&lt;a href=&quot;https://balbi.sh/posts/urchin-connected-sleep-and-clocks/#fn-sleep-policy&quot;&gt;[1]&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;p&gt;That was useful evidence about when the policy ran. It was not the
+answer to overnight connected consumption. I turned the host back on.&lt;/p&gt;
+&lt;p&gt;Easy to get distracted by a better number. Especially when the number
+is real, but belongs to a setup I don’t intend to use.&lt;/p&gt;
+&lt;h2 id=&quot;what-did-the-host-actually-agree-to&quot;&gt;What did the host actually agree to?&lt;/h2&gt;
+&lt;p&gt;Back in connected sleep, a steadier 30.72-second capture averaged
+&lt;strong&gt;86.52 µA&lt;/strong&gt;. Earlier windows had been higher, including occasional
+clusters of much more expensive activity. That variability was a
+reason to keep looking at charge and timing, not to pick whichever
+average made the next change look best.&lt;/p&gt;
+&lt;p&gt;I used &lt;code&gt;btmon&lt;/code&gt; to record host HCI traffic:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;shellscript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;sudo&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; btmon&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;w&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; urchin-connected-sleep.btsnoop&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The measurement keyboard had its own connection handle. Once mapped
+to its address, the other keyboard and mouse could be excluded. There
+were &lt;strong&gt;no ACL packets for the measurement keyboard&lt;/strong&gt; in that settled
+capture.&lt;/p&gt;
+&lt;p&gt;That did &lt;strong&gt;not&lt;/strong&gt; mean its radio had stopped. Empty link-layer exchanges,
+retransmissions, and the separate split link aren’t exposed as ordinary
+application packets in this host capture. It only ruled out a stream
+of host-visible application traffic as the explanation for that window.&lt;/p&gt;
+&lt;p&gt;To learn the negotiated parameters, I started another capture before
+power-cycling the measurement central. Requests aren’t proof of
+acceptance; the successful completion events were the useful part.&lt;/p&gt;
+&lt;p&gt;The host link ended up at:&lt;/p&gt;
+&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Parameter&lt;/th&gt;&lt;th style=&quot;text-align: right&quot;&gt;Negotiated value&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;
+&lt;tr&gt;&lt;td&gt;Connection interval&lt;/td&gt;&lt;td style=&quot;text-align: right&quot;&gt;7.5 ms&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;Peripheral latency&lt;/td&gt;&lt;td style=&quot;text-align: right&quot;&gt;60&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;Supervision timeout&lt;/td&gt;&lt;td style=&quot;text-align: right&quot;&gt;6 seconds&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;TX / RX PHY&lt;/td&gt;&lt;td style=&quot;text-align: right&quot;&gt;2M / 2M&lt;/td&gt;&lt;/tr&gt;
+&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;RMK first requested 15 ms with latency 30, then 7.5 ms with latency 60.
+Linux accepted both updates. This matched the roughly &lt;strong&gt;457.5–465 ms&lt;/strong&gt;
+spacing of the larger, host-like events in the current trace.&lt;/p&gt;
+&lt;h2 id=&quot;stop-computing-a-number-i-don-t-use&quot;&gt;Stop computing a number I don’t use&lt;/h2&gt;
+&lt;p&gt;My application explicitly started RMK’s words-per-minute processor.
+I don’t display WPM. I don’t use it for anything else either.&lt;/p&gt;
+&lt;p&gt;It still woke once a second to compute it.&lt;/p&gt;
+&lt;p&gt;Removing the task eliminated one of the one-second burst trains.
+The next capture averaged &lt;strong&gt;85.27 µA&lt;/strong&gt;, compared with 86.52 µA before.
+That’s a small difference, and these aren’t repeated controlled trials
+with an error bar. The clearer evidence was the missing train, not a
+claim that the subtraction gave its exact cost.&lt;/p&gt;
+&lt;p&gt;There was another one-second path. RMK’s USB LED-report reader tried
+to read from its HID OUT endpoint even with USB disconnected. A
+disabled-endpoint error led to a one-second wait and another attempt.&lt;/p&gt;
+&lt;p&gt;Embassy already has a way to wait until the endpoint is enabled:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span&gt;hid_reader&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;ready&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;await&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span&gt;hid_reader&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;read&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;mut&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; buf&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;await&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;?&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The gate is &lt;strong&gt;endpoint readiness&lt;/strong&gt;, not merely USB voltage being
+present. A charger can supply voltage without enumerating a keyboard.&lt;/p&gt;
+&lt;p&gt;With that wait added, the other one-second train disappeared. The
+capture averaged &lt;strong&gt;85.51 µA&lt;/strong&gt;, though, slightly &lt;em&gt;higher&lt;/em&gt; than the
+WPM-only image. A larger burst cluster raised that window’s average.
+Again, the waveform supported removal of the repeated work; the total
+didn’t establish a precise saving for the one-line fix.&lt;/p&gt;
+&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://github.com/rmk-rs/rmk/pull/1387&quot;&gt;USB readiness fix has a pending PR against RMK&lt;/a&gt;.
+It stays separate from the application clock choice. Tests
+exercise disabled-endpoint waiting, report delivery after enablement,
+disconnect/re-enable behavior, and preservation of other read errors.
+They don’t measure microamps.&lt;/p&gt;
+&lt;h2 id=&quot;fewer-events-more-expensive-events&quot;&gt;Fewer events, more expensive events&lt;/h2&gt;
+&lt;p&gt;The next trial increased host peripheral latency from &lt;strong&gt;60 to 120
+while asleep&lt;/strong&gt;, restoring 60 on wake. The interval stayed at 7.5 ms,
+the supervision timeout at six seconds, and split settings stayed put.&lt;/p&gt;
+&lt;p&gt;The tempting calculation was: ordinary host-like events cost about
+10–12 µC each; double their spacing and save roughly &lt;strong&gt;11–13 µA&lt;/strong&gt;.
+Peripheral latency permits skipping idle events; it doesn’t inherently
+force pending key data to wait for the full idle spacing.&lt;/p&gt;
+&lt;p&gt;Linux accepted latency 120. The event spacing did roughly double,
+from about 460 ms to about 910 ms.&lt;/p&gt;
+&lt;p&gt;The capture averaged &lt;strong&gt;90.36 µA&lt;/strong&gt;.&lt;/p&gt;
+&lt;p&gt;So much for that estimate.&lt;/p&gt;
+&lt;p&gt;Using the same threshold-based measurement on both exports, the median
+partial excess charge of ordinary host-like bursts increased from
+about &lt;strong&gt;10.47 µC to 16.90 µC&lt;/strong&gt;. There were also three expensive clusters
+in the new capture, compared with one in the USB-only capture.&lt;/p&gt;
+&lt;p&gt;The ordinary activity looked better between those clusters, but the
+clusters weren’t a spreadsheet error. The battery pays for them too.
+I couldn’t delete them from the average and call it a win.&lt;/p&gt;
+&lt;p&gt;The estimate had assumed nearly constant charge per event. The
+measurement had just told me that assumption was wrong.&lt;/p&gt;
+&lt;h2 id=&quot;the-crystal-was-already-on-the-board&quot;&gt;The crystal was already on the board&lt;/h2&gt;
+&lt;p&gt;One explanation worth checking was receive-window widening. If the
+clocks can drift while the devices skip events, the receiver needs
+timing allowance when it listens again. Longer gaps can mean more
+listening, not just fewer wakeups.&lt;/p&gt;
+&lt;p&gt;RMK’s generated nRF initialization selected the &lt;strong&gt;internal LFRC&lt;/strong&gt; for
+MPSL and declared &lt;strong&gt;500 ppm&lt;/strong&gt; accuracy. Embassy’s default configuration
+also selected LFRC. That was a coherent configuration. It just wasn’t
+using the hardware this board had available.&lt;/p&gt;
+&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://nicekeyboards.com/docs/nice-nano/pinout-schematic/&quot;&gt;official nice!nano v2 schematic&lt;/a&gt;
+shows a populated &lt;strong&gt;32.768 kHz crystal&lt;/strong&gt;. No soldering required.&lt;/p&gt;
+&lt;p&gt;I changed the central to use it consistently in both Embassy and
+MPSL, leaving the latency-120 experiment in place. The MPSL
+configuration became:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;nrf_sdc&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;mpsl&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;raw&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;mpsl_clock_lfclk_cfg_t&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;    source&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; nrf_sdc&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;mpsl&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;raw&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;MPSL_CLOCK_LF_SRC_XTAL&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; as&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; u8&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;    rc_ctiv&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;    rc_temp_ctiv&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 0&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;    accuracy_ppm&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt; 50&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;    skip_wait_lfclk_started&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;z-l-7 z-d-7&quot;&gt; false&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Both RC calibration fields must be zero for a non-RC source. Embassy
+also needs &lt;code&gt;LfclkSource::ExternalXtal&lt;/code&gt;; changing only the MPSL
+declaration isn’t the whole initialization.&lt;/p&gt;
+&lt;p&gt;The &lt;strong&gt;50 ppm&lt;/strong&gt; value is the
+&lt;a rel=&quot;external&quot; href=&quot;https://github.com/zephyrproject-rtos/zephyr/blob/0534e997eacb94bae1df6c9a7dd4a9a6cbf1cecf/drivers/clock_control/Kconfig.nrf#L81-L123&quot;&gt;crystal-clock reference used by Zephyr&lt;/a&gt;,
+not a tolerance I independently verified from the nice!nano crystal’s
+part number. The schematic confirms the crystal exists, not its
+worst-case accuracy across temperature and load. This is a tested
+configuration, not a new specification for the board.&lt;/p&gt;
+&lt;p&gt;I was surprised enough by the result to take a full minute:
+&lt;strong&gt;70.77 µA&lt;/strong&gt;. The host still reported 7.5 ms, latency 120, six-second
+supervision, and 2M PHY in both directions. The quiet floor was still
+about 29–30 µA.&lt;/p&gt;
+&lt;p&gt;That supports clock configuration as a useful improvement. It doesn’t
+identify every burst or prove receive-window widening caused every
+extra microcoulomb in the earlier capture. Crystal selection and the
+accuracy declaration changed together, and RC calibration was no
+longer required. I didn’t measure those effects separately.&lt;/p&gt;
+&lt;h2 id=&quot;keep-the-board-choice-in-the-application&quot;&gt;Keep the board choice in the application&lt;/h2&gt;
+&lt;p&gt;I briefly went down the route of adding configuration override hooks
+to RMK so the application could select both configurations while
+keeping generated startup.&lt;/p&gt;
+&lt;p&gt;Then I asked the simpler question: couldn’t the application already
+do this through &lt;code&gt;#[Override(chip_init)]&lt;/code&gt;?&lt;/p&gt;
+&lt;p&gt;Yes. It could.&lt;/p&gt;
+&lt;p&gt;That’s where I left it. Urchin now uses the existing chip-init override
+on both halves, with shared board-specific clock configuration. The
+startup retains RMK’s peripheral assignments, MPSL task, controller
+memory sizing, RNG, regulator settings, and device-derived BLE address.
+The cost is maintaining that startup code alongside RMK updates. No new
+override API, and no global assumption that every nRF keyboard has a
+crystal.&lt;/p&gt;
+&lt;p&gt;I also updated to current upstream RMK with my tap-hold work and the
+USB readiness fix integrated. The final firmware &lt;strong&gt;does not include
+the latency-120 experiment&lt;/strong&gt;: the normal host policy returns to latency
+60. Both halves select their LF crystals, whereas the first crystal
+diagnostic changed only the central.&lt;/p&gt;
+&lt;p&gt;Those distinctions matter. The final image isn’t the 70.77 µA
+diagnostic with one more line changed.&lt;/p&gt;
+&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://github.com/felipebalbi/rmk-urchin/commit/f0b4cb9879a31e7ffa18362ed75035494bb97528&quot;&gt;application commit&lt;/a&gt;
+contains the final setup. Its firmware and native checks pin the same
+RMK integration revision. The application still has 45 passing host
+tests, and both release images build. The current measurements are the
+physical check those tests can’t provide.&lt;/p&gt;
+&lt;h2 id=&quot;about-a-milliamp-awake-62-microamps-asleep&quot;&gt;About a milliamp awake, 62 microamps asleep&lt;/h2&gt;
+&lt;p&gt;The final &lt;code&gt;chip_init&lt;/code&gt; image gave me &lt;strong&gt;1.030 mA&lt;/strong&gt; over the first 29
+seconds of the CSV, then &lt;strong&gt;62.07 µA&lt;/strong&gt; over the 20.57 seconds starting
+at the 30-second mark. The transition was around 29.6–29.7 seconds
+into this recording.&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://balbi.sh/posts/urchin-connected-sleep-and-clocks/final-connected-sleep.png&quot;&gt;&lt;img src=&quot;https://balbi.sh/posts/urchin-connected-sleep-and-clocks/final-connected-sleep.png&quot; alt=&quot;Final firmware capture with the sleeping region selected: 62.42 µA over 20.51 seconds, following about 30 seconds awake.&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;The GUI selection is 62.42 µA over 20.51 seconds. The CSV calculation
+starts at a slightly different boundary and gives 62.07 µA over
+20.57 seconds. Both say about 62 µA; neither is the whole recording’s
+629.86 µA GUI average.&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://balbi.sh/posts/urchin-connected-sleep-and-clocks/final-awake.png&quot;&gt;&lt;img src=&quot;https://balbi.sh/posts/urchin-connected-sleep-and-clocks/final-awake.png&quot; alt=&quot;The awake selection of the same capture averages 1.03 mA over 29.44 seconds.&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;Awake, without typing. This includes the running firmware and display
+maintenance, not an isolated panel-supply measurement.&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;The previous integration image, before moving to the application’s
+chip-init override, measured &lt;strong&gt;62.54 µA&lt;/strong&gt; over its final 30 seconds.
+The two captures show no meaningful power regression from removing
+the new override idea.&lt;/p&gt;
+&lt;p&gt;The quiet gap still looks much like the one at the beginning:&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://balbi.sh/posts/urchin-connected-sleep-and-clocks/final-quiet-floor.png&quot;&gt;&lt;img src=&quot;https://balbi.sh/posts/urchin-connected-sleep-and-clocks/final-quiet-floor.png&quot; alt=&quot;A final quiet-gap selection averages 30.02 µA over 205.7 ms.&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;This is a gap between events, not the connected-sleep average. The
+final CSV’s samples below 100 µA average about 29.56 µA, another way
+of estimating that floor, not an independent hardware measurement.&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;And the events still matter:&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://balbi.sh/posts/urchin-connected-sleep-and-clocks/final-event-charge.png&quot;&gt;&lt;img src=&quot;https://balbi.sh/posts/urchin-connected-sleep-and-clocks/final-event-charge.png&quot; alt=&quot;An 8.44 ms selection around a final sleep event contains 4.25 µC of charge.&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;The selection contains 4.25 µC over 8.44 ms. That’s a selected window
+including surrounding current, not a claim that the radio transmitted
+for 8.44 ms.&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;In the final sleep trace there is still a split-like 225 ms schedule
+and host-like activity around 460 ms. Keeping the links costs energy.
+I’m not trying to make those peaks disappear by cropping them out.&lt;/p&gt;
+&lt;p&gt;The awake trace is busier:&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://balbi.sh/posts/urchin-connected-sleep-and-clocks/final-awake-detail.png&quot;&gt;&lt;img src=&quot;https://balbi.sh/posts/urchin-connected-sleep-and-clocks/final-awake-detail.png&quot; alt=&quot;A 92.86 ms detail of awake activity averages 981.87 µA and contains both peaks and short plateaus.&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;Useful evidence for another investigation, not proof that every
+plateau belongs to SPI or that every spike is a radio packet.&lt;/em&gt;&lt;/p&gt;
+&lt;h2 id=&quot;what-does-that-buy-a-110-mah-battery&quot;&gt;What does that buy a 110 mAh battery?&lt;/h2&gt;
+&lt;p&gt;Each half of my Urchin has a &lt;strong&gt;110 mAh battery&lt;/strong&gt;, not 100 mAh. I’ve
+added that clarification to the previous post too. The halves have
+separate batteries; I can’t pool 220 mAh and divide it by central
+current.&lt;/p&gt;
+&lt;p&gt;For a deliberately simple &lt;strong&gt;central-only, continuously sleeping&lt;/strong&gt;
+estimate:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;plain&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;hours = nominal capacity in mAh / average current in mA&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Central sleep current&lt;/th&gt;&lt;th style=&quot;text-align: right&quot;&gt;Ideal runtime from 110 mAh&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;
+&lt;tr&gt;&lt;td&gt;270–300 µA, previous non-subrated measurements&lt;/td&gt;&lt;td style=&quot;text-align: right&quot;&gt;About 15–17 days&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;124 µA, initial subrating-enabled minute&lt;/td&gt;&lt;td style=&quot;text-align: right&quot;&gt;About 37 days&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;62.07 µA, final connected-sleep window&lt;/td&gt;&lt;td style=&quot;text-align: right&quot;&gt;About 74 days&lt;/td&gt;&lt;/tr&gt;
+&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;From the old 270–300 µA range to roughly 62 µA, that’s &lt;strong&gt;77–79% less
+sleep current&lt;/strong&gt;, or about &lt;strong&gt;4.3–4.8 times the ideal sleep-only runtime&lt;/strong&gt;.
+From the initial 124 µA subrating capture, it’s approximately a halving
+of current and a doubling of that ideal runtime.&lt;/p&gt;
+&lt;p&gt;That’s not a promise of 74 days between charges. It excludes typing,
+reconnections, battery self-discharge, usable capacity lost to cutoff,
+temperature, and aging. These captures also span firmware revisions,
+so this isn’t a controlled attribution of the total gain to the
+crystal alone. The older 47 µA peripheral result isn’t a fresh
+measurement of the updated peripheral either.&lt;/p&gt;
+&lt;p&gt;The overnight arithmetic is less ambitious and more directly useful:
+eight hours at 270–300 µA costs &lt;strong&gt;2.16–2.40 mAh&lt;/strong&gt; on the central;
+eight hours at 62.07 µA costs about &lt;strong&gt;0.50 mAh&lt;/strong&gt;. Roughly
+&lt;strong&gt;1.66–1.90 mAh saved per eight-hour night&lt;/strong&gt;, without intentionally
+dropping either connection.&lt;/p&gt;
+&lt;p&gt;For a usage example, assume four hours per day at the measured
+&lt;strong&gt;1.03 mA awake-idle current&lt;/strong&gt; and twenty hours asleep. The new budget
+is about &lt;strong&gt;5.36 mAh/day&lt;/strong&gt;, or &lt;strong&gt;20.5 ideal days&lt;/strong&gt;. Holding that same
+awake current fixed but substituting the old 270–300 µA sleep current
+gives &lt;strong&gt;10.9–11.6 ideal days&lt;/strong&gt;. That’s roughly &lt;strong&gt;1.8–1.9 times the
+runtime in that model&lt;/strong&gt;.&lt;/p&gt;
+&lt;p&gt;Four hours of awake idle isn’t a measured typing day. I’m using the
+same awake budget on both sides to show how sleep consumption affects
+the result, not claiming I measured that daily autonomy.&lt;/p&gt;
+&lt;h2 id=&quot;there-are-still-microamps-left-to-explain&quot;&gt;There are still microamps left to explain&lt;/h2&gt;
+&lt;p&gt;The remaining floor is around &lt;strong&gt;29–30 µA&lt;/strong&gt;, nearly half the final
+connected-sleep average. I haven’t isolated its components yet.&lt;/p&gt;
+&lt;p&gt;The display task stops periodic work and cuts panel power, but its
+SPIM2 driver remains alive. The battery ADC stops each conversion but
+remains configured between samples. Those are investigation targets,
+not established leaks. “Enabled” in a register isn’t enough to assign
+a current to it.&lt;/p&gt;
+&lt;p&gt;Battery sampling still happens every &lt;strong&gt;30 seconds during sleep&lt;/strong&gt;.
+An unchanged percentage isn’t republished, so that doesn’t imply a
+host notification every 30 seconds. Flexible application work could
+be batched or deferred, but the BLE links have negotiated timing.
+SDC/MPSL handles their scheduling and high-priority interrupts;
+Embassy also runs its low-priority processing. It isn’t just a radio
+peripheral doing everything independently of the CPU, and it isn’t
+an ordinary application timer I can move next to the battery sample.&lt;/p&gt;
+&lt;p&gt;Before changing more of that, I wanted the configuration that had
+already helped to live in the application and survive an ordinary
+build. It does.&lt;/p&gt;
+&lt;p&gt;The displays weren’t secretly eating milliamps. The crystal wasn’t
+missing. I just hadn’t asked the firmware to use it.&lt;/p&gt;
+&lt;p&gt;I’ll take this correction too.&lt;/p&gt;
+&lt;section class=&quot;footnotes&quot;&gt;
+&lt;ol class=&quot;footnotes-list&quot;&gt;
+&lt;li id=&quot;fn-sleep-policy&quot;&gt;
+&lt;p&gt;This deserves investigation: if losing the host while
+already asleep leaves the split link on its host-connected settings,
+it can consume more power than necessary until the next sleep
+transition. It’s low priority for my connected-overnight use case,
+but I’ve opened &lt;a rel=&quot;external&quot; href=&quot;https://github.com/rmk-rs/rmk/issues/1390&quot;&gt;RMK issue #1390&lt;/a&gt;
+so it doesn’t get lost in this measurement detour. &lt;a href=&quot;https://balbi.sh/posts/urchin-connected-sleep-and-clocks/#fr-sleep-policy-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/section&gt;
+</content>
+  </entry>
+  
+  <entry xml:lang="en">
+    <title>Teaching my Urchin to type, then figuring out where the power went</title>
+    <published>2026-10-21T00:00:00+00:00</published>
+    <updated>2026-10-21T00:00:00+00:00</updated>
+    <author><name>Felipe Balbi</name></author>
+    <link rel="alternate" href="https://balbi.sh/posts/urchin-tap-hold-and-power/" type="text/html"/>
+    <id>https://balbi.sh/posts/urchin-tap-hold-and-power/</id>
+    <summary type="html">&lt;p&gt;My keyboard already worked with ZMK. I wasn’t trying to rescue a broken
+keyboard. I just wanted it to run &lt;a rel=&quot;external&quot; href=&quot;https://rmk.rs/&quot;&gt;RMK&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;The keyboard is an &lt;a rel=&quot;external&quot; href=&quot;https://github.com/duckyb/urchin&quot;&gt;Urchin&lt;/a&gt;, a small split
+keyboard with nice!nano controllers and nice!view displays. Moving it
+from ZMK to RMK meant bringing along the tap-hold behavior I liked, not
+just copying the keymap and calling it done.&lt;/p&gt;
+&lt;p&gt;Each half has a &lt;strong&gt;110 mAh battery&lt;/strong&gt;.&lt;/p&gt;
+&lt;p&gt;That conversion led to a buffered tap-hold implementation, some display
+power management, and quite a few sessions with Nordic’s Power Profiler
+Kit II.&lt;/p&gt;
+&lt;p&gt;It also led to a rather convincing wrong explanation for where the power
+was going. At one point I was considering replacing the displays with
+e-paper. The displays were drawing about &lt;strong&gt;3.7 µA&lt;/strong&gt;. The board I was
+measuring was busy looking for another keyboard half that wasn’t there.&lt;/p&gt;
+&lt;p&gt;Oops.&lt;/p&gt;</summary>
+    
+    <content type="html">&lt;p&gt;My keyboard already worked with ZMK. I wasn’t trying to rescue a broken
+keyboard. I just wanted it to run &lt;a rel=&quot;external&quot; href=&quot;https://rmk.rs/&quot;&gt;RMK&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;The keyboard is an &lt;a rel=&quot;external&quot; href=&quot;https://github.com/duckyb/urchin&quot;&gt;Urchin&lt;/a&gt;, a small split
+keyboard with nice!nano controllers and nice!view displays. Moving it
+from ZMK to RMK meant bringing along the tap-hold behavior I liked, not
+just copying the keymap and calling it done.&lt;/p&gt;
+&lt;p&gt;Each half has a &lt;strong&gt;110 mAh battery&lt;/strong&gt;.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-battery-capacity-1&quot;&gt;&lt;a href=&quot;https://balbi.sh/posts/urchin-tap-hold-and-power/#fn-battery-capacity&quot;&gt;[1]&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;p&gt;That conversion led to a buffered tap-hold implementation, some display
+power management, and quite a few sessions with Nordic’s Power Profiler
+Kit II.&lt;/p&gt;
+&lt;p&gt;It also led to a rather convincing wrong explanation for where the power
+was going. At one point I was considering replacing the displays with
+e-paper. The displays were drawing about &lt;strong&gt;3.7 µA&lt;/strong&gt;. The board I was
+measuring was busy looking for another keyboard half that wasn’t there.&lt;/p&gt;
+&lt;p&gt;Oops.&lt;/p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;/span&gt;&lt;h2 id=&quot;first-make-the-typing-work&quot;&gt;First, make the typing work&lt;/h2&gt;
+&lt;p&gt;Home-row modifiers are great until the firmware decides that an ordinary
+letter was actually a modifier. On my layout, for example, &lt;code&gt;A&lt;/code&gt; doubles
+as Shift. Thumb keys also double as layer switches. The firmware has to
+decide whether I meant a tap or a hold while other keys are already
+arriving.&lt;/p&gt;
+&lt;p&gt;Fast typing, intentional capitals, and layer chords all need slightly
+different things. Just shortening the tapping term isn’t a complete
+answer. Neither is deciding that every key pressed during normal typing
+must be a tap: sometimes I really do want that Shift or layer.&lt;/p&gt;
+&lt;p&gt;The approach I implemented in my RMK fork is to &lt;strong&gt;buffer the following
+events while a tap-hold key is undecided&lt;/strong&gt;. Once the owner resolves, it
+commits first, and the buffered events follow in order, using their
+original logical timestamps. That gives the modifier or layer decision
+a chance to take effect before the following key is interpreted.&lt;/p&gt;
+&lt;p&gt;For my Urchin, the configuration keeps a 200 ms hold timeout, enables
+permissive hold and same-hand tap filtering for the home-row modifiers,
+and uses a separate normal-mode policy for the thumb keys. Flow-tap is
+disabled, as is quick-tap repeat.&lt;/p&gt;
+&lt;p&gt;The feature is opt-in. I didn’t want to change how an existing RMK
+keyboard behaves just because someone updates the dependency.&lt;/p&gt;
+&lt;p&gt;There are limits, too. The implementation has a bounded event queue; it
+doesn’t pretend to have unlimited memory. It also isn’t a claim of full
+ZMK behavioral compatibility. The goal was to reproduce the typing
+policy I actually use, not every possible tap-dance or combo behavior.&lt;/p&gt;
+&lt;p&gt;On the hardware, this has been working well: fast typing, mixed-case
+letters, and layer switching all feel much better. The changes are in
+&lt;a rel=&quot;external&quot; href=&quot;https://github.com/felipebalbi/rmk/commit/5f0ab05292f6d757d25c0491071c6c8190318831&quot;&gt;my RMK fork&lt;/a&gt;,
+and the keyboard configuration is in
+&lt;a rel=&quot;external&quot; href=&quot;https://github.com/felipebalbi/rmk-urchin&quot;&gt;rmk-urchin&lt;/a&gt;.
+I want some ordinary daily use before turning the buffered tap-hold work
+into an upstream PR. A good test suite matters, but so does spending a
+few days typing things other than test cases.&lt;/p&gt;
+&lt;h2 id=&quot;then-let-the-screens-sleep&quot;&gt;Then, let the screens sleep&lt;/h2&gt;
+&lt;p&gt;The keyboard already had a 30-second idle timeout. The application needed
+to do something useful with the sleep event.&lt;/p&gt;
+&lt;p&gt;Both screens now finish their current transaction, receive a final clear,
+and lose their switched supply. While asleep, they stop periodic display
+work entirely. Status events still update the software state in RAM.
+When the keyboard wakes, the application restores power, waits for the
+supply to settle, reinitializes the panel, and redraws the current state.&lt;/p&gt;
+&lt;p&gt;This isn’t MCU System OFF. The keyboard can still maintain its BLE links
+and detect keys.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-connected-sleep-1&quot;&gt;&lt;a href=&quot;https://balbi.sh/posts/urchin-tap-hold-and-power/#fn-connected-sleep&quot;&gt;[2]&lt;/a&gt;&lt;/sup&gt; It’s the display application responding to RMK’s
+sleep/wake events.&lt;/p&gt;
+&lt;p&gt;I also disabled USB CDC logging for the normal firmware. USB HID and Vial
+remain enabled; removing a logger didn’t require removing USB keyboard
+support.&lt;/p&gt;
+&lt;p&gt;The screen sleep and wake behavior worked on the real keyboard. The
+application’s host test suite reached 45 passing tests, including checks
+around sleep handling and in-flight display transfers. Those tests do
+not measure current, certify the physical power rail, or tell me what
+a radio is doing. That’s why the PPK2 came out.&lt;/p&gt;
+&lt;h2 id=&quot;a-display-can-trigger-work-without-consuming-the-power&quot;&gt;A display can trigger work without consuming the power&lt;/h2&gt;
+&lt;p&gt;The first whole-board measurements were not encouraging. Some awake
+runs were in the several-milliamp range. When the keyboard slept, the
+current dropped dramatically. It was tempting to call the difference
+“display power.”&lt;/p&gt;
+&lt;p&gt;That description mixed up two different things:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Current going into the physical display.&lt;/li&gt;
+&lt;li&gt;Everything else the firmware and MCU do while the display is awake.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;The nice!view is a Sharp memory LCD, not an e-paper panel. It retains the
+pixel data, so unchanged content doesn’t need to be uploaded again.
+There is still LCD polarity maintenance to do. On this board, COM
+polarity is controlled through the serial interface rather than an
+external inversion signal. Our awake driver alternates it with short
+HOLD commands every 16 ms; full images are sent when the visible state
+changes.&lt;/p&gt;
+&lt;p&gt;I checked the
+&lt;a rel=&quot;external&quot; href=&quot;https://web.archive.org/web/20240115011246id_/https://www.sharpsde.com/fileadmin/products/Displays/Specs/LS011B7DH03_24Nov17_Spec_LD-29Y03.pdf&quot;&gt;LS011B7DH03 panel specification&lt;/a&gt;
+rather than treating generic Sharp Memory LCD advice as interchangeable.
+Its table 6-3-1 gives a 57–70 Hz frame frequency for serial COM control,
+and its polarity-driving notes describe 60 polarity changes per second.
+That is &lt;strong&gt;not&lt;/strong&gt; a requirement to resend the framebuffer 60 times a second.&lt;/p&gt;
+&lt;p&gt;Even so, why would two bytes over SPI leave me looking at milliamps?&lt;/p&gt;
+&lt;p&gt;I eventually measured the display supply separately on my actual
+keyboard, using the PPK2 in ammeter mode. The result was &lt;strong&gt;3.68 µA
+averaged over a minute&lt;/strong&gt; with the display active.&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://balbi.sh/posts/urchin-tap-hold-and-power/niceview-supply.png&quot;&gt;&lt;img src=&quot;https://balbi.sh/posts/urchin-tap-hold-and-power/niceview-supply.png&quot; alt=&quot;PPK2 capture of the isolated nice!view supply, showing a 3.68 µA average over one minute.&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;This is the display supply, not the whole keyboard. The average at the
+bottom is the useful number; the short peaks don’t make this a
+milliamp-scale load.&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;The physical panel wasn’t where the missing milliamps were going.
+Replacing it with e-paper might change how often the MCU needs to do
+display work, but it wasn’t a fix for a panel that was burning through
+the battery. The panel wasn’t doing that.&lt;/p&gt;
+&lt;h2 id=&quot;a-cancellation-guard-wasn-t-the-answer-either&quot;&gt;A cancellation guard wasn’t the answer either&lt;/h2&gt;
+&lt;p&gt;We had an application-side cancellation wrapper around Embassy’s SPI
+driver. Its job is to stop an unfinished DMA transfer before a cancelled
+future can release the buffers. There is a synchronous wait in that abort
+path, which made it worth checking.&lt;/p&gt;
+&lt;p&gt;I built an isolated diagnostic image without the wrapper. Awake
+consumption stayed around &lt;strong&gt;4.4–4.5 mA&lt;/strong&gt;. That did not support the guard
+as the explanation for the sustained draw. The normal firmware keeps
+the protection.&lt;/p&gt;
+&lt;p&gt;I haven’t proved that every remaining microamp is necessary, or ruled
+out improvements in our driver or &lt;code&gt;embassy-nrf&lt;/code&gt;. What I don’t have is
+evidence that a HAL defect explains these measurements. Removing a
+safety mechanism and seeing no useful improvement isn’t a reason to
+leave it removed.&lt;/p&gt;
+&lt;h2 id=&quot;the-suspiciously-regular-30-ms-plateau&quot;&gt;The suspiciously regular 30 ms plateau&lt;/h2&gt;
+&lt;p&gt;Zooming in made the awake current much more interesting. There were
+small recurring bursts and much longer high-current plateaus. The
+plateaus were about &lt;strong&gt;30 ms long&lt;/strong&gt;, repeating every &lt;strong&gt;100 ms&lt;/strong&gt;.&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://balbi.sh/posts/urchin-tap-hold-and-power/split-discovery.png&quot;&gt;&lt;img src=&quot;https://balbi.sh/posts/urchin-tap-hold-and-power/split-discovery.png&quot; alt=&quot;Whole-board PPK2 trace with approximately 30 ms high-current plateaus recurring every 100 ms, alongside smaller bursts.&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;An early whole-board capture from the measurement setup. The window
+averages 4.62 mA. This isn’t an isolated measurement of SPI or the panel.&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;I connected CS and SCLK to the PPK2’s digital inputs and exported the
+current and digital channels together. The sample spacing was 10 µs, so
+it couldn’t decode a 1 MHz SPI clock reliably. CS was still enough to
+separate short commands from a full image transfer.&lt;/p&gt;
+&lt;p&gt;In that export, the CS-like strobes were only about &lt;strong&gt;0.81–0.87 ms&lt;/strong&gt;
+long, spaced roughly &lt;strong&gt;16 ms&lt;/strong&gt; apart. There were no long CS assertions
+corresponding to repeated full-frame writes. Meanwhile, the complete
+high-current plateaus measured &lt;strong&gt;29.75 ms&lt;/strong&gt;, with their starts exactly
+&lt;strong&gt;100 ms&lt;/strong&gt; apart.&lt;/p&gt;
+&lt;p&gt;Then we looked at RMK’s split discovery configuration:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;//&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; Split scan window&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Duration&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;from_millis&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;30&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt;//&lt;/span&gt;&lt;span class=&quot;z-l-6 z-l-i z-d-3 z-d-i&quot;&gt; Scan interval&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Duration&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;from_millis&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-9 z-d-9&quot;&gt;100&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Well, hello there.&lt;/p&gt;
+&lt;p&gt;The bare nice!nano&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-matrix-diode-1&quot;&gt;&lt;a href=&quot;https://balbi.sh/posts/urchin-tap-hold-and-power/#fn-matrix-diode&quot;&gt;[3]&lt;/a&gt;&lt;/sup&gt; was running &lt;strong&gt;split-central firmware&lt;/strong&gt;. The other
+half wasn’t connected. It was supposed to look for it, and it was doing
+exactly that. The
+&lt;a rel=&quot;external&quot; href=&quot;https://github.com/felipebalbi/rmk/blob/5f0ab05292f6d757d25c0491071c6c8190318831/rmk/src/ble/scan.rs&quot;&gt;pinned source&lt;/a&gt;
+spells out the 30 ms window and 100 ms interval.&lt;/p&gt;
+&lt;p&gt;An isolated build that didn’t run split discovery brought awake current
+down to around &lt;strong&gt;1.8 mA&lt;/strong&gt; in that test setup. A later connected sleep
+selection measured &lt;strong&gt;68.78 µA&lt;/strong&gt;. I had also changed the host pairing
+state during this part of the investigation, so these aren’t numbers
+to subtract blindly from earlier runs. They did give me a much better
+baseline than a board searching for an absent peer.&lt;/p&gt;
+&lt;p&gt;The important correction was bigger than the number: &lt;strong&gt;sleep stopped
+more than display work&lt;/strong&gt;. It also changed what the split radio was
+doing. The big drop at the idle timeout had never isolated the display
+as the cause.&lt;/p&gt;
+&lt;h2 id=&quot;finally-measure-an-actual-split&quot;&gt;Finally, measure an actual split&lt;/h2&gt;
+&lt;p&gt;I found another nice!nano, flashed the normal central and peripheral
+images, and connected the two. No need to redesign anything. Once all
+configured peripheral halves are connected, the central stops discovery.&lt;/p&gt;
+&lt;p&gt;The central’s sleeping consumption was higher than the host-only
+baseline: roughly &lt;strong&gt;270–300 µA&lt;/strong&gt; in the selected windows. Zooming in
+showed bursts almost exactly &lt;strong&gt;20 ms apart&lt;/strong&gt;.&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://balbi.sh/posts/urchin-tap-hold-and-power/central-sleep.png&quot;&gt;&lt;img src=&quot;https://balbi.sh/posts/urchin-tap-hold-and-power/central-sleep.png&quot; alt=&quot;Sleeping split central with radio bursts about 20 ms apart. The selected 19.93 ms interval averages 271.21 µA.&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;The central is connected to the host and its peripheral half. The
+selection spans almost one 20 ms interval, not just the pulse.&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;That matches RMK’s requested sleeping split interval when a host
+transport is active. The central schedules connection opportunities
+every 20 ms. The peripheral is allowed to skip many of them through
+peripheral latency; that doesn’t give the central the same event-skipping
+behavior.&lt;/p&gt;
+&lt;p&gt;This doesn’t imply a large stream of application messages between the
+halves. Empty link-layer exchanges and the work around connection
+events still cost energy. A current trace doesn’t tell me the contents
+of those packets, but the timing and configured interval fit.&lt;/p&gt;
+&lt;p&gt;The peripheral was the pleasant surprise:&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://balbi.sh/posts/urchin-tap-hold-and-power/peripheral-sleep.png&quot;&gt;&lt;img src=&quot;https://balbi.sh/posts/urchin-tap-hold-and-power/peripheral-sleep.png&quot; alt=&quot;Peripheral capture transitioning from awake activity to sleep. The selected 27.98-second sleeping period averages 46.71 µA.&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;Read the selection at the bottom right: 46.71 µA over 27.98 seconds.
+The 623.01 µA whole-window average includes the earlier awake period.&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;In that run, its selected awake period averaged about &lt;strong&gt;1.13 mA&lt;/strong&gt;, then
+the sleeping selection came down to &lt;strong&gt;46.71 µA&lt;/strong&gt;. Those sparse bursts
+are consistent with the peripheral taking advantage of its allowed
+event skipping.&lt;/p&gt;
+&lt;p&gt;So the useful sleep figures, &lt;strong&gt;before enabling subrating&lt;/strong&gt;, were:&lt;/p&gt;
+&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Setup&lt;/th&gt;&lt;th style=&quot;text-align: right&quot;&gt;Measured sleep average&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;
+&lt;tr&gt;&lt;td&gt;Test central, host connected, split discovery disabled&lt;/td&gt;&lt;td style=&quot;text-align: right&quot;&gt;About 69 µA&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;Normal split central, host and other half connected&lt;/td&gt;&lt;td style=&quot;text-align: right&quot;&gt;About 270–300 µA&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;Normal split peripheral, connected to central&lt;/td&gt;&lt;td style=&quot;text-align: right&quot;&gt;About 47 µA&lt;/td&gt;&lt;/tr&gt;
+&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;These are different setups and selected measurement windows, not a
+controlled battery-runtime benchmark. They are much more useful than
+my original assumption that both halves would consume roughly the same
+amount while sleeping.&lt;/p&gt;
+&lt;h2 id=&quot;one-more-knob-connection-subrating&quot;&gt;One more knob: connection subrating&lt;/h2&gt;
+&lt;p&gt;RMK already has an optional
+&lt;a rel=&quot;external&quot; href=&quot;https://github.com/felipebalbi/rmk/blob/5f0ab05292f6d757d25c0491071c6c8190318831/rmk/src/split/ble/central.rs#L268-L347&quot;&gt;&lt;code&gt;subrating&lt;/code&gt; feature&lt;/a&gt;
+for the split link, with nRF52840 support. I hadn’t enabled it.&lt;/p&gt;
+&lt;p&gt;Unlike peripheral latency alone, connection subrating lets both sides
+skip connection events. In the pinned implementation, when a host is
+connected, the sleeping split link requests a factor of 30 on a 7.5 ms
+base interval. That gives roughly &lt;strong&gt;225 ms between scheduled split
+events&lt;/strong&gt;, rather than the ordinary 20 ms sleep interval.&lt;/p&gt;
+&lt;p&gt;The cost is wake latency. RMK documents about &lt;strong&gt;116 ms on average and
+232 ms worst-case&lt;/strong&gt; for the first peripheral-side keypress after sleep.
+Those are upstream figures, not measurements of my keyboard. A local
+keypress on the central can initiate wake without waiting for that
+peripheral event. The split link returns to its fast settings after wake.&lt;/p&gt;
+&lt;p&gt;For me, a couple hundred milliseconds on the first key after an idle
+period is a reasonable thing to try. I enabled the existing feature on
+both halves of my real firmware, kept the 30-second idle timeout, and
+built a rollback pair before changing it.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;I don’t have post-subrating power measurements or a week of typing
+results yet.&lt;/strong&gt; The trial is the next step. In particular, I want to
+check quick peripheral taps that are released before the next event:
+delayed delivery is acceptable; a missing press or a stuck key isn’t.
+I also want to check held keys and reconnection from either half.&lt;/p&gt;
+&lt;p&gt;Changing RMK’s feature set can reset stored settings and bonds, so this
+is a flash-both-halves change with possible host and split re-pairing.&lt;/p&gt;
+&lt;h2 id=&quot;where-i-stopped&quot;&gt;Where I stopped&lt;/h2&gt;
+&lt;p&gt;The buffered tap-hold behavior is working well enough that I want to
+use it normally for a while. Screen sleep works. The physical display
+is a tiny load. The missing-half scan explains the big recurring
+plateaus, and the connected central’s 20 ms radio schedule explains
+why its sleep current is higher than the peripheral’s.&lt;/p&gt;
+&lt;p&gt;There is still awake-state overhead worth understanding. I haven’t
+turned a few short captures into a claim about how many days the
+batteries will last, and I haven’t demonstrated that subrating improves
+this particular keyboard yet.&lt;/p&gt;
+&lt;p&gt;But I no longer need to replace a perfectly reasonable display to fix
+a radio search. I’ll take that.&lt;/p&gt;
+&lt;section class=&quot;footnotes&quot;&gt;
+&lt;ol class=&quot;footnotes-list&quot;&gt;
+&lt;li id=&quot;fn-battery-capacity&quot;&gt;
+&lt;p&gt;Updated November 4, 2026: the batteries in my Urchin
+are rated at 110 mAh each, not 100 mAh. This clarifies the battery
+capacity; the current measurements above are unchanged. Capacity-based
+runtime estimates should use 110 mAh per half. &lt;a href=&quot;https://balbi.sh/posts/urchin-tap-hold-and-power/#fr-battery-capacity-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id=&quot;fn-connected-sleep&quot;&gt;
+&lt;p&gt;In my ZMK setup, I kept losing the connections after
+idle periods. With this RMK setup, the halves keep their link and the
+central stays connected to the host while sleeping. Wakeups have been
+short, and getting back to typing feels much smoother. I prefer this
+behavior: the retained connections and quick wakeups make for a really
+nice typing experience. That’s my experience with these configurations,
+not a claim that every ZMK keyboard disconnects when idle. &lt;a href=&quot;https://balbi.sh/posts/urchin-tap-hold-and-power/#fr-connected-sleep-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id=&quot;fn-matrix-diode&quot;&gt;
+&lt;p&gt;One early measurement had to go in the bin: I put a
+switch on the bare test board and forgot its matrix diode. That trace
+wasn’t valid evidence of key handling, so I repeated the experiment
+with the diode installed. &lt;a href=&quot;https://balbi.sh/posts/urchin-tap-hold-and-power/#fr-matrix-diode-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/section&gt;
+</content>
+  </entry>
+  
+</feed>
