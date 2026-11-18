@@ -37,7 +37,7 @@ println!("{}", render::<lisp!(NumeralList), List<Number>>());
 The first prints `(true . false)`; the second prints `(1 2 3)`.
 
 These Rust names describe output, not new values in the lambda language.
-`Number` doesn't replace a Church numeral. `Pair<A, B>` doesn't replace
+`Number` doesn't replace a [Church numeral][wiki-numerals]. `Pair<A, B>` doesn't replace
 our selecting-function cell. `List<E>` doesn't replace our nil-terminated
 chain. No lambda program constructs these schemas, and no evaluator
 rule knows what they are.
@@ -229,9 +229,12 @@ schemas, nested and empty cases, computed fields and spines, and real
 executable-output checks. Extract it and run `cargo test --offline --workspace`
 and `cargo run --offline --quiet` in `rust-lambda-types`.
 
-Next week is the finale. We will take recognizable ideas from SICP and
+Next week is the finale. We will take recognizable ideas from [SICP][wiki-sicp] and
 use all this machinery to calculate ten. Sixteen weeks. Ten. I think
 you'll agree the schedule left ample room for efficiency.
+
+[wiki-numerals]: https://en.wikipedia.org/wiki/Church_encoding#Church_numerals
+[wiki-sicp]: https://en.wikipedia.org/wiki/Structure_and_Interpretation_of_Computer_Programs
 
 [^buffer]: A native container used to assemble output is not the same
     thing as a native implementation of the encoded data structure's

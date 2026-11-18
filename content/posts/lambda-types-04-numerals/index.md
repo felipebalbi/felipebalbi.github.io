@@ -23,7 +23,7 @@ to a number, but the number has no lawyer.
 
 ## The number tells you how many times
 
-A Church numeral accepts a step function `f` and a starting value `x`.
+A [Church numeral][wiki-numerals] accepts a step function `f` and a starting value `x`.
 Its count is the number of times it applies the step:
 
 ```text
@@ -181,7 +181,7 @@ Neither a numeric evaluator primitive nor a runtime counter is required.
 
 ## Zero is very good at not doing things
 
-Zero never refers to its step function. In our call-by-name evaluator,
+Zero never refers to its step function. In our [call-by-name][wiki-name] evaluator,
 that step need not be evaluated at all:
 
 ```text
@@ -209,6 +209,9 @@ write five, six, and a resignation letter. Instead, next week's post will
 construct the next numeral from the one we already have. We are about to
 spend an entire installment on adding one. Please don't tell the people
 who designed the increment instruction.
+
+[wiki-numerals]: https://en.wikipedia.org/wiki/Church_encoding#Church_numerals
+[wiki-name]: https://en.wikipedia.org/wiki/Evaluation_strategy#Call_by_name
 
 [^untyped]: “Untyped” describes the lambda language, not its Rust host.
     Rust checks that the associated-type computations have implementations.

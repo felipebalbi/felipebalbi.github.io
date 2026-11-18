@@ -36,7 +36,7 @@ There is no imperative `return`, break statement, or exception lurking
 behind this description. We are specifying which expression is selected
 for evaluation.
 
-Predicates must follow our Church-boolean convention. Values can be any
+Predicates must follow our [Church-boolean][wiki-booleans] convention. Values can be any
 lambda terms. A chosen false value is still a chosen value. A chosen nil
 value is still a match. The committee votes on the predicate, not on
 whether it likes the result.
@@ -141,7 +141,7 @@ type Cond = App<Y, CondStep>;
 a Rust-side loop through clause types, or a parser that evaluates the
 conditions while building the expression.
 
-Up to beta-equivalence, the cases are:
+Up to [beta-equivalence][wiki-beta], the cases are:
 
 ```text
 COND NIL                                     =β NIL
@@ -211,6 +211,9 @@ We now have enough language to make the Rust spelling genuinely tiresome.
 Next week we will add an S-expression macro. It will translate notation,
 not compute answers. The bad idea stays exactly as bad; it merely becomes
 easier to type.
+
+[wiki-booleans]: https://en.wikipedia.org/wiki/Church_encoding#Church_Booleans
+[wiki-beta]: https://en.wikipedia.org/wiki/Lambda_calculus_definition#%CE%B2-reduction
 
 [^nil]: “No match” and “matched nil” are operationally different paths
     whose final values deliberately coincide. Tests with divergent later

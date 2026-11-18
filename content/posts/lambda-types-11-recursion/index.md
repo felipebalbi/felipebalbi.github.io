@@ -52,14 +52,14 @@ What we want is a `LENGTH` satisfying this relationship:
 LENGTH = LENGTH_STEP LENGTH
 ```
 
-In other words, a fixed point of the step: give the step its recursive
+In other words, a [fixed point][wiki-fixed] of the step: give the step its recursive
 behavior and get the same overall behavior back. There is a standard
 lambda-calculus way to build this, and it is not standard because anyone
 was worried about readable Rust diagnostics.
 
 ## Y, because we can
 
-The call-by-name fixed-point combinator is:
+The [call-by-name][wiki-name] [fixed-point combinator][wiki-y] is:
 
 ```text
 Y = λf. (λx. f (x x)) (λx. f (x x))
@@ -83,7 +83,7 @@ step. The usual equation is:
 Y F =β F (Y F)
 ```
 
-The subscript matters: this is beta-equivalence. Both sides can reduce to
+The subscript matters: this is [beta-equivalence][wiki-beta]. Both sides can reduce to
 `F (M M)`. It is not a claim that the evaluator literally rewrites an
 expression into the printed alias `Y F` in one step, or that both sides
 have the same Rust closure type.[^fixed]
@@ -217,6 +217,11 @@ literal combinator and all the checks. Run `cargo test --offline` and
 Next week we will use recursion to search an ordered list of clauses.
 This gives us a Lisp-shaped `Cond`. The compiler's only new contribution
 will be continued patience.
+
+[wiki-fixed]: https://en.wikipedia.org/wiki/Fixed_point_(mathematics)
+[wiki-name]: https://en.wikipedia.org/wiki/Evaluation_strategy#Call_by_name
+[wiki-y]: https://en.wikipedia.org/wiki/Fixed-point_combinator#Y_combinator
+[wiki-beta]: https://en.wikipedia.org/wiki/Lambda_calculus_definition#%CE%B2-reduction
 
 [^fixed]: A fixed-point equation concerns the recursive term's lambda
     behavior. Rust type aliases, syntactic identity, equality of closure

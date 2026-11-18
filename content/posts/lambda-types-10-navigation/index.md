@@ -13,7 +13,7 @@ this means today's implementation will be short. It does. I have decided
 to compensate by discussing the bounds.
 
 There will be no runtime indexing, recursive Rust trait for lists, or
-host integer used as a loop count. A Church numeral will provide the
+host integer used as a loop count. A [Church numeral][wiki-numerals] will provide the
 repetition. It has already been a boolean flipper and an arithmetic
 supervisor; today it gets sent out for a walk.
 
@@ -190,7 +190,10 @@ in `rust-lambda-types`. No runtime Rust function walks the encoded list.
 We can now walk as far as we're told. Next week we will ask a different
 question: how far is it to the end? We will answer without receiving the
 count in advance and without defining a recursive Rust alias. The price
-is the Y combinator. A sensible project would charge less.
+is the [Y combinator][wiki-y]. A sensible project would charge less.
+
+[wiki-numerals]: https://en.wikipedia.org/wiki/Church_encoding#Church_numerals
+[wiki-y]: https://en.wikipedia.org/wiki/Fixed-point_combinator#Y_combinator
 
 [^drop]: Rust's [`Drop` trait](https://doc.rust-lang.org/std/ops/trait.Drop.html)
     controls destruction of runtime values. Our `Drop` is a local type alias

@@ -71,7 +71,7 @@ Multiple lambda parameters become nested one-argument lambdas:
 ```
 
 We haven't invented a multi-argument evaluator primitive. We have given
-currying a slightly less bureaucratic spelling.
+[currying][wiki-currying] a slightly less bureaucratic spelling.
 
 For example:
 
@@ -92,7 +92,7 @@ with a parenthesis problem. There are traditions to uphold.
 
 ## Names go in; distances come out
 
-We originally used de Bruijn indices to represent binding without textual
+We originally used [de Bruijn indices][wiki-indices] to represent binding without textual
 names. The macro doesn't undo that decision. It allows names at the
 surface and lowers them to the same indices.
 
@@ -113,8 +113,8 @@ library name:
 type ConfusingButLegal = lisp!((lambda (True) True));
 ```
 
-That is identity, not a constant true function. The macro respects lexical
-scope, not our taste in parameter names.
+That is identity, not a constant true function. The macro respects
+[lexical scope][wiki-scope], not our taste in parameter names.
 
 After lowering a lambda body, restore the previous binding depth. Otherwise
 a parameter in one expression could leak into a sibling argument. The
@@ -173,7 +173,7 @@ type Mul = lisp!((lambda (m n) (m (Add n) Zero)));
 type Cons = lisp!((lambda (a d select) (select a d)));
 ```
 
-And the fixed-point combinator is still the literal term:
+And the [fixed-point combinator][wiki-y] is still the literal term:
 
 ```rust
 type Y = lisp!((lambda (f) ((lambda (x) (f (x x))) (lambda (x) (f (x x))))));
@@ -231,6 +231,11 @@ We haven't changed the evaluator, added domain primitives, or improved
 the compiler's resource limits. We have made the input readable. Next
 week we will extend the same courtesy to the output, which has spent
 thirteen posts resembling a missing closing bracket investigation.
+
+[wiki-currying]: https://en.wikipedia.org/wiki/Currying
+[wiki-indices]: https://en.wikipedia.org/wiki/De_Bruijn_index
+[wiki-scope]: https://en.wikipedia.org/wiki/Scope_(computer_science)#Lexical_scope
+[wiki-y]: https://en.wikipedia.org/wiki/Fixed-point_combinator#Y_combinator
 
 [^proc]: The [Rust Reference on procedural macros](https://doc.rust-lang.org/reference/procedural-macros.html)
     describes the separate `proc-macro` crate and token-stream interface.

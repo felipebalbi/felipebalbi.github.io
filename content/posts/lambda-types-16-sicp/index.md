@@ -24,7 +24,7 @@ the suspense doesn't become unbearable.
 
 ## Borrow a good idea for a bad purpose
 
-The inspiration is *Structure and Interpretation of Computer Programs*,
+The inspiration is *[Structure and Interpretation of Computer Programs][wiki-sicp]*,
 second edition, by Harold Abelson and Gerald Jay Sussman with Julie Sussman.
 Its [section 2.2.3, “Sequences as Conventional Interfaces”][sequences]
 organizes computations into stages connected by lists: select elements,
@@ -53,7 +53,7 @@ way to write a program, which is exactly why it would ruin this one.
 
 ## Two little functions
 
-The input is our existing `NumeralList`: three Church numerals in
+The input is our existing `NumeralList`: three [Church numerals][wiki-numerals] in
 functional cells, terminated by our chosen nil. Squaring uses the
 multiplication term we already derived:
 
@@ -91,7 +91,7 @@ type Map = lisp!((Y MapStep));
 ```
 
 `recur` is a lambda-bound argument, not a recursive Rust alias. `Y` is
-still the literal fixed-point combinator. The evaluator's three general
+still the literal [fixed-point combinator][wiki-y]. The evaluator's three general
 expression rules haven't acquired a mapping department.
 
 Use the numeric list view from last week to see the result:
@@ -150,7 +150,7 @@ each stored boolean supplies its own keep-or-skip decision, leaving
 
 ## Accumulate toward the answer
 
-SICP's `accumulate` is a **right fold**. For elements `a`, `b`, and `c`,
+SICP's `accumulate` is a **[right fold][wiki-fold]**. For elements `a`, `b`, and `c`,
 it constructs this association:
 
 ```text
@@ -248,7 +248,7 @@ in November.
 
 We borrowed sequence-processing ideas from Scheme examples, not Scheme's
 entire operational behavior. Ordinary Scheme procedure applications
-evaluate their arguments eagerly; our evaluator is call-by-name and
+evaluate their arguments eagerly; our evaluator is [call-by-name][wiki-name] and
 weak-head. Our `If` can be a plain function because unused arguments
 remain suspended.
 
@@ -266,7 +266,7 @@ Folding with `True` can select the first element without demanding either
 the initial value or the recursive result.
 
 This does not make the implementation an optimized streaming system.
-There is no memoizing call-by-need machinery, no fusion pass, and no
+There is no memoizing [call-by-need][wiki-need] machinery, no fusion pass, and no
 performance claim. Suspended work can be demanded more than once. We
 should not confuse avoiding one unnecessary computation with having
 developed a sensible way to compute anything.
@@ -338,6 +338,13 @@ The compiler deserves a break. So do we.
 
 [sequences]: https://sarabander.github.io/sicp/html/2_002e2.xhtml#g_t2_002e2_002e3
 [square-list]: https://sarabander.github.io/sicp/html/2_002e2.xhtml#Exercise-2_002e21
+
+[wiki-sicp]: https://en.wikipedia.org/wiki/Structure_and_Interpretation_of_Computer_Programs
+[wiki-numerals]: https://en.wikipedia.org/wiki/Church_encoding#Church_numerals
+[wiki-y]: https://en.wikipedia.org/wiki/Fixed-point_combinator#Y_combinator
+[wiki-fold]: https://en.wikipedia.org/wiki/Fold_(higher-order_function)
+[wiki-name]: https://en.wikipedia.org/wiki/Evaluation_strategy#Call_by_name
+[wiki-need]: https://en.wikipedia.org/wiki/Evaluation_strategy#Call_by_need
 
 [^sicp]: The references are to the original Scheme-language second edition,
     not the JavaScript adaptation. We adapt the sequence interfaces and

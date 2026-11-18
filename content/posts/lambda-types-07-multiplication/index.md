@@ -24,7 +24,7 @@ becomes the one-argument step our numeral knows how to repeat.
 
 ## Only half an addition, please
 
-Our addition term is curried:
+Our addition term is [curried][wiki-currying]:
 
 ```text
 ADD = λm. λn. m SUCC n
@@ -46,7 +46,7 @@ three to the numeral it receives.
 (ADD THREE) THREE → a numeral behaving like six
 ```
 
-This is **partial application**. The first operand survives in the inner
+This is **[partial application][wiki-partial]**. The first operand survives in the inner
 closure's captured environment. We already implemented the necessary
 machinery back when the most thrilling thing in the program was identity.
 It has been waiting patiently for an outing.[^currying]
@@ -72,7 +72,7 @@ TWO (ADD THREE) ZERO
 ```
 
 Zero, then three, then six. The expression's nested structure is shown
-above; our call-by-name evaluator will expose it according to demand,
+above; our [call-by-name][wiki-name] evaluator will expose it according to demand,
 not run an imperative accumulator through three runtime states.
 
 Write the expression in types:
@@ -222,6 +222,10 @@ The evaluator still knows only variables, functions, and application.
 Next week we will store two things together without using a Rust tuple
 as the language's pair. At this point, making data storage inconvenient
 feels like a natural extension of the brand.
+
+[wiki-currying]: https://en.wikipedia.org/wiki/Currying
+[wiki-partial]: https://en.wikipedia.org/wiki/Partial_application
+[wiki-name]: https://en.wikipedia.org/wiki/Evaluation_strategy#Call_by_name
 
 [^currying]: Currying represents a function of several arguments as nested
     one-argument functions. Partial application supplies some of those

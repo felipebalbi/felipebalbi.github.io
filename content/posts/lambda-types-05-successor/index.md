@@ -11,7 +11,7 @@ It's nearly Christmas, so this week's present is one. Not a numeral one;
 we already have that. The ability to take a number and produce the next
 one. Please keep the receipt.
 
-Our Church numerals describe iteration. Last week we wrote zero through
+Our [Church numerals][wiki-numerals] describe iteration. Last week we wrote zero through
 three by hand. Today we will stop copying application nodes and arrange
 for a lambda term to supply the extra application. In a normal program,
 this would be the point where somebody types `+ 1`. We have taken certain
@@ -168,7 +168,7 @@ less certain.[^finite]
 
 ## Successor can decline to inspect its numeral
 
-The body is `f (n f x)`. In call-by-name evaluation, the outer `f` controls
+The body is `f (n f x)`. In [call-by-name][wiki-name] evaluation, the outer `f` controls
 whether its argument is needed. If `f` ignores that argument and gives back
 identity, then the entire `n f x` computation can stay suspended.
 
@@ -191,6 +191,9 @@ This step deliberately contains no addition or multiplication. One more
 application is enough for one week. Next week we will give successor to a
 numeral and ask it to repeat. This will produce addition, just in time for
 the end of the year, when everyone is making regrettable commitments.
+
+[wiki-numerals]: https://en.wikipedia.org/wiki/Church_encoding#Church_numerals
+[wiki-name]: https://en.wikipedia.org/wiki/Evaluation_strategy#Call_by_name
 
 [^weak]: If the supplied `f` ignores its argument, the evaluator can expose
     `f`'s result without completing the inner `n f x`. The mathematical

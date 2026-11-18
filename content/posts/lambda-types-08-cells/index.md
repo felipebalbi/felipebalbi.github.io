@@ -23,7 +23,7 @@ tuple out of this.
 
 ## A pair without a record
 
-A cons cell has two fields, traditionally called **car** and **cdr**.
+A [cons cell][wiki-cons] has two fields, traditionally called **car** and **cdr**.
 The dotted notation `(A . B)` means a cell whose first field is `A` and
 second field is `B`.[^names]
 
@@ -177,7 +177,7 @@ passport office.
 
 ## The unselected field can be terrible
 
-Call-by-name application lets a consumer ignore a field without evaluating
+[Call-by-name][wiki-name] application lets a consumer ignore a field without evaluating
 it. These cell literals can safely expose the other field:
 
 ```text
@@ -208,6 +208,9 @@ ordinary data, not an empty-list marker we forgot to introduce.
 Next week we will abstract the constructor and choose an empty case.
 Then we'll have lists, and the privilege of reaching the end of one.
 It is important to establish that endings are possible in this series.
+
+[wiki-cons]: https://en.wikipedia.org/wiki/Cons
+[wiki-name]: https://en.wikipedia.org/wiki/Evaluation_strategy#Call_by_name
 
 [^names]: The historical names `car` and `cdr` come from early Lisp machine
     terminology, not from an essential property of pairs. For the original

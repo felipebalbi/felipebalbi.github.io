@@ -54,10 +54,10 @@ an implementation whose associated type supplies the answer.
 
 Consider `λx. λy. x`. Supplying the first argument gives back a function
 waiting for the second. That inner function must remember `x` when it is
-eventually used elsewhere. Forgetting it would make lexical scope a sort
+eventually used elsewhere. Forgetting it would make [lexical scope][wiki-scope] a sort
 of optimistic suggestion.
 
-A **closure** remembers the body and the environment where the lambda
+A **[closure][wiki-closure]** remembers the body and the environment where the lambda
 appeared:
 
 ```rust
@@ -76,7 +76,7 @@ a function; `Closure<Body, Env>` is what the evaluator produces when it
 encounters that function. The saved environment contains surrounding
 bindings, not the still-missing argument.
 
-Stopping here makes this a **weak-head** evaluator. It does not go tidying
+Stopping here makes this a **[weak-head][wiki-weak-head]** evaluator. It does not go tidying
 up inside every function body before allowing the function to exist.[^weak]
 The compiler has quite enough tidying up to do outside it.
 
@@ -120,7 +120,7 @@ evaluation demands it, the required trait implementation does not exist.
 
 ## Postpone the argument, with supporting documentation
 
-We chose **call-by-name** evaluation: don't evaluate an argument unless the
+We chose **[call-by-name][wiki-name]** evaluation: don't evaluate an argument unless the
 function needs it. Suspending just its syntax isn't enough. An argument can
 itself refer to variables in the caller, so we must save that environment
 alongside it:
@@ -140,12 +140,12 @@ where
 }
 ```
 
-A thunk is an unevaluated expression with a forwarding address. Forcing it
+A [thunk][wiki-thunk] is an unevaluated expression with a forwarding address. Forcing it
 evaluates the saved expression in the saved environment, not whichever
 environment happens to be nearby at the time.
 
 We haven't built a cache. “Call-by-name” here does not mean “evaluate once
-and share the result”; that latter promise belongs to call-by-need.[^need]
+and share the result”; that latter promise belongs to [call-by-need][wiki-need].[^need]
 Our implementation is lazy in when it demands work, not an assurance of
 economy. Naturally, the useless compiler experiment is also permitted to
 repeat itself.
@@ -286,6 +286,13 @@ type equality is not general lambda equivalence.
 We now have all three evaluation rules. Next week we will resist the urge
 to add more and write some programs instead. First up: obtaining booleans
 without allowing the compiler to use a boolean.
+
+[wiki-scope]: https://en.wikipedia.org/wiki/Scope_(computer_science)#Lexical_scope
+[wiki-closure]: https://en.wikipedia.org/wiki/Closure_(computer_programming)
+[wiki-weak-head]: https://en.wikipedia.org/wiki/Weak_head_normal_form
+[wiki-name]: https://en.wikipedia.org/wiki/Evaluation_strategy#Call_by_name
+[wiki-need]: https://en.wikipedia.org/wiki/Evaluation_strategy#Call_by_need
+[wiki-thunk]: https://en.wikipedia.org/wiki/Thunk
 
 [^associated]: Rust's [associated-type reference](https://doc.rust-lang.org/reference/items/associated-items.html#associated-types)
     explains the syntax independently of this abuse. The `where` clauses

@@ -56,7 +56,7 @@ type-level arithmetic quietly escaped through the printer's back door.
 ## Read behavior, not source shape
 
 `Succ Zero`, `Add Two Three`, and `Length NumeralList` have quite different
-syntax trees. Their weak-head results may carry suspended work inside
+syntax trees. Their [weak-head][wiki-weak-head] results may carry suspended work inside
 closures and environments. Counting `App` nodes in the input would
 measure our spelling choices, not the resulting numeral.
 
@@ -233,6 +233,9 @@ have parentheses around it, completing our transition from unreadable
 angle brackets to readable parentheses around an equally unnecessary
 computation.
 
+[wiki-weak-head]: https://en.wikipedia.org/wiki/Weak_head_normal_form
+[wiki-numerals]: https://en.wikipedia.org/wiki/Church_encoding#Church_numerals
+
 [^readback]: “Readback” here means decoding the behavior exposed by a
     chosen probe into a host display value. It is not full normalization
     of arbitrary terms or reconstruction of a canonical lambda-expression
@@ -246,5 +249,5 @@ computation.
     well-informed `println!`.
 
 [^limits]: The finite host output type is a limit of the view as well as
-    compiler resources being a limit of evaluation. Church numerals do not
+    compiler resources being a limit of evaluation. [Church numerals][wiki-numerals] do not
     intrinsically have a `usize` maximum; our chosen presentation does.

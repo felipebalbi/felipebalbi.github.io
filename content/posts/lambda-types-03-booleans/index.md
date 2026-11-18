@@ -42,7 +42,7 @@ TRUE  A B → A
 FALSE A B → B
 ```
 
-This is a Church encoding: represent data through the behavior of functions
+This is a [Church encoding][wiki-church]: represent data through the behavior of functions
 when they are used.[^church] It saves us from introducing a primitive
 boolean, at the modest cost of making every boolean a small function. The
 compiler is not being consulted on the trade-off.
@@ -114,7 +114,7 @@ IF TRUE  A B → TRUE  A B → A
 IF FALSE A B → FALSE A B → B
 ```
 
-This works as an ordinary function because our evaluator is call-by-name.
+This works as an ordinary function because our evaluator is [call-by-name][wiki-name].
 It doesn't evaluate both alternatives before handing them over. Under an
 eager strategy, merely writing this selector would not give conditional
 control over argument evaluation.[^eager]
@@ -234,6 +234,9 @@ truth-table, composition, and lazy-choice checks. After extraction, run
 We have added six functions and no evaluator rules. Next week we will use
 the same three expression forms to represent numbers. If you think a
 boolean is an excessive amount of function, wait until you meet two.
+
+[wiki-church]: https://en.wikipedia.org/wiki/Church_encoding
+[wiki-name]: https://en.wikipedia.org/wiki/Evaluation_strategy#Call_by_name
 
 [^church]: “Church encoding” names a family of functional representations,
     not a new Rust technique. The important property here is the selector

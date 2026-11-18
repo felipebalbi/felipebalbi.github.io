@@ -117,7 +117,7 @@ source diff. It is important to have receipts for a joke this expensive.
 
 ## The operands arrive one at a time
 
-Our functions are curried, so we can pause between arguments:
+Our functions are [curried][wiki-currying], so we can pause between arguments:
 
 ```rust
 type AddTwo = App<Add, Two>;
@@ -207,6 +207,8 @@ executable; it displays the selected type names.
 We can now obtain five through lambda evaluation. This is not a useful
 result, but it is the correct useless result. Next week we will obtain six
 by repeating addition. New year, same questionable judgment.
+
+[wiki-currying]: https://en.wikipedia.org/wiki/Currying
 
 [^expansion]: A reduction written in an explanation may descend farther
     into a function than our weak-head evaluator currently needs to go.

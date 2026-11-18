@@ -175,7 +175,7 @@ interchangeable would prematurely end some very short conversations.
 
 These lists are linked chains of functional pairs with a chosen empty
 case. They are not the fold-encoded representation usually meant by
-“Church lists.”[^lists] Numerals being Church-encoded doesn't require
+“[Church lists][wiki-lists].”[^lists] Numerals being Church-encoded doesn't require
 every other data structure to share a surname.
 
 Nor does `Cons` require list-shaped fields. `CONS ONE TWO` remains a
@@ -222,6 +222,8 @@ The executable still prints observation types, not complete lists.
 Next week a numeral will repeatedly take a cdr. We will call this
 navigation rather than “making the number do the walking,” although
 that is very much what we are doing.
+
+[wiki-lists]: https://en.wikipedia.org/wiki/Church_encoding#Church_lists_%E2%80%93_right_fold_representation
 
 [^dialects]: Common Lisp identifies its empty list with false; Scheme
     distinguishes the empty list from its false boolean. Our tiny language

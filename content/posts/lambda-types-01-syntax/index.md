@@ -10,7 +10,7 @@ tags = ["rust", "lambda-calculus", "type-system"]
 Rust's type system spends most of its life preventing mistakes. I thought it
 deserved a change of pace, so I gave it a mistake to *be*.
 
-We are going to implement lambda calculus in Rust types. Not a runtime
+We are going to implement [lambda calculus][wiki-lambda] in Rust types. Not a runtime
 interpreter written in Rust; that would be a sensible activity, and we have
 not gathered here for that. The expressions will be types. The results will
 be types. The compiler, which presumably had other plans, will do the work.
@@ -109,7 +109,7 @@ carefully during substitution. In an open term, replacing a free `x` with
 `y` inside `λy. x` must not accidentally bind the new `y`. That is variable
 capture; the innocent-looking textual replacement changes the meaning.
 
-We will use **de Bruijn indices** instead. A variable says how many binders
+We will use **[de Bruijn indices][wiki-indices]** instead. A variable says how many binders
 outward to look, starting at zero:
 
 ```text
@@ -241,6 +241,9 @@ series is published; they are available together in the draft preview.
 | [14](/posts/lambda-types-14-readable-results/) | February 24 | Readable numbers and booleans |
 | [15](/posts/lambda-types-15-readable-structures/) | March 3 | Readable pairs and lists |
 | [16](/posts/lambda-types-16-sicp/) | March 10 | A little SICP |
+
+[wiki-lambda]: https://en.wikipedia.org/wiki/Lambda_calculus
+[wiki-indices]: https://en.wikipedia.org/wiki/De_Bruijn_index
 
 [^notation]: These are parsing conventions, not evaluation rules. `λx. λy. x y`
     means `λx. (λy. (x y))`. Parentheses can override the conventions; changing
