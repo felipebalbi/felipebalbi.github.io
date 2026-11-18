@@ -77,7 +77,8 @@ be arguments, so this is a perfectly reasonable expression:
 ```
 
 Mathematically, applying the left-hand identity to the right-hand identity
-reduces to identity. That is an example of **beta reduction**, the rule that
+reduces to identity. That is an example of
+**[beta reduction](https://en.wikipedia.org/wiki/Beta_reduction)**, the rule that
 connects application to a function's body. Today, the arrow is in our
 explanation, not in the Rust program:
 
