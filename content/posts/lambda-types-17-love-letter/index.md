@@ -197,6 +197,15 @@ The result is extraordinary without pretending it arrived fully formed
 from one person, or that every feature of modern Lisp was in the first
 paper. Affection doesn't need better history than the history we have.
 
+For a later expression of that affection, watch William E. Byrd's
+[“The Most Beautiful Program Ever Written”][byrd-talk], presented at
+Papers We Love NYC in 2017. Byrd, a coauthor of
+[*The Reasoned Schemer*][reasoned-schemer], explores a tiny
+[metacircular evaluator][wiki-metacircular]: a Lisp interpreter written
+in Lisp.[^byrd] The family resemblance to our three expression forms is
+hard to miss. The difference is that he lets Lisp help, while I involved
+Rust's human-resources department.
+
 ## Love is not a deployment strategy
 
 There is no [Lisp machine][wiki-machines] on my desk. Dedicated commercial
@@ -260,6 +269,9 @@ Dear Rust: sorry about all of that.
 [wiki-vm]: https://en.wikipedia.org/wiki/Virtual_machine
 [wiki-gc]: https://en.wikipedia.org/wiki/Garbage_collection_(computer_science)
 [wiki-abelson]: https://en.wikipedia.org/wiki/Hal_Abelson
+[wiki-metacircular]: https://en.wikipedia.org/wiki/Meta-circular_evaluator
+[byrd-talk]: https://paperswelove.org/videos/william-byrd-on-the-most-beautiful-program-ever-written-pwl-nyc/
+[reasoned-schemer]: https://mitpress.mit.edu/9780262535519/the-reasoned-schemer/
 
 [^reader]: The [Common Lisp reader algorithm](https://www.lispworks.com/documentation/HyperSpec/Body/02_b.htm)
     covers tokens, escapes, macro characters, and more. “Open parenthesis,
@@ -295,6 +307,13 @@ Dear Rust: sorry about all of that.
     discusses both Russell's interpreter and the M-expression plans.
     These are primary sources, not an attribution of every later Lisp
     implementation technique to one paper.
+
+[^byrd]: The organizer's [talk page][byrd-talk] links the recording and
+    confirms Byrd's book credit. This is a small evaluator, not a complete
+    implementation of Scheme or Common Lisp. Its compactness relies on
+    facilities already supplied by the host, including procedures and
+    application. A short interpreter is not an entire language system
+    compressed through superior parenthesis management.
 
 [^runtime]: The [SBCL manual's introduction](https://www.sbcl.org/manual/index.html#Introduction)
     identifies its native compiler; [“Parts of SBCL”](https://www.sbcl.org/manual/index.html#Parts-of-SBCL)
