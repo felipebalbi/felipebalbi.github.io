@@ -2,15 +2,15 @@
 title = "Lambda in types, part 16: Sixteen weeks to compute ten"
 date = 2027-03-10T09:00:00
 draft = true
-description = "The gloriously useless finale: SICP-inspired map, filter, and accumulate, implemented as lambda terms and evaluated by Rust's type system. The answer is ten. We checked."
+description = "The gloriously useless computational finale: SICP-inspired map, filter, and accumulate, implemented as lambda terms and evaluated by Rust's type system. The answer is ten. We checked."
 [taxonomies]
 tags = ["rust", "lambda-calculus", "type-system", "lisp", "sicp"]
 +++
 
-We have reached the end of a sixteen-part series about making a perfectly
-serviceable compiler do something it was not hired to do. We represented
-lambda expressions as Rust types, built a general evaluator, invented
-numbers out of repeated application, and eventually taught the output to
+We have reached the computational finale of a seventeen-part series about
+making a perfectly serviceable compiler do something it was not hired
+to do. We represented lambda expressions as Rust types, built a general
+evaluator, invented numbers out of repeated application, and eventually taught the output to
 stop looking like a stack trace from a punctuation factory.
 
 Today we will compose a filter, a map, and a fold. The result will be ten.
@@ -19,8 +19,9 @@ the suspense doesn't become unbearable.
 
 <!-- more -->
 
-**Part 16 of 16.** [Previous: readable structures](/posts/lambda-types-15-readable-structures/) ·
-[Series index](/posts/lambda-types-01-syntax/#the-series).
+**Part 16 of 17.** [Previous: readable structures](/posts/lambda-types-15-readable-structures/) ·
+[Series index](/posts/lambda-types-01-syntax/#the-series) ·
+[Next: a love letter to Lisp](/posts/lambda-types-17-love-letter/).
 
 ## Borrow a good idea for a bad purpose
 
@@ -335,6 +336,10 @@ having no useful purpose at all.
 We began with three syntax constructors and ended with a little language
 that filters, transforms, and combines encoded data. The answer is ten.
 The compiler deserves a break. So do we.
+
+Next week is an [epilogue, not another feature](/posts/lambda-types-17-love-letter/):
+a love letter to Lisp, to its parentheses, and to McCarthy. The compiler
+gets to sit that one out.
 
 [sequences]: https://sarabander.github.io/sicp/html/2_002e2.xhtml#g_t2_002e2_002e3
 [square-list]: https://sarabander.github.io/sicp/html/2_002e2.xhtml#Exercise-2_002e21

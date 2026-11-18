@@ -18,7 +18,7 @@ becomes the one-argument step our numeral knows how to repeat.
 
 <!-- more -->
 
-**Part 7 of 16.** [Previous: addition](/posts/lambda-types-06-addition/) ·
+**Part 7 of 17.** [Previous: addition](/posts/lambda-types-06-addition/) ·
 [Series index](/posts/lambda-types-01-syntax/#the-series) ·
 [Next: cells](/posts/lambda-types-08-cells/).
 

@@ -17,7 +17,7 @@ to a number, but the number has no lawyer.
 
 <!-- more -->
 
-**Part 4 of 16.** [Previous: booleans](/posts/lambda-types-03-booleans/) ·
+**Part 4 of 17.** [Previous: booleans](/posts/lambda-types-03-booleans/) ·
 [Series index](/posts/lambda-types-01-syntax/#the-series) ·
 [Next: successor](/posts/lambda-types-05-successor/).
 

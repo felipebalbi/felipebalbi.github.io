@@ -18,7 +18,9 @@ be types. The compiler, which presumably had other plans, will do the work.
 The original stretch goal was Conway's Game of Life. The eventual finale is
 a little functional language that filters a list, squares its odd numbers,
 and adds them up. The answer is ten. We will spend sixteen weeks arranging
-for a compiler to discover ten. Please adjust your expectations accordingly.
+for a compiler to discover ten. A seventeenth installment is a love-letter
+epilogue to Lisp, in case the parentheses hadn't given us away. Please
+adjust your expectations accordingly.
 
 There is no practical application. This is play. This week's deliverable
 is that we can **describe identity**. We cannot evaluate it yet. Even by the
@@ -26,7 +28,7 @@ standards of a project with no purpose, we are taking our time.
 
 <!-- more -->
 
-**Part 1 of 16.** [Next: evaluation](/posts/lambda-types-02-evaluation/).
+**Part 1 of 17.** [Next: evaluation](/posts/lambda-types-02-evaluation/).
 The [series index](#the-series) is at the end of this post.
 
 ## The rule of the experiment
@@ -241,6 +243,7 @@ series is published; they are available together in the draft preview.
 | [14](/posts/lambda-types-14-readable-results/) | February 24 | Readable numbers and booleans |
 | [15](/posts/lambda-types-15-readable-structures/) | March 3 | Readable pairs and lists |
 | [16](/posts/lambda-types-16-sicp/) | March 10 | A little SICP |
+| [17](/posts/lambda-types-17-love-letter/) | March 17 | Dear Lisp, sorry about Rust — an epilogue |
 
 [wiki-lambda]: https://en.wikipedia.org/wiki/Lambda_calculus
 [wiki-indices]: https://en.wikipedia.org/wiki/De_Bruijn_index

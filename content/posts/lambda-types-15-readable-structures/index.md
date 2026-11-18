@@ -17,7 +17,7 @@ types. We are merely adding parentheses to the evidence.
 
 <!-- more -->
 
-**Part 15 of 16.** [Previous: readable scalars](/posts/lambda-types-14-readable-results/) ·
+**Part 15 of 17.** [Previous: readable scalars](/posts/lambda-types-14-readable-results/) ·
 [Series index](/posts/lambda-types-01-syntax/#the-series) ·
 [Next: the SICP finale](/posts/lambda-types-16-sicp/).
 
@@ -229,9 +229,10 @@ schemas, nested and empty cases, computed fields and spines, and real
 executable-output checks. Extract it and run `cargo test --offline --workspace`
 and `cargo run --offline --quiet` in `rust-lambda-types`.
 
-Next week is the finale. We will take recognizable ideas from [SICP][wiki-sicp] and
-use all this machinery to calculate ten. Sixteen weeks. Ten. I think
-you'll agree the schedule left ample room for efficiency.
+Next week is the computational finale. We will take recognizable ideas
+from [SICP][wiki-sicp] and use all this machinery to calculate ten.
+Sixteen weeks. Ten. I think you'll agree the schedule left ample room
+for efficiency.
 
 [wiki-numerals]: https://en.wikipedia.org/wiki/Church_encoding#Church_numerals
 [wiki-sicp]: https://en.wikipedia.org/wiki/Structure_and_Interpretation_of_Computer_Programs

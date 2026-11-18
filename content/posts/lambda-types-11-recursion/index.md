@@ -20,7 +20,7 @@ meeting that should have been an email, wait until you see the email.
 
 <!-- more -->
 
-**Part 11 of 16.** [Previous: navigation](/posts/lambda-types-10-navigation/) ·
+**Part 11 of 17.** [Previous: navigation](/posts/lambda-types-10-navigation/) ·
 [Series index](/posts/lambda-types-01-syntax/#the-series) ·
 [Next: ordered clauses](/posts/lambda-types-12-cond/).
 

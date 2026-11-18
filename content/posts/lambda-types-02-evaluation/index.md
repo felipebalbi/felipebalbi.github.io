@@ -18,7 +18,7 @@ making the Rust compiler work considerably harder.
 
 <!-- more -->
 
-**Part 2 of 16.** [Previous: syntax](/posts/lambda-types-01-syntax/) ·
+**Part 2 of 17.** [Previous: syntax](/posts/lambda-types-01-syntax/) ·
 [Series index](/posts/lambda-types-01-syntax/#the-series) ·
 [Next: booleans](/posts/lambda-types-03-booleans/).
 

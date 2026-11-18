@@ -9,7 +9,7 @@ tags = ["rust", "lambda-calculus", "type-system"]
 
 There are easier ways to add two and three. Almost all ways, in fact.
 A pocket calculator would work. Your fingers would work. A compiler can
-constant-fold `2 + 3` without a sixteen-part intervention.
+constant-fold `2 + 3` without a seventeen-part intervention.
 
 Unfortunately, we promised to implement our arithmetic as lambda terms.
 Last week we built successor: a function that makes a numeral perform one
@@ -19,7 +19,7 @@ some internal consistency. That's how they get you.
 
 <!-- more -->
 
-**Part 6 of 16.** [Previous: successor](/posts/lambda-types-05-successor/) ·
+**Part 6 of 17.** [Previous: successor](/posts/lambda-types-05-successor/) ·
 [Series index](/posts/lambda-types-01-syntax/#the-series) ·
 [Next: multiplication](/posts/lambda-types-07-multiplication/).
 

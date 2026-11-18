@@ -18,7 +18,7 @@ make the angle brackets look like an administrative error.
 
 <!-- more -->
 
-**Part 12 of 16.** [Previous: recursion](/posts/lambda-types-11-recursion/) ·
+**Part 12 of 17.** [Previous: recursion](/posts/lambda-types-11-recursion/) ·
 [Series index](/posts/lambda-types-01-syntax/#the-series) ·
 [Next: readable syntax](/posts/lambda-types-13-macro/).
 

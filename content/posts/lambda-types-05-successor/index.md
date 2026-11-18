@@ -19,7 +19,7 @@ measures to prevent that sort of progress.
 
 <!-- more -->
 
-**Part 5 of 16.** [Previous: numerals](/posts/lambda-types-04-numerals/) ·
+**Part 5 of 17.** [Previous: numerals](/posts/lambda-types-04-numerals/) ·
 [Series index](/posts/lambda-types-01-syntax/#the-series) ·
 [Next: addition](/posts/lambda-types-06-addition/).
 

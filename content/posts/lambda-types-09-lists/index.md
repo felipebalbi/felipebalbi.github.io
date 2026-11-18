@@ -17,7 +17,7 @@ of a perfectly good opportunity to make a function ignore another function.
 
 <!-- more -->
 
-**Part 9 of 16.** [Previous: cells](/posts/lambda-types-08-cells/) ·
+**Part 9 of 17.** [Previous: cells](/posts/lambda-types-08-cells/) ·
 [Series index](/posts/lambda-types-01-syntax/#the-series) ·
 [Next: navigation](/posts/lambda-types-10-navigation/).
 

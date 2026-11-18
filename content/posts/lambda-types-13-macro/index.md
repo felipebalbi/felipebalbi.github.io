@@ -17,7 +17,7 @@ except that this time the room really is easier to read.
 
 <!-- more -->
 
-**Part 13 of 16.** [Previous: Cond](/posts/lambda-types-12-cond/) ·
+**Part 13 of 17.** [Previous: Cond](/posts/lambda-types-12-cond/) ·
 [Series index](/posts/lambda-types-01-syntax/#the-series) ·
 [Next: readable results](/posts/lambda-types-14-readable-results/).
 

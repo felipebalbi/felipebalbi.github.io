@@ -17,7 +17,7 @@ tuple out of this.
 
 <!-- more -->
 
-**Part 8 of 16.** [Previous: multiplication](/posts/lambda-types-07-multiplication/) ·
+**Part 8 of 17.** [Previous: multiplication](/posts/lambda-types-07-multiplication/) ·
 [Series index](/posts/lambda-types-01-syntax/#the-series) ·
 [Next: constructors and nil](/posts/lambda-types-09-lists/).
 

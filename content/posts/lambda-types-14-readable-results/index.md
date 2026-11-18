@@ -18,7 +18,7 @@ merely become easier to confirm exactly how useless it is.
 
 <!-- more -->
 
-**Part 14 of 16.** [Previous: the macro](/posts/lambda-types-13-macro/) ·
+**Part 14 of 17.** [Previous: the macro](/posts/lambda-types-13-macro/) ·
 [Series index](/posts/lambda-types-01-syntax/#the-series) ·
 [Next: readable structures](/posts/lambda-types-15-readable-structures/).
 

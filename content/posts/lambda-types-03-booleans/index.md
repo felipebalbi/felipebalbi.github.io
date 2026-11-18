@@ -18,7 +18,7 @@ project. It is an explanation of what happens when nobody intervenes.
 
 <!-- more -->
 
-**Part 3 of 16.** [Previous: evaluation](/posts/lambda-types-02-evaluation/) ·
+**Part 3 of 17.** [Previous: evaluation](/posts/lambda-types-02-evaluation/) ·
 [Series index](/posts/lambda-types-01-syntax/#the-series) ·
 [Next: numerals](/posts/lambda-types-04-numerals/).
 

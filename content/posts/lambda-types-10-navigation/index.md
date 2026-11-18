@@ -19,7 +19,7 @@ supervisor; today it gets sent out for a walk.
 
 <!-- more -->
 
-**Part 10 of 16.** [Previous: lists](/posts/lambda-types-09-lists/) ·
+**Part 10 of 17.** [Previous: lists](/posts/lambda-types-09-lists/) ·
 [Series index](/posts/lambda-types-01-syntax/#the-series) ·
 [Next: recursion](/posts/lambda-types-11-recursion/).
 
