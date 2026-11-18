@@ -212,9 +212,9 @@ It is important to establish that endings are possible in this series.
 [wiki-cons]: https://en.wikipedia.org/wiki/Cons
 [wiki-name]: https://en.wikipedia.org/wiki/Evaluation_strategy#Call_by_name
 
-[^names]: The historical names `car` and `cdr` come from early Lisp machine
-    terminology, not from an essential property of pairs. For the original
-    discussion, see McCarthy's [1960 Lisp paper](https://www-formal.stanford.edu/jmc/recursive.html).
+[^names]: The historical names `car` and `cdr` come from IBM 704 register
+    terminology used by early Lisp, not from an essential property of pairs.
+    For the original discussion, see McCarthy's [1960 Lisp paper](https://www-formal.stanford.edu/jmc/recursive.html).
     We borrow the names and dotted-pair notation, not that machine's layout
     or a complete Lisp implementation's semantics.
 

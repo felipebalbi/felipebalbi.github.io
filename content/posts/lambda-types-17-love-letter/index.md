@@ -215,7 +215,8 @@ particular hardware-and-software world, not evidence that Lisp itself
 requires that hardware to run.
 
 Nor does every Lisp implementation execute through a bytecode
-[virtual machine][wiki-vm]. SBCL, for example, has a native-code compiler.
+[virtual machine][wiki-vm]. [Steel Bank Common Lisp (SBCL)][wiki-sbcl], for
+example, has a native-code compiler.
 It also has a runtime: compiling to machine instructions doesn't make
 allocation, [garbage collection][wiki-gc], and other support machinery
 disappear.[^runtime]
@@ -267,6 +268,7 @@ Dear Rust: sorry about all of that.
 [wiki-mccarthy]: https://en.wikipedia.org/wiki/John_McCarthy_(computer_scientist)
 [wiki-machines]: https://en.wikipedia.org/wiki/Lisp_machine
 [wiki-vm]: https://en.wikipedia.org/wiki/Virtual_machine
+[wiki-sbcl]: https://en.wikipedia.org/wiki/Steel_Bank_Common_Lisp
 [wiki-gc]: https://en.wikipedia.org/wiki/Garbage_collection_(computer_science)
 [wiki-abelson]: https://en.wikipedia.org/wiki/Hal_Abelson
 [wiki-metacircular]: https://en.wikipedia.org/wiki/Meta-circular_evaluator
