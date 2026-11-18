@@ -143,12 +143,23 @@ function in a fixed vocabulary, but a new arrangement built from the
 same materials. Resource-management forms and small domain-specific
 notations can be expressed without assembling a separate string parser.
 
+[Hal Abelson][wiki-abelson] put it rather better in SICP lecture 3A:
+
+> Lisp is a lousy language for doing any particular problem. What it's
+> good for is figuring out the right language that you want and embedding
+> that in Lisp.[^abelson]
+
+The important word is *embedding*. Your little language doesn't have to
+rebuild functions, recursion, and abstraction before it can do anything
+interesting. It can keep using Lisp's. The host supplies the workshop;
+you supply the questionable extension to the premises.
+
 It is not a guarantee of taste. You can duplicate evaluation accidentally,
 capture a caller's variable, or invent a private language everyone else
 must learn. Common Lisp macro authors need to manage introduced names;
 [hygienic macro][wiki-hygiene] systems address related problems differently.
 Access to the building materials includes permission to construct a shed
-in front of the fire exit.
+in front of the fire exit.[^our-shed]
 
 The [downloadable examples](examples.lisp) run with `sbcl --script examples.lisp`.
 They check the expansion and the condition's single evaluation as well
@@ -248,6 +259,7 @@ Dear Rust: sorry about all of that.
 [wiki-machines]: https://en.wikipedia.org/wiki/Lisp_machine
 [wiki-vm]: https://en.wikipedia.org/wiki/Virtual_machine
 [wiki-gc]: https://en.wikipedia.org/wiki/Garbage_collection_(computer_science)
+[wiki-abelson]: https://en.wikipedia.org/wiki/Hal_Abelson
 
 [^reader]: The [Common Lisp reader algorithm](https://www.lispworks.com/documentation/HyperSpec/Body/02_b.htm)
     covers tokens, escapes, macro characters, and more. “Open parenthesis,
@@ -261,6 +273,22 @@ Dear Rust: sorry about all of that.
     Macro expansion produces a form for subsequent processing. The returned
     form may itself need expansion; the example here exposes one outer
     expansion rather than pretending to show a compiler's final AST.
+
+[^abelson]: Hal Abelson, [SICP lecture 3A, “Henderson Escher Example”](https://ocw.mit.edu/courses/6-001-structure-and-interpretation-of-computer-programs-spring-2005/resources/3a-henderson-escher-example/),
+    [transcript, page 14](https://ocw.mit.edu/courses/6-001-structure-and-interpretation-of-computer-programs-spring-2005/453216e53b2225221a756bf42bfdcd3d_PEwZL3H2oKg.pdf#page=14).
+    The transcript renders the language's name as “List”; the quotation
+    restores “Lisp.” His example embeds a picture language whose procedures
+    can still use the host language's facilities.
+
+[^our-shed]: Our own [part-13 `lisp!()` macro](/posts/lambda-types-13-macro/)
+    relies on this freedom to build a private notation inside a host
+    language. Rust gives the procedural macro structured token trees;
+    it translates our S-expressions into `Lambda`, `App`, and `Var` types.
+    The trait evaluator still performs the computation. Rust isn't thereby
+    homoiconic in Lisp's sense, and `lisp!()` isn't a Common Lisp macro.
+    The shared superpower is extending the surface notation by transforming
+    structured syntax. In our case, the shed contains a lambda evaluator
+    and appears to be obstructing the compiler's emergency exit.
 
 [^mccarthy]: McCarthy's [original 1960 paper](https://www-formal.stanford.edu/jmc/recursive.html)
     remains worth reading. His later [account of Lisp's implementation](https://www-formal.stanford.edu/jmc/history/lisp/node3.html)
