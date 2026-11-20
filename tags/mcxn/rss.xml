@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"
+     xmlns:atom="http://www.w3.org/2005/Atom"
+     xmlns:content="http://purl.org/rss/1.0/modules/content/"
+     xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Felipe Balbi</title>
+    <link>https://balbi.sh</link>
+    <description>Notes on embedded systems, Rust, and the craft of writing software.</description>
+    <generator>Zola</generator>
+    <language>en</language>
+    <lastBuildDate>Wed, 18 Nov 2026 00:00:00 +0000</lastBuildDate>
+    <atom:link href="https://balbi.sh/tags/mcxn/rss.xml" rel="self" type="application/rss+xml"/>
+    
+    <item>
+      <title>All that work to blink three LEDs</title>
+      <link>https://balbi.sh/posts/mcxn-three-leds/</link>
+      <guid isPermaLink="true">https://balbi.sh/posts/mcxn-three-leds/</guid>
+      <pubDate>Wed, 18 Nov 2026 00:00:00 +0000</pubDate>
+      <dc:creator>Felipe Balbi</dc:creator>
+      <description>&lt;p&gt;The application has three outputs and a loop. Turn an LED on, wait half a
+second, turn it off, try another color. The sort of program you write to
+prove the board is alive before doing anything interesting.&lt;/p&gt;
+&lt;p&gt;Getting to that program involved changes to a peripheral access crate,
+debugger target descriptions, clock initialization, GPIO, and the code
+that generates the HAL’s peripheral implementations. It also prompted a
+discussion about whether we should have one HAL for rather more of NXP’s
+microcontrollers.&lt;/p&gt;
+&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https://github.com/embassy-rs/embassy/pull/7520&quot;&gt;Initial MCXN support landed in Embassy yesterday&lt;/a&gt;. The visible
+result is an RGB blinky on an MCXN556S. The interesting part is everything
+the blinky does not tell you.&lt;/p&gt;</description>
+      
+      <content:encoded>&lt;p&gt;The application has three outputs and a loop. Turn an LED on, wait half a
+second, turn it off, try another color. The sort of program you write to
+prove the board is alive before doing anything interesting.&lt;/p&gt;
+&lt;p&gt;Getting to that program involved changes to a peripheral access crate,
+debugger target descriptions, clock initialization, GPIO, and the code
+that generates the HAL’s peripheral implementations. It also prompted a
+discussion about whether we should have one HAL for rather more of NXP’s
+microcontrollers.&lt;/p&gt;
+&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https://github.com/embassy-rs/embassy/pull/7520&quot;&gt;Initial MCXN support landed in Embassy yesterday&lt;/a&gt;. The visible
+result is an RGB blinky on an MCXN556S. The interesting part is everything
+the blinky does not tell you.&lt;/p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;/span&gt;&lt;h2 id=&quot;first-describe-the-thing-you-want-to-program&quot;&gt;First, describe the thing you want to program&lt;/h2&gt;
+&lt;p&gt;There are several different meanings of “support” in an embedded Rust
+stack, and they do not arrive together.&lt;/p&gt;
+&lt;p&gt;A peripheral access crate, or PAC, describes registers: their addresses,
+fields, and the values those fields accept. A HAL turns that description
+into operations an application can use. The debugger needs its own
+description of the target so it can connect and program it. Having one of
+these does not conjure the others into existence.&lt;/p&gt;
+&lt;p&gt;The MCXN work included &lt;a rel=&quot;external&quot; href=&quot;https://github.com/embassy-rs/nxp-pac/pull/146&quot;&gt;peripheral models in &lt;code&gt;nxp-pac&lt;/code&gt;&lt;/a&gt;, followed
+by &lt;a rel=&quot;external&quot; href=&quot;https://github.com/embassy-rs/nxp-pac/pull/147&quot;&gt;MCXN246, MCXN556, and MCXN557 MetaPAC selections&lt;/a&gt;. The latter
+is a useful example of why adding a part number is not just copying a
+file and changing its name: the N556/N557 descriptions need &lt;strong&gt;DAC1 instead
+of PLU&lt;/strong&gt;, with the corresponding peripheral and interrupt availability.&lt;/p&gt;
+&lt;p&gt;That work brought the PAC to &lt;strong&gt;14 numeric MCXN chip selections&lt;/strong&gt;. Numeric
+is important here. Reusing register definitions for suffix variants with
+matching maps does not say that their boot policy, memory capacity,
+electrical limits, or errata are interchangeable. Nor does a chip feature
+tell you which pins are bonded out on your package. The application’s
+linker layout and pin choices still have to match the actual device.&lt;/p&gt;
+&lt;p&gt;On the debugger side, &lt;a rel=&quot;external&quot; href=&quot;https://github.com/probe-rs/probe-rs/pull/4628&quot;&gt;probe-rs gained MCX N target support&lt;/a&gt;,
+followed by &lt;a rel=&quot;external&quot; href=&quot;https://github.com/probe-rs/probe-rs/pull/4691&quot;&gt;package-variant descriptions&lt;/a&gt;. Those are
+separate contributions from the Embassy HAL. A target being recognizable
+to the debugger is useful, but it is not evidence that an async driver
+for one of its peripherals exists.&lt;/p&gt;
+&lt;p&gt;This is the infrastructure underneath the line that looks innocuous in
+the application:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; p&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; hal&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;init&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;hal&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;config&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Config&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;default&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;It is a short line with a fairly large dependency on reality.&lt;/p&gt;
+&lt;h2 id=&quot;the-clock-configuration-is-deliberately-uninteresting&quot;&gt;The clock configuration is deliberately uninteresting&lt;/h2&gt;
+&lt;p&gt;The initial MCXN profile uses &lt;strong&gt;FRO12 at 12 MHz&lt;/strong&gt;, a &lt;strong&gt;3 MHz slow bus&lt;/strong&gt;, and
+the &lt;strong&gt;1 MHz OSTIMER&lt;/strong&gt; clock for Embassy’s time driver. No ambitious clock
+tree configuration, no voltage scaling, no MCXN deep-sleep support in
+this first step.&lt;/p&gt;
+&lt;p&gt;That is not a statement about what the chips can do. It is the boundary
+of what this implementation currently offers.&lt;/p&gt;
+&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://github.com/embassy-rs/embassy/blob/41d7b34f69fa530d30439516dced774eedebcd02/embassy-mcxa/src/clocks/mcxn.rs&quot;&gt;clock implementation&lt;/a&gt; checks the numeric device type
+against the selected chip and, on dual-core parts, refuses to proceed
+unless CPU1 is held in reset. The initial port is for the primary core,
+not an experiment in coordinating two running cores through a shared
+clock controller.&lt;/p&gt;
+&lt;p&gt;Startup waits also have a finite polling budget. An oscillator or divider
+that never reaches the expected state produces a phase-specific error
+rather than an infinite loop with no indication of which step stopped.
+This is a polling budget, &lt;strong&gt;not a wall-clock timeout&lt;/strong&gt;: there is no
+initialized Embassy timer to consult while establishing the clocks that
+will feed it.&lt;/p&gt;
+&lt;p&gt;The reported frequencies come from the selected sources and divider
+readback. They are nominal frequencies, not measurements against an
+independent reference. That distinction matters even when the answer is
+the thoroughly unsurprising number twelve million.&lt;/p&gt;
+&lt;p&gt;The other deliberate choice is what initialization leaves alone. It
+retains inherited flash wait states, RAM ECC settings, and
+security/calibration state. The boot environment must already provide
+usable SRAM, including whatever ECC initialization its memory layout
+requires. This HAL does not turn a minimal clock profile into an excuse
+to rewrite every vaguely related register.&lt;/p&gt;
+&lt;h2 id=&quot;share-the-gpio-operations-not-the-assumptions&quot;&gt;Share the GPIO operations, not the assumptions&lt;/h2&gt;
+&lt;p&gt;The data side of GPIO is a good candidate for reuse. Setting, clearing,
+toggling, and reading a pin can share the same driver wrappers when the
+underlying register interface permits it.&lt;/p&gt;
+&lt;p&gt;Pin control is where that simple picture stops being sufficient.&lt;/p&gt;
+&lt;p&gt;The port separates &lt;a rel=&quot;external&quot; href=&quot;https://github.com/embassy-rs/embassy/blob/41d7b34f69fa530d30439516dced774eedebcd02/embassy-mcxa/src/gpio/mod.rs&quot;&gt;shared GPIO types and operations&lt;/a&gt; from
+the family-specific code. MCXN has &lt;a rel=&quot;external&quot; href=&quot;https://github.com/embassy-rs/embassy/blob/41d7b34f69fa530d30439516dced774eedebcd02/embassy-mcxa/src/gpio/mcxn.rs&quot;&gt;native per-pad PCR accessors&lt;/a&gt;,
+rather than simply using the MCXA uniform PORT/PCR model everywhere.
+That dispatch stays in the MCXN pin-control implementation, where it
+belongs, instead of spreading family checks through every public output
+method.&lt;/p&gt;
+&lt;p&gt;For this first step, the implemented MCXN GPIO pins are &lt;strong&gt;P0_10, P0_27,
+and P1_2&lt;/strong&gt;: the three RGB outputs used by the example. MCXN23x lacks
+P0_10, so that selection gets only the other two. The generator does not
+advertise a GPIO implementation for every pin just because pin metadata
+exists. Nor does this initial MCXN path claim async GPIO interrupt
+support.&lt;/p&gt;
+&lt;p&gt;There is a similar restraint during initialization. GPIO and PORT clocks
+are enabled without resetting the whole blocks. Resetting an entire
+block to prepare three LED pins would also discard inherited protection
+and pad state outside those pins. The implementation requires the blocks
+to be out of reset already, and it does not override access policy to
+make a denied pin usable.&lt;/p&gt;
+&lt;p&gt;The resulting application still gets the familiar interface. From the
+&lt;a rel=&quot;external&quot; href=&quot;https://github.com/embassy-rs/embassy/blob/41d7b34f69fa530d30439516dced774eedebcd02/examples/mcxn556/src/bin/blinky.rs&quot;&gt;merged blinky example&lt;/a&gt;:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; mut&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; red&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Output&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;new&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;p&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;P0_10&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Level&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;High&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; DriveStrength&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Normal&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; SlewRate&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Fast&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; mut&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; green&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Output&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;new&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;p&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;P0_27&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Level&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;High&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; DriveStrength&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Normal&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; SlewRate&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Fast&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;let&lt;/span&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt; mut&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; blue&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Output&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;new&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;p&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;P1_2&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Level&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;High&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; DriveStrength&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Normal&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; SlewRate&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Fast&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;After all that, the loop really does mostly consist of setting levels
+and calling &lt;code&gt;Timer::after_millis(500).await&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;I would like the application to be boring. I do not want the code below
+it to achieve that by pretending the differences are not there.&lt;/p&gt;
+&lt;h2 id=&quot;does-this-need-another-hal&quot;&gt;Does this need another HAL?&lt;/h2&gt;
+&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https://github.com/embassy-rs/embassy/pull/7520#issuecomment-6859101616&quot;&gt;Kevin Lannen asked the obvious question&lt;/a&gt;: should MCXN
+live inside &lt;code&gt;embassy-mcxa&lt;/code&gt;, or should it have its own crate? The families
+share some peripherals, but certainly not all of them. Kevin also linked
+&lt;a rel=&quot;external&quot; href=&quot;https://github.com/embassy-rs/embassy/pull/7521&quot;&gt;his MCXN947 GPIO and blinky work&lt;/a&gt; in the discussion.&lt;/p&gt;
+&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https://github.com/embassy-rs/embassy/pull/7520#issuecomment-6860533357&quot;&gt;My answer was to keep the work together&lt;/a&gt;. If the approach
+works well, renaming the crate to &lt;code&gt;embassy-mcx&lt;/code&gt; would be a reasonable
+follow-up. That is a direction, not a rename this PR performed: the
+merged example still imports &lt;code&gt;embassy_mcxa&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;Then &lt;a rel=&quot;external&quot; href=&quot;https://github.com/embassy-rs/embassy/pull/7520#issuecomment-6935882247&quot;&gt;9names suggested going further&lt;/a&gt;: why not put the NXP
+families under &lt;code&gt;embassy-nxp&lt;/code&gt;? Kevin &lt;a rel=&quot;external&quot; href=&quot;https://github.com/embassy-rs/embassy/pull/7520#issuecomment-6938098403&quot;&gt;listed concrete overlaps&lt;/a&gt;,
+including USB controller relationships across MCXN, i.MX RT, LPC55, and
+RT600, and shared peripherals such as CTIMER, OSTIMER, WWDT, PINT, and
+ADC between MCXN and LPC55.&lt;/p&gt;
+&lt;p&gt;That is a much better basis for a shared HAL than the vendor logo on the
+front of the datasheet. It is also not a reason to do the whole merger
+in one patch.&lt;/p&gt;
+&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https://github.com/embassy-rs/embassy/pull/7520#issuecomment-6957947139&quot;&gt;I want to move in that direction&lt;/a&gt;, but we already have working
+deep sleep on MCXA. Moving everything immediately risks regressing
+behavior that is useful today in exchange for an architecture we hope
+will be useful later.&lt;/p&gt;
+&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://github.com/embassy-rs/embassy/pull/7520#issuecomment-6958018934&quot;&gt;sequence I proposed in the discussion&lt;/a&gt; starts below the
+HAL: move toward the MetaPAC approach in &lt;code&gt;nxp-pac&lt;/code&gt;, review the peripheral
+models so corresponding hardware produces consistent helpers, update
+the existing HALs to those accessors, and then tackle bringing them
+together.&lt;/p&gt;
+&lt;p&gt;There is already a small piece of that work in &lt;a rel=&quot;external&quot; href=&quot;https://github.com/embassy-rs/nxp-pac/pull/149&quot;&gt;the MCXA/MCXN fieldset and
+enum consolidation&lt;/a&gt;. It shares compatible descriptions while
+preserving layouts, sparse pin capabilities, access policies, defaults,
+and driver identities. The qualification is the work. Sharing a field
+description is useful; erasing a hardware distinction to make two files
+look alike is not.&lt;/p&gt;
+&lt;p&gt;Even compilation cost appeared in the review. Kevin &lt;a rel=&quot;external&quot; href=&quot;https://github.com/embassy-rs/embassy/pull/7520#discussion_r4592411847&quot;&gt;asked about
+building representative families&lt;/a&gt; to reduce memory
+use, and &lt;a rel=&quot;external&quot; href=&quot;https://github.com/embassy-rs/embassy/pull/7520#discussion_r4595066404&quot;&gt;reported a local comparison&lt;/a&gt; in which
+disabling &lt;code&gt;defmt&lt;/code&gt; reduced a PAC build from roughly 2.1 GB to 1.5 GB.
+Those are his benchmark figures, not a general memory guarantee, but
+they are a useful reminder that generated APIs have a host-side cost,
+too. &lt;a rel=&quot;external&quot; href=&quot;https://github.com/embassy-rs/nxp-pac/pull/150&quot;&gt;Removing unnecessary one-bit enums&lt;/a&gt; was another recent
+change explicitly aimed at compilation memory usage.&lt;/p&gt;
+&lt;h2 id=&quot;what-actually-landed&quot;&gt;What actually landed&lt;/h2&gt;
+&lt;p&gt;The &lt;a rel=&quot;external&quot; href=&quot;https://github.com/embassy-rs/embassy/blob/41d7b34f69fa530d30439516dced774eedebcd02/embassy-mcxa/README.md#initial-mcxn-support&quot;&gt;merged support notes&lt;/a&gt; describe a deliberately narrow
+starting point:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Fourteen numeric MCXN chip selections, covering the N23x, N24x, N52x,
+N53x, N54x, N55x, and N94x device groups.&lt;/li&gt;
+&lt;li&gt;A fixed primary-core clock profile, OSTIMER time driver, and the small
+GPIO subset above. Other MCXN peripherals are not supported yet.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Hardware validation on MCXN556S only.&lt;/strong&gt; Other chip selections are
+not a claim of testing on those devices.&lt;/li&gt;
+&lt;li&gt;The ordinary &lt;code&gt;embassy-executor/platform-cortex-m&lt;/code&gt; executor. The HAL’s
+&lt;code&gt;executor-platform&lt;/code&gt; and &lt;code&gt;time-driver-lptmr&lt;/code&gt; features are not supported
+on MCXN.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;The example is also a &lt;strong&gt;plain, unsigned image&lt;/strong&gt;. Whether it can start
+autonomously depends on the device’s boot policy. A secure-boot-enabled
+device needs an appropriately authenticated image; HAL initialization
+does not change that policy. Debug-mailbox mass erase is a separate,
+destructive maintenance operation, not a hidden step in making the
+example run.&lt;/p&gt;
+&lt;p&gt;These are not apologetic qualifications attached to an otherwise broad
+claim of “MCXN support.” They are the claim. The port gives the next
+peripheral a defined place to start, without making the application
+responsible for discovering which existing MCXA assumptions do not
+apply.&lt;/p&gt;
+&lt;p&gt;Three LEDs are not much of an application. They are enough to exercise
+the path from a chip selection through generated register access,
+initialization, GPIO, and an async timer to something visible on the
+board.&lt;/p&gt;
+&lt;p&gt;That seems like a useful first step. The rest can arrive without having
+been promised by the blinky.&lt;/p&gt;
+</content:encoded>
+    </item>
+    
+  </channel>
+</rss>

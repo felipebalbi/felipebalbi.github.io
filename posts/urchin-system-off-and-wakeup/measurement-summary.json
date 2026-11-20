@@ -1,0 +1,350 @@
+{
+  "supply_voltage_V": 4.0,
+  "supply_voltage_source": "User confirmed all captures used 4.0 V.",
+  "measurement_date": "2026-11-05",
+  "subject": "Whole Urchin central measurement board, not isolated SoC current.",
+  "functional_observations": "User verified host reconnection, accepted subsequent keypresses, and connection to the split peripheral. The first wake key is lost: wake reboots the MCU, the event is not preserved, and RAM retention is disabled. Key-to-host latency and reconnection time were not measured.",
+  "application_base_commit": "041403d5ec7aa1186de57e7653db59e349b50bfb",
+  "firmware_rmk_revision": "18300680e2f16046643b9f8151abae891df998a4",
+  "captures": [
+    {
+      "file": "ppk-20261105T172741.csv",
+      "sha256": "a936a4f9f843036752bafc3fd091449dfe5e76552caa714002e70976b5813c9f",
+      "samples": 5640960,
+      "first_time_s": 0.0,
+      "last_time_s": 56.409589999999994,
+      "median_sample_interval_s": 9.999999999621423e-06,
+      "sample_gap_min_max_s": [
+        9.999999988963282e-06,
+        1.0000000003174137e-05
+      ],
+      "windows": {
+        "whole": {
+          "start_s": 0,
+          "end_exclusive_s": 56.4096,
+          "duration_s": 56.40959999786446,
+          "mean_uA": 1300.919215674105,
+          "median_uA": 20.652,
+          "min_uA": 5.073,
+          "max_uA": 14162.723,
+          "charge_uC": 73384.33258571183,
+          "quantiles_1_5_95_99_uA": [
+            19.028,
+            19.292,
+            6711.75,
+            8467.024
+          ]
+        },
+        "awake_0_to_26_3": {
+          "start_s": 0,
+          "end_exclusive_s": 26.3,
+          "duration_s": 26.299999999004342,
+          "mean_uA": 2744.9848611399243,
+          "median_uA": 434.45,
+          "min_uA": 5.556,
+          "max_uA": 14162.723,
+          "charge_uC": 72193.10184524694,
+          "quantiles_1_5_95_99_uA": [
+            13.718,
+            77.621,
+            6890.983,
+            8648.03
+          ]
+        },
+        "off_26_7_to_end": {
+          "start_s": 26.7,
+          "end_exclusive_s": 56.4096,
+          "duration_s": 29.709599998875262,
+          "mean_uA": 19.79267766917091,
+          "median_uA": 19.599,
+          "min_uA": 18.546,
+          "max_uA": 27.323,
+          "charge_uC": 588.0325364577385,
+          "quantiles_1_5_95_99_uA": [
+            19.072,
+            19.248,
+            21.354,
+            24.031
+          ]
+        },
+        "off_27_to_end": {
+          "start_s": 27,
+          "end_exclusive_s": 56.4096,
+          "duration_s": 29.40959999888662,
+          "mean_uA": 19.792322891504813,
+          "median_uA": 19.599,
+          "min_uA": 18.546,
+          "max_uA": 25.567,
+          "charge_uC": 582.0842992879635,
+          "quantiles_1_5_95_99_uA": [
+            19.072,
+            19.248,
+            21.354,
+            24.031
+          ]
+        },
+        "off_30_to_end": {
+          "start_s": 30,
+          "end_exclusive_s": 56.4096,
+          "duration_s": 26.409599999000193,
+          "mean_uA": 19.791136421604264,
+          "median_uA": 19.599,
+          "min_uA": 18.546,
+          "max_uA": 25.567,
+          "charge_uC": 522.6759964202126,
+          "quantiles_1_5_95_99_uA": [
+            19.072,
+            19.248,
+            21.31,
+            24.031
+          ]
+        },
+        "off_40_to_50": {
+          "start_s": 40,
+          "end_exclusive_s": 50.0,
+          "duration_s": 9.999999999621423,
+          "mean_uA": 19.79091132,
+          "median_uA": 19.599,
+          "min_uA": 18.59,
+          "max_uA": 25.523,
+          "charge_uC": 197.90911319250762,
+          "quantiles_1_5_95_99_uA": [
+            19.072,
+            19.204,
+            21.31,
+            24.075
+          ]
+        }
+      },
+      "last_sample_above_100uA_s": 26.548689999999997,
+      "transition_samples": [
+        [
+          26.548669999999998,
+          442.542
+        ],
+        [
+          26.54868,
+          378.62
+        ],
+        [
+          26.548689999999997,
+          326.435
+        ],
+        [
+          26.5487,
+          88.274
+        ],
+        [
+          26.54871,
+          87.848
+        ],
+        [
+          26.54872,
+          86.994
+        ],
+        [
+          26.54873,
+          86.568
+        ]
+      ],
+      "off_pulses_threshold_23uA": {
+        "count": 212,
+        "median_interval_ms": 138.87000000000427,
+        "min_max_interval_ms": [
+          136.82999999999979,
+          140.54000000000144
+        ],
+        "first_ten_starts_s": [
+          27.05277,
+          27.1915,
+          27.32977,
+          27.468490000000003,
+          27.60698,
+          27.7447,
+          27.882759999999998,
+          28.02131,
+          28.15952,
+          28.29727
+        ]
+      }
+    },
+    {
+      "file": "ppk-20261105T173440.csv",
+      "sha256": "8e3acbf151c9607394762fa8b2abd5e11152dba56773ee51267e91c87b4e4164",
+      "samples": 4468384,
+      "last_time_s": 44.68383,
+      "sample_interval_s": 9.999999999621423e-06,
+      "first_above_100uA_s": 4.96146,
+      "last_above_100uA_s": 35.84256,
+      "peak": {
+        "time_s": 5.46195,
+        "current_uA": 128098.039
+      },
+      "windows": {
+        "whole": {
+          "start_s": 0,
+          "end_exclusive_s": 44.683840000000004,
+          "duration_s": 44.68383999830837,
+          "mean_uA": 1891.0604645496,
+          "min_uA": 4.547,
+          "max_uA": 128098.039,
+          "charge_uC": 84499.84322506103
+        },
+        "off_before_0_to_4_8": {
+          "start_s": 0,
+          "end_exclusive_s": 4.8,
+          "duration_s": 4.799999999818283,
+          "mean_uA": 19.742405277083332,
+          "min_uA": 18.546,
+          "max_uA": 25.436,
+          "charge_uC": 94.76354532641247
+        },
+        "startup_4_95_to_5_78": {
+          "start_s": 4.95,
+          "end_exclusive_s": 5.78,
+          "duration_s": 0.8299999999685781,
+          "mean_uA": 3476.923547228916,
+          "min_uA": 18.809,
+          "max_uA": 128098.039,
+          "charge_uC": 2885.8465440907485
+        },
+        "firmware_active_6_to_35": {
+          "start_s": 6,
+          "end_exclusive_s": 35.0,
+          "duration_s": 28.999999998902126,
+          "mean_uA": 2717.6215038624136,
+          "min_uA": 5.468,
+          "max_uA": 12676.69,
+          "charge_uC": 78811.0236090264
+        },
+        "off_after_36_to_end": {
+          "start_s": 36,
+          "end_exclusive_s": 44.683840000000004,
+          "duration_s": 8.68383999967125,
+          "mean_uA": 19.75210873530604,
+          "min_uA": 18.633,
+          "max_uA": 27.366,
+          "charge_uC": 171.5241519135065
+        },
+        "peak_window_5_46185_to_5_46205": {
+          "start_s": 5.46185,
+          "end_exclusive_s": 5.46205,
+          "duration_s": 0.00019999999999242846,
+          "mean_uA": 38242.9494,
+          "min_uA": 4808.076,
+          "max_uA": 128098.039,
+          "charge_uC": 7.648589879710442
+        }
+      }
+    },
+    {
+      "file": "ppk-20261105T174151.csv",
+      "sha256": "30f8928582f5ac5d82740fddc23e343cfc8a491aac5ee0662445c4ddfef98e0b",
+      "samples": 2533024,
+      "sample_interval_s": 9.999999999621423e-06,
+      "sample_gap_min_max_s": [
+        9.999999996068709e-06,
+        1.0000000003174137e-05
+      ],
+      "whole": {
+        "start_s": 0.0,
+        "end_exclusive_s": 25.33024,
+        "duration_s": 25.330239999041055,
+        "mean_uA": 1032.510484109507,
+        "min_uA": 4.415,
+        "max_uA": 125084.43,
+        "charge_uC": 26153.73836401988
+      },
+      "activity_groups_threshold_100uA_max_gap_200ms": [
+        {
+          "start_s": 0.0,
+          "end_exclusive_s": 14.1924,
+          "duration_s": 14.192399999462708,
+          "mean_uA": 1049.1237057227813,
+          "min_uA": 5.468,
+          "max_uA": 12646.066,
+          "charge_uC": 14889.583280536315
+        },
+        {
+          "start_s": 20.005770000000002,
+          "end_exclusive_s": 25.33024,
+          "duration_s": 5.324469999798428,
+          "mean_uA": 2093.945811635712,
+          "min_uA": 5.556,
+          "max_uA": 125084.43,
+          "charge_uC": 11149.151655257918
+        }
+      ],
+      "quiet_windows_trimmed_100ms_each_side": [
+        {
+          "start_s": 14.292399999999999,
+          "end_exclusive_s": 19.90577,
+          "duration_s": 5.613369999787491,
+          "mean_uA": 19.79318869947999,
+          "min_uA": 18.546,
+          "max_uA": 27.015,
+          "charge_uC": 111.10649164579375
+        }
+      ]
+    },
+    {
+      "file": "ppk-20261105T174729.csv",
+      "sha256": "a2de9375e54e5f276c52afe464eff060114b779ce89b963508c5b3bcae0f12f6",
+      "samples": 5903648,
+      "sample_interval_s": 9.999999999621423e-06,
+      "sample_gap_min_max_s": [
+        9.999999988963282e-06,
+        1.0000000003174137e-05
+      ],
+      "whole": {
+        "start_s": 0.0,
+        "end_exclusive_s": 59.03648,
+        "duration_s": 59.036479997765014,
+        "mean_uA": 998.6246655523838,
+        "min_uA": 4.722,
+        "max_uA": 125084.43,
+        "charge_uC": 58955.28509315808
+      },
+      "activity_groups_threshold_100uA_max_gap_200ms": [
+        {
+          "start_s": 0.0,
+          "end_exclusive_s": 18.51071,
+          "duration_s": 18.510709999299227,
+          "mean_uA": 1046.9808140838466,
+          "min_uA": 5.468,
+          "max_uA": 13325.089,
+          "charge_uC": 19380.358224336305
+        },
+        {
+          "start_s": 22.24257,
+          "end_exclusive_s": 55.8309,
+          "duration_s": 33.588329998728426,
+          "mean_uA": 1174.1557544212528,
+          "min_uA": 5.512,
+          "max_uA": 125084.43,
+          "charge_uC": 39437.930949406975
+        }
+      ],
+      "quiet_windows_trimmed_100ms_each_side": [
+        {
+          "start_s": 18.61071,
+          "end_exclusive_s": 22.14257,
+          "duration_s": 3.5318499998662922,
+          "mean_uA": 19.761007497487153,
+          "min_uA": 18.59,
+          "max_uA": 27.279,
+          "charge_uC": 69.7929143273578
+        },
+        {
+          "start_s": 55.9309,
+          "end_exclusive_s": 58.936479999999996,
+          "duration_s": 3.0055799998862156,
+          "mean_uA": 19.761955725683563,
+          "min_uA": 18.633,
+          "max_uA": 25.962,
+          "charge_uC": 59.396138887751405
+        }
+      ]
+    }
+  ]
+}

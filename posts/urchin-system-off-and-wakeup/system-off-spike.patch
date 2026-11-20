@@ -1,0 +1,114 @@
+--- a/src/screen.rs
++++ b/src/screen.rs
+@@ -19,6 +19,10 @@
+ #[cfg(target_os = "none")]
+ #[path = "screen/runtime.rs"]
+ pub mod runtime;
++
++#[cfg(target_os = "none")]
++#[path = "screen/system_off_spike.rs"]
++mod system_off_spike;
+ 
+ #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+ pub enum Role {
+--- a/src/screen/runtime.rs
++++ b/src/screen/runtime.rs
+@@ -336,6 +336,10 @@
+                 _ => {}
+             }
+             if self.screen.is_sleeping() {
++                #[cfg(target_os = "none")]
++                if R::ROLE == Role::Central {
++                    super::system_off_spike::enter();
++                }
+                 let event = self.subscriptions.next_event().await;
+                 event.apply(self.screen.state_mut());
+                 continue;
+--- /dev/null
++++ b/src/screen/system_off_spike.rs
+@@ -0,0 +1,85 @@
++//! Throwaway central-only SYSTEM_OFF measurement, not an idle-policy implementation.
++
++use embassy_nrf::pac::{
++    self,
++    gpio::vals::{Detectmode, Dir, Drive, Input, Pull, Sense},
++};
++
++pub(super) fn enter() -> ! {
++    // Called only after the screen's final SPI transaction and rail shutdown.
++    // Stop BLE synchronously before taking hardware away from its running tasks.
++    let result = unsafe { nrf_sdc::raw::sdc_disable() };
++    assert_eq!(result, 0);
++
++    // Never return to Embassy or MPSL with their hardware reconfigured.
++    cortex_m::interrupt::disable();
++    pac::PPI.chenclr().write(|w| w.0 = u32::MAX);
++
++    // The 30-second battery sample can overlap the 30-second idle timeout.
++    if pac::SAADC.enable().read().enable() {
++        pac::SAADC.events_stopped().write_value(0);
++        pac::SAADC.tasks_stop().write_value(1);
++        while pac::SAADC.events_stopped().read() == 0 {
++            core::hint::spin_loop();
++        }
++        pac::SAADC.enable().write(|w| w.set_enable(false));
++    }
++    pac::SPIM2
++        .enable()
++        .write(|w| w.set_enable(pac::spim::vals::Enable::Disabled));
++
++    // Replace Embassy's matrix-wait senses and latched DETECT configuration.
++    for (port, pins) in [(pac::P0, 32), (pac::P1, 16)] {
++        for pin in 0..pins {
++            port.pin_cnf(pin).modify(|w| w.set_sense(Sense::Disabled));
++        }
++        port.latch().write(|w| w.0 = u32::MAX);
++        port.detectmode()
++            .write(|w| w.set_detectmode(Detectmode::Default));
++    }
++
++    // Central columns from keyboard.toml; preload HIGH before enabling outputs.
++    for (port, pin) in [
++        (pac::P1, 15),
++        (pac::P1, 13),
++        (pac::P1, 11),
++        (pac::P0, 10),
++        (pac::P0, 9),
++    ] {
++        port.outset().write(|w| w.set_pin(pin, true));
++        port.pin_cnf(pin).write(|w| {
++            w.set_dir(Dir::Output);
++            w.set_input(Input::Disconnect);
++            w.set_pull(Pull::Disabled);
++            w.set_drive(Drive::S0s1);
++            w.set_sense(Sense::Disabled);
++        });
++    }
++
++    // Col2row matrix: a closed switch raises its pulled-down row through its diode.
++    for (port, pin) in [(pac::P1, 0), (pac::P0, 11), (pac::P1, 4), (pac::P1, 6)] {
++        port.pin_cnf(pin).write(|w| {
++            w.set_dir(Dir::Input);
++            w.set_input(Input::Connect);
++            w.set_pull(Pull::Pulldown);
++            w.set_drive(Drive::S0s1);
++            w.set_sense(Sense::High);
++        });
++    }
++
++    // Wake is a reset, so no RAM contents need retaining. Keep System ON power intact.
++    for bank in 0..9 {
++        pac::POWER.ram(bank).powerclr().write(|w| {
++            for section in 0..if bank == 8 { 6 } else { 2 } {
++                w.set_s_retention(section, true);
++            }
++        });
++    }
++    cortex_m::asm::dsb();
++    embassy_nrf::power::set_system_off();
++    cortex_m::asm::dsb();
++    // Under an attached debugger SYSTEM_OFF is emulated; never resume the tasks.
++    loop {
++        cortex_m::asm::wfe();
++    }
++}
