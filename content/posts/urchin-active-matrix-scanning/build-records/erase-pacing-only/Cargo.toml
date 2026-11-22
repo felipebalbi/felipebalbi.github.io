@@ -1,0 +1,119 @@
+[package]
+name = "rmk-urchin"
+version = "0.1.0"
+authors = ["Felipe Balbi <felipe@balbi.sh>"]
+description = "Urchin RMK Firmware"
+readme = "README.md"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+
+[features]
+default = []
+prototype-matrix = ["rmk/prototype_matrix_scan"]
+prototype-spim = []
+
+[dependencies]
+# Pin the published main-plus-ordered-tap-hold baseline for reproducible measurements.
+rmk = { git = "https://github.com/felipebalbi/rmk.git", rev = "0d9c302094dfc2aacc62263d09b19f7013e18611", default-features = false, features = [
+    "nrf52840_ble",
+    "split",
+    "subrating",
+    "async_matrix",
+    "adafruit_bl",
+    "storage",
+    "vial",
+    "host_lock",
+    "watchdog",
+] }
+nrf-sdc = { git = "https://github.com/alexmoon/nrf-sdc", rev = "9cf87fa7883b89b2d4dc7cd94864da7927bd858c", default-features = false, features = [
+    "defmt",
+    "peripheral",
+    "central",
+    "nrf52840",
+] }
+nrf-mpsl = { git = "https://github.com/alexmoon/nrf-sdc", rev = "9cf87fa7883b89b2d4dc7cd94864da7927bd858c", default-features = false, features = [
+    "defmt",
+    "critical-section-impl",
+    "nrf52840",
+] }
+bt-hci = { version = "0.11", default-features = false, features = ["defmt"] }
+
+cortex-m = "0.7.7"
+cortex-m-rt = "0.7.5"
+embassy-time = { version = "0.5", features = ["tick-hz-32_768", "defmt", "defmt-timestamp-uptime"] }
+embassy-nrf = { version = "0.11", features = [
+    "defmt",
+    "nrf52840",
+    "time-driver-rtc1",
+    "gpiote",
+    "unstable-pac",
+    "nfc-pins-as-gpio",
+    "time",
+] }
+embassy-executor = { version = "0.10", features = [
+    "defmt",
+    "platform-cortex-m",
+    "executor-thread",
+] }
+# RMK's generated startup imports and panic-probe still use RTT for panic output.
+defmt = "1.0"
+defmt-rtt = "1.0"
+panic-probe = { version = "1.0", features = ["print-defmt"] }
+log = { version = "0.4", default-features = false, features = ["max_level_debug"] }
+static_cell = "2"
+embedded-graphics = "0.8.2"
+embedded-hal = "1"
+embedded-hal-async = "1"
+heapless = "0.9"
+embassy-futures = "0.1"
+
+[build-dependencies]
+xz2 = "0.1.7"
+json = "0.12"
+const-gen = "1.6"
+
+# Split keyboard example
+[[bin]]
+name = "central"
+path = "src/central.rs"
+
+[[bin]]
+name = "peripheral"
+path = "src/peripheral.rs"
+
+[profile.dev]
+codegen-units = 1      # better optimizations
+debug = true
+opt-level = 1
+overflow-checks = true
+lto = false
+panic = 'unwind'
+
+[profile.release]
+codegen-units = 1       # better optimizations
+debug = true            # no overhead for bare-metal
+opt-level = "z"         # optimize for binary size
+overflow-checks = false
+lto = "fat"
+
+# Root-workspace patches must match RMK: USB modules and watchdog APIs changed
+# on Embassy main without a version bump.
+[patch.crates-io]
+embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy", rev = "12b84e3dd8d6b31f045649b84250292c34e024d4" }
+embassy-futures = { git = "https://github.com/embassy-rs/embassy", rev = "12b84e3dd8d6b31f045649b84250292c34e024d4" }
+embassy-hal-internal = { git = "https://github.com/embassy-rs/embassy", rev = "12b84e3dd8d6b31f045649b84250292c34e024d4" }
+embassy-nrf = { git = "https://github.com/embassy-rs/embassy", rev = "12b84e3dd8d6b31f045649b84250292c34e024d4" }
+embassy-sync = { git = "https://github.com/embassy-rs/embassy", rev = "12b84e3dd8d6b31f045649b84250292c34e024d4" }
+embassy-time = { git = "https://github.com/embassy-rs/embassy", rev = "12b84e3dd8d6b31f045649b84250292c34e024d4" }
+embassy-time-driver = { git = "https://github.com/embassy-rs/embassy", rev = "12b84e3dd8d6b31f045649b84250292c34e024d4" }
+embassy-time-queue-utils = { git = "https://github.com/embassy-rs/embassy", rev = "12b84e3dd8d6b31f045649b84250292c34e024d4" }
+embassy-usb = { git = "https://github.com/embassy-rs/embassy", rev = "12b84e3dd8d6b31f045649b84250292c34e024d4" }
+embassy-usb-driver = { git = "https://github.com/embassy-rs/embassy", rev = "12b84e3dd8d6b31f045649b84250292c34e024d4" }
+embassy-executor-timer-queue = { git = "https://github.com/embassy-rs/embassy", rev = "12b84e3dd8d6b31f045649b84250292c34e024d4" }
+
+# Frozen measurement snapshot: pinned RMK plus the included pacing-only patch.
+[patch."https://github.com/felipebalbi/rmk.git"]
+rmk = { path = "../rmk/rmk" }
+rmk-config = { path = "../rmk/rmk-config" }
+rmk-macro = { path = "../rmk/rmk-macro" }
+rmk-types = { path = "../rmk/rmk-types" }

@@ -1,0 +1,25 @@
+PACING-ONLY CENTRAL IMAGE
+
+Flash central.uf2 to the central measurement board only. Do not flash it
+to the peripheral. Keep the peripheral's firmware and power unchanged.
+
+This image clears all RMK settings/bonds on EVERY boot. Let it boot, then
+run SETTLE_SECONDS=15 bash ./pair-keyboard from the normal Urchin checkout.
+Confirm the host connection and split connection separately. Keep board
+power uninterrupted after pairing. Use the same 4200 mV supply, screen
+state, and workload as the previous paired captures.
+
+Measure held physical F first, then repeated short F taps. The question
+is whether the original async settling timer plus 1 ms scan pacing
+reproduces the combined matrix variant's saving.
+
+The old prototype-matrix feature name is retained in this frozen source
+snapshot, but now selects pacing only: the 64-cycle delay has been removed.
+All non-RMK dependency packages remain pinned as in the earlier builds.
+
+SOURCE.tar.gz contains the complete modified source snapshots, manifests,
+and locks. The build uses local source overrides, not a newly published
+RMK commit. Extract the source archive into a fresh directory to reproduce;
+set KEYBOARD_TOML_PATH to its urchin/keyboard.toml and build from urchin/
+using the arguments in BUILD.txt with your own target-directory path.
+Firmware hashes identify these artifacts, not cross-machine reproducibility.

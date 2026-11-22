@@ -1,0 +1,84 @@
+Urchin active matrix power — publication worksheet
+
+Target publication: Monday, **2026-11-23**. The article remains `draft = true`.
+Do not commit or publish without the owner's review.
+
+Draft: `content/posts/urchin-active-matrix-scanning/index.md`.
+
+## Collected evidence
+
+- Twelve original screenshots, unchanged bytes and original PNG/JPEG formats.
+- Ten main workload captures: four initial held-F variants, two awake-idle
+  variants, two initial repeated-tap variants, and two pacing-only captures.
+- The unpaired initial `both` capture is explicitly excluded from comparisons.
+- An early `both` capture before the scripted repeat is retained in the
+  inventory but excluded because its workload wasn't recorded.
+- `measurements.csv` contains GUI window statistics, not raw PPK2 samples.
+- `measurement-summary.json` includes screenshot hashes, calculations,
+  owner confirmations, missing metadata, and prepared build provenance.
+- `build-records/erase-*` contains the original build records, checksum lists,
+  and erase-enabled keyboard configuration for each prepared variant. No
+  firmware binaries are bundled, and the exact image flashed per capture
+  hasn't been confirmed against those checksums.
+
+## Findings that can be stated now
+
+- Matrix timing changes together reduced held-switch charge by about 52% in
+  the first captures. Pacing-only is now measured; settling-only is not.
+- Repeated manual taps used 26.65 mC on baseline versus 15.62 mC on matrix over
+  10 s: a 41.4% descriptive difference between these captures.
+- The owner confirmed approximately matched rhythm/count, unchanged other
+  tapping conditions, and every F tap registering.
+- Baseline and both awake-idle averages were 968.21 and 975.70 µA respectively:
+  no established saving.
+- SPIM-only held-F current was close to baseline; both was close to matrix.
+  No useful net benefit is demonstrated for the tested workload.
+- Pacing-only held F: 3.44 mA, 14.34 mA maximum, 34.42 mC over 10 s.
+- Pacing-only tapping F: 2.23 mA, 14.06 mA maximum, 22.33 mC over 10 s.
+- The owner confirmed the two new screenshot workload labels. They show
+  about 20% and 16% less charge than the earlier held/tapping baselines.
+- The combined matrix variant improves further than pacing-only. That
+  establishes an additional observed benefit with pacing enabled, not the
+  standalone settling effect or absence of an interaction.
+- Pacing-only uses the earlier published revisions plus a frozen local patch,
+  not the newer upstream cleanup branch. Its record includes the patch and
+  preserves all non-RMK dependency versions/sources/checksums.
+
+## Before publishing
+
+- [ ] Confirm measurement role, battery/rail insertion point, board/controller,
+  USB/debug connections, and screen power/content state.
+- [ ] Confirm peer firmware, independent peer supply, and split link status.
+  Earlier advice to keep the peripheral on baseline is not evidence that it
+  actually stayed on baseline in all captures.
+- [ ] Confirm exact flashed UF2 hashes and whether every capture used the
+  erase-enabled build records included in this bundle.
+- [ ] Record negotiated host/split intervals, peripheral latency, PHY, and
+  other host devices/profiles. Do not reuse October's negotiation as evidence
+  for November's captures.
+- [ ] Record actual post-connection settling time for repeats. Use the same
+  delay across variants; at least account for RMK's two requests with separate
+  five-second waits. The script originally defaulted to only five seconds.
+- [ ] Confirm awake-idle windows exclude the 30 s sleep transition.
+- [ ] Obtain raw PPK2 exports and acquisition sample rate. Live-view FPS is not
+  the sampling rate; old posts' 10 µs spacing does not establish this run's.
+- [ ] Repeat alternating baseline/matrix tapping runs with counted taps and
+  a metronome; record or control press duration as well as frequency.
+- [ ] Check a fully populated keyboard: overlapping rolls, modifiers, layers,
+  remote presses, releases, wake, and subjective responsiveness.
+- [ ] Review draft claims and publication framing after the additional runs.
+- [ ] Keep `draft = true` until the owner decides to publish.
+
+## Optional follow-up experiments
+
+- A separate 5 ms active-scan gap, preserving the measured 1 ms version.
+  Keep settling, debounce, BLE policy and SPIM unchanged. It is only a
+  proposal; no such firmware or measurements have been created here.
+- Matrix-only and SPIM-only awake-idle captures.
+- Short-settling-only, plus repeated pacing-only/combined comparisons, if
+  attributing standalone and interaction effects becomes important.
+- SPIM under display-heavy workloads, only if worth investigating; don't
+  infer continuous clock activity from a retained driver.
+
+No battery-life claim, latency guarantee, per-tap charge, confidence interval,
+or 5 ms result is supported by this first set.
