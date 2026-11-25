@@ -1,7 +1,7 @@
 +++
 title = "Lambda in types, part 1: A perfectly good compiler, ruined"
 date = 2026-11-25T09:00:00
-draft = true
+draft = false
 description = "Representing untyped lambda calculus with three Rust type constructors: why syntax comes first, how de Bruijn indices preserve binding, and what we have not computed yet."
 [taxonomies]
 tags = ["rust", "lambda-calculus", "type-system"]
