@@ -1,0 +1,231 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+  <title>Felipe Balbi</title>
+  <subtitle>Notes on embedded systems, Rust, and the craft of writing software.</subtitle>
+  <link href="https://balbi.sh/tags/lambda-calculus/atom.xml" rel="self" type="application/atom+xml"/>
+  <link href="https://balbi.sh"/>
+  <generator uri="https://www.getzola.org/">Zola</generator>
+  <updated>2026-11-25T09:00:00+00:00</updated>
+  <id>https://balbi.sh/tags/lambda-calculus/atom.xml</id>
+  
+  <entry xml:lang="en">
+    <title>Lambda in types, part 1: A perfectly good compiler, ruined</title>
+    <published>2026-11-25T09:00:00+00:00</published>
+    <updated>2026-11-25T09:00:00+00:00</updated>
+    <author><name>Felipe Balbi</name></author>
+    <link rel="alternate" href="https://balbi.sh/posts/lambda-types-01-syntax/" type="text/html"/>
+    <id>https://balbi.sh/posts/lambda-types-01-syntax/</id>
+    <summary type="html">&lt;p&gt;Rust’s type system spends most of its life preventing mistakes. I thought it
+deserved a change of pace, so I gave it a mistake to &lt;em&gt;be&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;We are going to implement &lt;a rel=&quot;external&quot; href=&quot;https://en.wikipedia.org/wiki/Lambda_calculus&quot;&gt;lambda calculus&lt;/a&gt; in Rust types. Not a runtime
+interpreter written in Rust; that would be a sensible activity, and we have
+not gathered here for that. The expressions will be types. The results will
+be types. The compiler, which presumably had other plans, will do the work.&lt;/p&gt;
+&lt;p&gt;The original stretch goal was Conway’s Game of Life. The eventual finale is
+a little functional language that filters a list, squares its odd numbers,
+and adds them up. The answer is ten. We will spend sixteen weeks arranging
+for a compiler to discover ten. A seventeenth installment is a love-letter
+epilogue to Lisp, in case the parentheses hadn’t given us away. Please
+adjust your expectations accordingly.&lt;/p&gt;
+&lt;p&gt;There is no practical application. This is play. This week’s deliverable
+is that we can &lt;strong&gt;describe identity&lt;/strong&gt;. We cannot evaluate it yet. Even by the
+standards of a project with no purpose, we are taking our time.&lt;/p&gt;</summary>
+    
+    <content type="html">&lt;p&gt;Rust’s type system spends most of its life preventing mistakes. I thought it
+deserved a change of pace, so I gave it a mistake to &lt;em&gt;be&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;We are going to implement &lt;a rel=&quot;external&quot; href=&quot;https://en.wikipedia.org/wiki/Lambda_calculus&quot;&gt;lambda calculus&lt;/a&gt; in Rust types. Not a runtime
+interpreter written in Rust; that would be a sensible activity, and we have
+not gathered here for that. The expressions will be types. The results will
+be types. The compiler, which presumably had other plans, will do the work.&lt;/p&gt;
+&lt;p&gt;The original stretch goal was Conway’s Game of Life. The eventual finale is
+a little functional language that filters a list, squares its odd numbers,
+and adds them up. The answer is ten. We will spend sixteen weeks arranging
+for a compiler to discover ten. A seventeenth installment is a love-letter
+epilogue to Lisp, in case the parentheses hadn’t given us away. Please
+adjust your expectations accordingly.&lt;/p&gt;
+&lt;p&gt;There is no practical application. This is play. This week’s deliverable
+is that we can &lt;strong&gt;describe identity&lt;/strong&gt;. We cannot evaluate it yet. Even by the
+standards of a project with no purpose, we are taking our time.&lt;/p&gt;
+&lt;span id=&quot;continue-reading&quot;&gt;&lt;/span&gt;
+&lt;p&gt;&lt;strong&gt;Part 1 of 17.&lt;/strong&gt; &lt;a href=&quot;/posts/lambda-types-02-evaluation/&quot;&gt;Next: evaluation&lt;/a&gt;.
+The &lt;a href=&quot;https://balbi.sh/posts/lambda-types-01-syntax/#the-series&quot;&gt;series index&lt;/a&gt; is at the end of this post.&lt;/p&gt;
+&lt;h2 id=&quot;the-rule-of-the-experiment&quot;&gt;The rule of the experiment&lt;/h2&gt;
+&lt;p&gt;There is a very easy way to cheat at this project. Make a Rust type called
+&lt;code&gt;Add&lt;/code&gt;, give it an implementation that adds two Rust-level numbers, and call
+the result a language. That would get us to the wrong sort of bad idea.&lt;/p&gt;
+&lt;p&gt;Our self-imposed inconvenience is:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Rust supplies general evaluation rules. Lambda terms supply the programs.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;Identity must be an expression in the language, not a special case in the
+evaluator. Later, the same restriction will apply to booleans, arithmetic,
+cells, and recursion. We may build human-facing output adapters, but those
+adapters must not secretly do the arithmetic we claim the language performed.&lt;/p&gt;
+&lt;p&gt;This is disposable code, not the beginning of a compiler framework. If I
+start discussing its enterprise plugin story, please take the keyboard away.
+We do need to be precise about which layer is doing what: being useless
+is a choice; being wrong would spoil the joke.&lt;/p&gt;
+&lt;h2 id=&quot;three-forms-are-enough-to-begin&quot;&gt;Three forms are enough to begin&lt;/h2&gt;
+&lt;p&gt;Untyped lambda calculus gives us three expression forms:&lt;/p&gt;
+&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Form&lt;/th&gt;&lt;th&gt;Written as&lt;/th&gt;&lt;th&gt;What it describes&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;
+&lt;tr&gt;&lt;td&gt;Variable&lt;/td&gt;&lt;td&gt;&lt;code&gt;x&lt;/code&gt;&lt;/td&gt;&lt;td&gt;A reference to a bound argument&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;Abstraction&lt;/td&gt;&lt;td&gt;&lt;code&gt;λx. body&lt;/code&gt;&lt;/td&gt;&lt;td&gt;A function with argument &lt;code&gt;x&lt;/code&gt; and body &lt;code&gt;body&lt;/code&gt;&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;Application&lt;/td&gt;&lt;td&gt;&lt;code&gt;function argument&lt;/code&gt;&lt;/td&gt;&lt;td&gt;Applying one expression to another&lt;/td&gt;&lt;/tr&gt;
+&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;The dot separates a parameter from its body. Application associates to the
+left: &lt;code&gt;f a b&lt;/code&gt; means &lt;code&gt;(f a) b&lt;/code&gt;. A lambda’s body extends to the right unless
+parentheses say otherwise.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-notation-1&quot;&gt;&lt;a href=&quot;https://balbi.sh/posts/lambda-types-01-syntax/#fn-notation&quot;&gt;[1]&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;p&gt;The smallest example worth inflicting on a compiler is identity:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;plain&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;λx. x&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;It accepts an argument and gives that argument back. Functions can themselves
+be arguments, so this is a perfectly reasonable expression:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;plain&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;(λx. x) (λx. x)&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Mathematically, applying the left-hand identity to the right-hand identity
+reduces to identity. That is an example of
+&lt;strong&gt;&lt;a rel=&quot;external&quot; href=&quot;https://en.wikipedia.org/wiki/Beta_reduction&quot;&gt;beta reduction&lt;/a&gt;&lt;/strong&gt;, the rule that
+connects application to a function’s body. Today, the arrow is in our
+explanation, not in the Rust program:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;plain&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;(λx. x) (λx. x) → λx. x&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Notice what the grammar doesn’t contain: no integer literals, no booleans,
+no lists, no named recursion. Those are not omissions we will patch by
+adding variants to a syntax enum. We will discover representations for them
+using the three forms we already have.&lt;/p&gt;
+&lt;h2 id=&quot;names-are-pleasant-until-substitution-gets-involved&quot;&gt;Names are pleasant until substitution gets involved&lt;/h2&gt;
+&lt;p&gt;The names in &lt;code&gt;λx. x&lt;/code&gt; are for us. Rename both occurrences to &lt;code&gt;y&lt;/code&gt; and nothing
+changes: &lt;code&gt;λy. y&lt;/code&gt; is the same function. The important fact is which binder
+owns which reference.&lt;/p&gt;
+&lt;p&gt;Here are two functions whose distinction does matter:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;plain&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;λx. λy. y    choose the inner argument&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;λx. λy. x    choose the outer argument&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Keeping textual names would make us responsible for renaming variables
+carefully during substitution. In an open term, replacing a free &lt;code&gt;x&lt;/code&gt; with
+&lt;code&gt;y&lt;/code&gt; inside &lt;code&gt;λy. x&lt;/code&gt; must not accidentally bind the new &lt;code&gt;y&lt;/code&gt;. That is variable
+capture; the innocent-looking textual replacement changes the meaning.&lt;/p&gt;
+&lt;p&gt;We will use &lt;strong&gt;&lt;a rel=&quot;external&quot; href=&quot;https://en.wikipedia.org/wiki/De_Bruijn_index&quot;&gt;de Bruijn indices&lt;/a&gt;&lt;/strong&gt; instead. A variable says how many binders
+outward to look, starting at zero:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;plain&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;λx. x       → λ. 0&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;λx. λy. y   → λ. λ. 0&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;λx. λy. x   → λ. λ. 1&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The numbers are distances to binders, not the language’s future arithmetic
+values. &lt;code&gt;0&lt;/code&gt; means “the nearest enclosing lambda’s argument.” &lt;code&gt;1&lt;/code&gt; means
+“skip that binder and use the next.”&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-debruijn-1&quot;&gt;&lt;a href=&quot;https://balbi.sh/posts/lambda-types-01-syntax/#fn-debruijn&quot;&gt;[2]&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;p&gt;This doesn’t make binding disappear. It makes the relationship explicit.
+Next week, our evaluator will still have to preserve that relationship when
+a function leaves the environment in which it was defined.&lt;/p&gt;
+&lt;h2 id=&quot;put-the-syntax-in-types&quot;&gt;Put the syntax in types&lt;/h2&gt;
+&lt;p&gt;Rust needs one constructor for each form:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;use&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; std&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;marker&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;PhantomData&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;struct&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Z&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;struct&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Var&lt;/span&gt;&lt;span&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;N&lt;/span&gt;&lt;span&gt;&amp;gt;&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;PhantomData&lt;/span&gt;&lt;span&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;N&lt;/span&gt;&lt;span&gt;&amp;gt;&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;struct&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Lambda&lt;/span&gt;&lt;span&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Body&lt;/span&gt;&lt;span&gt;&amp;gt;&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;PhantomData&lt;/span&gt;&lt;span&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Body&lt;/span&gt;&lt;span&gt;&amp;gt;&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;struct&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; App&lt;/span&gt;&lt;span&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Function&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Argument&lt;/span&gt;&lt;span&gt;&amp;gt;&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;PhantomData&lt;/span&gt;&lt;span&gt;&amp;lt;&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Function&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Argument&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;&amp;gt;&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;Z&lt;/code&gt; is the index zero. That is the only index this snapshot needs; a way to
+represent larger indices arrives with nested evaluation in part 2.&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;Var&amp;lt;N&amp;gt;&lt;/code&gt; is a variable reference. &lt;code&gt;Lambda&amp;lt;Body&amp;gt;&lt;/code&gt; contains the type describing
+a function body. &lt;code&gt;App&amp;lt;Function, Argument&amp;gt;&lt;/code&gt; contains two type-level children.
+It records an application without performing it.&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;PhantomData&lt;/code&gt; is the standard marker for a relationship to a type without
+storing a value of that type. Rust requires us to use these generic
+parameters somehow; the marker makes the relationship explicit.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-phantom-1&quot;&gt;&lt;a href=&quot;https://balbi.sh/posts/lambda-types-01-syntax/#fn-phantom&quot;&gt;[3]&lt;/a&gt;&lt;/sup&gt;
+Our program constructs none of these structs at runtime. We only name the
+types.&lt;/p&gt;
+&lt;p&gt;Identity is now:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;type&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Identity&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Lambda&lt;/span&gt;&lt;span&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Var&lt;/span&gt;&lt;span&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Z&lt;/span&gt;&lt;span&gt;&amp;gt;&lt;/span&gt;&lt;span&gt;&amp;gt;&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-3 z-l-b z-d-6 z-d-b&quot;&gt;type&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Expression&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt; =&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; App&lt;/span&gt;&lt;span&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Identity&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; Identity&lt;/span&gt;&lt;span&gt;&amp;gt;&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Read the first alias from the outside inward: a lambda whose body is a
+reference to its nearest argument. The second alias describes applying
+that expression to itself.&lt;/p&gt;
+&lt;p&gt;A type alias is not a new nominal type, a variable assignment, or a function
+call. &lt;code&gt;Identity&lt;/code&gt; is another name for &lt;code&gt;Lambda&amp;lt;Var&amp;lt;Z&amp;gt;&amp;gt;&lt;/code&gt;. Naming &lt;code&gt;Expression&lt;/code&gt;
+does not cause a reduction. We have built the tree, not the machine that
+interprets it.&lt;/p&gt;
+&lt;p&gt;This separation is our first act of tidiness at the scene of the crime. If &lt;code&gt;App&amp;lt;F, X&amp;gt;&lt;/code&gt;
+immediately meant “the result of calling &lt;code&gt;F&lt;/code&gt; on &lt;code&gt;X&lt;/code&gt;,” it would be much harder
+to talk about suspended work. Keeping application as syntax leaves that
+decision to the evaluator.&lt;/p&gt;
+&lt;h2 id=&quot;what-can-we-run&quot;&gt;What can we run?&lt;/h2&gt;
+&lt;p&gt;We can inspect the tree:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;rust&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;fn&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt; main&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt; {&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;    println!&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;Identity: &lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; std&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;any&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;type_name&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Identity&lt;/span&gt;&lt;span&gt;&amp;gt;&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;    println!&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;Application: &lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span&gt;,&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; std&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;any&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;type_name&lt;/span&gt;&lt;span class=&quot;z-l-5 z-d-5&quot;&gt;::&lt;/span&gt;&lt;span&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;Expression&lt;/span&gt;&lt;span&gt;&amp;gt;&lt;/span&gt;&lt;span&gt;(&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;)&lt;/span&gt;&lt;span&gt;;&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Rust expands the aliases and usually includes module paths. Look for the
+shape &lt;code&gt;Lambda&amp;lt;Var&amp;lt;Z&amp;gt;&amp;gt;&lt;/code&gt;, and for an &lt;code&gt;App&lt;/code&gt; containing two copies of that shape.
+Do not treat the exact spelling as an output protocol. &lt;code&gt;type_name&lt;/code&gt; is a
+diagnostic aid, not a stable serialization format, and certainly not proof
+that evaluation occurred.&lt;sup class=&quot;footnote-reference&quot; id=&quot;fr-typename-1&quot;&gt;&lt;a href=&quot;https://balbi.sh/posts/lambda-types-01-syntax/#fn-typename&quot;&gt;[4]&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;p&gt;Nor have we built a well-scopedness checker. Rust lets us write
+&lt;code&gt;Lambda&amp;lt;u8&amp;gt;&lt;/code&gt;, even though &lt;code&gt;u8&lt;/code&gt; is not one of our expression forms. We can
+also describe references with no matching binder once larger indices exist.
+Representation alone doesn’t establish validity. Later trait requirements
+will reject unsupported operations when evaluation demands them; that is
+not the same thing as checking every syntax tree up front.&lt;/p&gt;
+&lt;h2 id=&quot;read-and-run-this-step&quot;&gt;Read and run this step&lt;/h2&gt;
+&lt;p&gt;The &lt;a href=&quot;https://balbi.sh/posts/lambda-types-01-syntax/source.tar.gz&quot;&gt;source archive&lt;/a&gt; is the exact article-1 snapshot,
+&lt;code&gt;afb9fbeb022c&lt;/code&gt;, not the final version of the experiment:&lt;/p&gt;
+&lt;pre class=&quot;giallo z-l-code z-d-code&quot; &gt;&lt;code data-lang=&quot;shellscript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;tar&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;xzf&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; source.tar.gz&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;cd&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; rust-lambda-types&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span class=&quot;z-l-1 z-d-1&quot;&gt;cargo&lt;/span&gt;&lt;span class=&quot;z-l-2 z-d-2&quot;&gt; run&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt; -&lt;/span&gt;&lt;span class=&quot;z-l-8 z-d-8&quot;&gt;-offline&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Use a Rust toolchain supporting edition 2024. The archive has no third-party
+dependencies. Each later article includes its own snapshot, so following an
+early post does not require mentally deleting features introduced months
+after it.&lt;/p&gt;
+&lt;p&gt;Next week we will give the tree meaning. A lambda will become a closure, an
+argument will become suspended work, and application will connect the two.
+The first genuine result will still be identity. This time, Rust will have
+worked it out.&lt;/p&gt;
+&lt;h2 id=&quot;the-series&quot;&gt;The series&lt;/h2&gt;
+&lt;p&gt;All posts are Wednesday installments. Later links become public as the
+series is published; they are available together in the draft preview.&lt;/p&gt;
+&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Part&lt;/th&gt;&lt;th&gt;Date&lt;/th&gt;&lt;th&gt;Topic&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;
+&lt;tr&gt;&lt;td&gt;1&lt;/td&gt;&lt;td&gt;November 25, 2026&lt;/td&gt;&lt;td&gt;A perfectly good compiler, ruined&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;a href=&quot;/posts/lambda-types-02-evaluation/&quot;&gt;2&lt;/a&gt;&lt;/td&gt;&lt;td&gt;December 2&lt;/td&gt;&lt;td&gt;Evaluation and lexical environments&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;a href=&quot;/posts/lambda-types-03-booleans/&quot;&gt;3&lt;/a&gt;&lt;/td&gt;&lt;td&gt;December 9&lt;/td&gt;&lt;td&gt;Booleans are choices&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;a href=&quot;/posts/lambda-types-04-numerals/&quot;&gt;4&lt;/a&gt;&lt;/td&gt;&lt;td&gt;December 16&lt;/td&gt;&lt;td&gt;Numbers are iterators&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;a href=&quot;/posts/lambda-types-05-successor/&quot;&gt;5&lt;/a&gt;&lt;/td&gt;&lt;td&gt;December 23&lt;/td&gt;&lt;td&gt;One more application&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;a href=&quot;/posts/lambda-types-06-addition/&quot;&gt;6&lt;/a&gt;&lt;/td&gt;&lt;td&gt;December 30&lt;/td&gt;&lt;td&gt;Addition repeats successor&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;a href=&quot;/posts/lambda-types-07-multiplication/&quot;&gt;7&lt;/a&gt;&lt;/td&gt;&lt;td&gt;January 6, 2027&lt;/td&gt;&lt;td&gt;Multiplication repeats addition&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;a href=&quot;/posts/lambda-types-08-cells/&quot;&gt;8&lt;/a&gt;&lt;/td&gt;&lt;td&gt;January 13&lt;/td&gt;&lt;td&gt;A pair is a function&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;a href=&quot;/posts/lambda-types-09-lists/&quot;&gt;9&lt;/a&gt;&lt;/td&gt;&lt;td&gt;January 20&lt;/td&gt;&lt;td&gt;Constructors, projections, and nil&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;a href=&quot;/posts/lambda-types-10-navigation/&quot;&gt;10&lt;/a&gt;&lt;/td&gt;&lt;td&gt;January 27&lt;/td&gt;&lt;td&gt;Let a number walk a list&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;a href=&quot;/posts/lambda-types-11-recursion/&quot;&gt;11&lt;/a&gt;&lt;/td&gt;&lt;td&gt;February 3&lt;/td&gt;&lt;td&gt;Recursion without recursive aliases&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;a href=&quot;/posts/lambda-types-12-cond/&quot;&gt;12&lt;/a&gt;&lt;/td&gt;&lt;td&gt;February 10&lt;/td&gt;&lt;td&gt;First true clause wins&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;a href=&quot;/posts/lambda-types-13-macro/&quot;&gt;13&lt;/a&gt;&lt;/td&gt;&lt;td&gt;February 17&lt;/td&gt;&lt;td&gt;A little Lisp notation&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;a href=&quot;/posts/lambda-types-14-readable-results/&quot;&gt;14&lt;/a&gt;&lt;/td&gt;&lt;td&gt;February 24&lt;/td&gt;&lt;td&gt;Readable numbers and booleans&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;a href=&quot;/posts/lambda-types-15-readable-structures/&quot;&gt;15&lt;/a&gt;&lt;/td&gt;&lt;td&gt;March 3&lt;/td&gt;&lt;td&gt;Readable pairs and lists&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;a href=&quot;/posts/lambda-types-16-sicp/&quot;&gt;16&lt;/a&gt;&lt;/td&gt;&lt;td&gt;March 10&lt;/td&gt;&lt;td&gt;A little SICP&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;a href=&quot;/posts/lambda-types-17-love-letter/&quot;&gt;17&lt;/a&gt;&lt;/td&gt;&lt;td&gt;March 17&lt;/td&gt;&lt;td&gt;Dear Lisp, sorry about Rust — an epilogue&lt;/td&gt;&lt;/tr&gt;
+&lt;/tbody&gt;&lt;/table&gt;
+&lt;section class=&quot;footnotes&quot;&gt;
+&lt;ol class=&quot;footnotes-list&quot;&gt;
+&lt;li id=&quot;fn-notation&quot;&gt;
+&lt;p&gt;These are parsing conventions, not evaluation rules. &lt;code&gt;λx. λy. x y&lt;/code&gt;
+means &lt;code&gt;λx. (λy. (x y))&lt;/code&gt;. Parentheses can override the conventions; changing
+parentheses can change a program even when every variable name stays put. &lt;a href=&quot;https://balbi.sh/posts/lambda-types-01-syntax/#fr-notation-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id=&quot;fn-debruijn&quot;&gt;
+&lt;p&gt;N. G. de Bruijn introduced the nameless notation in
+&lt;a rel=&quot;external&quot; href=&quot;https://doi.org/10.1016/1385-7258(72)90034-0&quot;&gt;“Lambda calculus notation with nameless dummies” (1972)&lt;/a&gt;.
+We use zero-based indices. Eliminating names avoids name-based capture,
+but an evaluator still needs a correct account of binding; the notation
+is not a substitute for lexical-scope tests. &lt;a href=&quot;https://balbi.sh/posts/lambda-types-01-syntax/#fr-debruijn-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id=&quot;fn-phantom&quot;&gt;
+&lt;p&gt;See Rust’s &lt;a rel=&quot;external&quot; href=&quot;https://doc.rust-lang.org/std/marker/struct.PhantomData.html&quot;&gt;&lt;code&gt;PhantomData&lt;/code&gt; documentation&lt;/a&gt;.
+The marker also participates in variance, auto traits, and drop checking.
+None of those subtleties is our evaluation mechanism: associated types
+and trait selection will do that work. &lt;a href=&quot;https://balbi.sh/posts/lambda-types-01-syntax/#fr-phantom-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id=&quot;fn-typename&quot;&gt;
+&lt;p&gt;The standard library explicitly describes
+&lt;a rel=&quot;external&quot; href=&quot;https://doc.rust-lang.org/std/any/fn.type_name.html&quot;&gt;&lt;code&gt;type_name&lt;/code&gt;&lt;/a&gt; as
+intended for diagnostics. Our later tests will compare types directly,
+rather than parsing this string. &lt;a href=&quot;https://balbi.sh/posts/lambda-types-01-syntax/#fr-typename-1&quot;&gt;↩&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/section&gt;
+</content>
+  </entry>
+  
+</feed>

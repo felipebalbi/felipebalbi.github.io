@@ -1,0 +1,15 @@
+--- a/rmk/src/matrix.rs
++++ b/rmk/src/matrix.rs
+@@ -380,12 +380,7 @@
+                 if let Some(out_pin) = self.get_output_pins_mut().get_mut(out_idx) {
+                     out_pin.set_high().ok();
+                 }
+-                #[cfg(not(feature = "prototype_matrix_scan"))]
+                 Timer::after_micros(1).await;
+-                // This experiment targets the nRF52840's fixed 64 MHz CPU clock.
+-                // Host tests model scan scheduling, not electrical settling.
+-                #[cfg(all(feature = "prototype_matrix_scan", target_arch = "arm", target_os = "none"))]
+-                cortex_m::asm::delay(64);
+ 
+                 let in_start = if out_idx == out_idx_start { in_idx_start } else { 0 };
+ 

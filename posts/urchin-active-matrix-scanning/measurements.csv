@@ -1,0 +1,13 @@
+id,variant,workload,average_current_mA,maximum_current_mA,window_seconds,charge_mC,included_in_workload_comparisons,screenshot,screenshot_sha256
+unpaired-both,both,Unpaired; workload not recorded,1.9,13.78,10.0,19.03,False,unpaired-both.png,d4f3cf4c24e10d652f730a5ba08f902e89bdfe03a6eb422150469dd5c9cf186a
+early-both,both,Before scripted repeat; workload not recorded,1.14,12.8,10.0,11.4,False,early-both.png,283de6175ea35d2d16dc0a875b0ef24c74efe597ed72786da4c7941d993aa310
+both-held-f,both,Held physical F,2.05,13.42,10.0,20.47,True,both-held-f.png,64304aea8c0c96f6917cc9647faea7d201191de26e11fdd2fef9e0283e712aef
+baseline-held-f,baseline,Held physical F,4.3,12.73,10.0,42.98,True,baseline-held-f.jpg,3a524d2134c48dfe5dea863f45ba1ab614bac7be86039401fd7b623b1001be32
+baseline-awake-idle,baseline,"Awake, no typing",0.96821,12.33,10.0,9.68,True,baseline-awake-idle.png,ef5ec00a4d884ebd1b2f56a8ae76ccaf227e311f801cc2e9c7ba7f1a02c7064a
+both-awake-idle,both,"Awake, no typing",0.9757,12.3,10.0,9.76,True,both-awake-idle.png,dac49e936a51980a7e9eb1b90ab35285e5543aba73049be821e41307dad659d9
+matrix-held-f,matrix,Held physical F,2.07,14.29,10.0,20.72,True,matrix-held-f.png,2533fc43ba1a8b012a2f59dbcdb09151d418dbe4c228b7a9a1212dd71e826baf
+spim-held-f,spim,Held physical F,4.36,12.68,10.0,43.6,True,spim-held-f.jpg,860038b4feb4b36ff1d76a3a9d22a52b8b19d54fd89643c8f9fe4ee26c903da9
+baseline-tapping-f,baseline,Repeated manual F taps,2.66,12.65,10.0,26.65,True,baseline-tapping-f.jpg,230cb40d5ac540eb2b5f1142126c55401a81d709a8c97f2f8fcb8b75c368af0e
+matrix-tapping-f,matrix,Repeated manual F taps,1.56,13.92,10.0,15.62,True,matrix-tapping-f.png,81ae4b915f15570faeefde110cce4ca227d34eafa59151da92049f97d02aee3d
+pacing-only-held-f,pacing-only,Held physical F,3.44,14.34,10.0,34.42,True,pacing-only-held-f.png,16f6b6c0e4e327e8e45f4326b86e880ce4e9dae81e2b810be8facc1779323b7c
+pacing-only-tapping-f,pacing-only,Repeated manual F taps,2.23,14.06,10.0,22.33,True,pacing-only-tapping-f.png,60d9614123ebf6f6090f43acd75bc1eef6068701d2d337ea20b13823a7d24df3

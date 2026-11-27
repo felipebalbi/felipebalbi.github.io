@@ -1,0 +1,9 @@
+variant=spim
+features=prototype-spim
+clear_storage=true
+target=thumbv7em-none-eabihf
+commit=580db2ce97625ae9bad5073990d15618a6fb16e8
+rmk=0d9c302094dfc2aacc62263d09b19f7013e18611
+rustc 1.100.0 (0ef1bc386 2026-11-09)
+build-command=KEYBOARD_TOML_PATH=<included keyboard-erase.toml> cargo build --release --locked --bins --no-default-features --target thumbv7em-none-eabihf --target-dir /home/balbi/workspace/rmk-urchin/target/erase-build --features prototype-spim
+working-tree-status:
